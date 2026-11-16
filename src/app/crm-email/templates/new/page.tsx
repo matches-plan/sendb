@@ -23,7 +23,7 @@ export default function NewTemplatePage() {
             const result = await updateTemplate(templateIdRef.current, data);
             if (result.success && data.status === "published") {
                 toast.success("템플릿이 발행되었습니다.");
-                router.push("/email?tab=templates");
+                router.push("/crm-email?tab=templates");
             }
             return result;
         } else {
@@ -32,14 +32,14 @@ export default function NewTemplatePage() {
                 templateIdRef.current = result.data.id;
                 if (data.status === "published") {
                     toast.success("템플릿이 생성되었습니다.");
-                    router.push("/email?tab=templates");
+                    router.push("/crm-email?tab=templates");
                 }
             }
             return result;
         }
     };
 
-    const handleCancel = () => router.push("/email?tab=templates");
+    const handleCancel = () => router.push("/crm-email?tab=templates");
 
     return (
         <WorkspaceLayout>

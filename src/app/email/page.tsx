@@ -1,9 +1,7 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import useSWR from "swr";
-import { defaultFetcher } from "@/lib/swr-fetcher";
 import WorkspaceLayout, { QueryErrorState } from "@/components/layouts/WorkspaceLayout";
 import { PageContainer } from "@/components/common/page-container";
 import { PageHeader } from "@/components/common/page-header";
@@ -12,8 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Settings, Mail } from "lucide-react";
 import EmailDashboard from "@/components/email/dashboard/ui/EmailDashboard";
-import EmailTemplateList from "@/components/email/EmailTemplateList";
-import EmailTemplateLinkList from "@/components/email/EmailTemplateLinkList";
 import EmailSendLogTable from "@/components/email/EmailSendLogTable";
 import EmailSendStats from "@/components/email/EmailSendStats";
 import EmailConfigForm from "@/components/email/EmailConfigForm";
@@ -23,19 +19,27 @@ import FollowupQueueTable from "@/components/email/FollowupQueueTable";
 import AssetManager from "@/components/email/assets/ui/AssetManager";
 import RepliesTab from "@/components/email/replies/ui/RepliesTab";
 import { useRepliesEnabled } from "@/components/email/replies/hooks/useRepliesEnabled";
+import { useAllPartitionOptions } from "@/components/email/hooks/useAllPartitionOptions";
 import { useEmailConfig } from "@/hooks/useEmailConfig";
 import { useSenderProfiles } from "@/hooks/useSenderProfiles";
 import AiCopyManager from "@/components/ai-copy/ui/AiCopyManager";
 import ExperimentManager from "@/components/email-experiments/ui/ExperimentManager";
 import { experimentHref } from "@/components/email-experiments/experiment-href";
 
+const CRM_EMAIL_TABS = ["templates", "links"];
+
 function EmailPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const activeTab = searchParams.get("tab") || "dashboard";
+    // 템플릿·템플릿 자동발송은 CRM관리 > 이메일(/crm-email)로 옮겼다 — 예전 링크·대시보드 바로가기도 그쪽으로 보낸다
     const setActiveTab = (tab: string) => {
-        router.replace(`/email?tab=${tab}`);
+        if (CRM_EMAIL_TABS.includes(tab)) router.push(`/crm-email?tab=${tab}`);
+        else router.replace(`/email?tab=${tab}`);
     };
+    useEffect(() => {
+        if (CRM_EMAIL_TABS.includes(activeTab)) router.replace(`/crm-email?tab=${activeTab}`);
+    }, [activeTab, router]);
     // 실험 선택은 주소에 남긴다 — push라서 뒤로 가기로 이전에 본 실험으로 돌아간다 (UX-242)
     const selectExperiment = (id: number) => {
         if (searchParams.get("tab") === "experiments" && Number(searchParams.get("experimentId")) === id) return;
@@ -50,21 +54,10 @@ function EmailPageContent() {
     const isReady = !!config?.appKey && (profiles?.length ?? 0) > 0;
     const isSetupLoading = configLoading || profilesLoading;
 
-    // 조직 내 모든 파티션 조회
-    const { data: allPartitionsData, error: partitionsError, mutate: mutatePartitions } = useSWR("/api/partitions", defaultFetcher);
+    const { partitions, error: partitionsError, retry } = useAllPartitionOptions();
 
-    const partitions = useMemo(() => {
-        const items: Array<{ id: number; name: string; workspaceId: number; workspaceName: string }> = allPartitionsData?.data ?? [];
-        const hasMultipleWorkspaces = new Set(items.map((p) => p.workspaceId)).size > 1;
-        return items.map((p) => ({
-            id: p.id,
-            workspaceId: p.workspaceId,
-            name: hasMultipleWorkspaces ? `[${p.workspaceName}] ${p.name}` : p.name,
-        }));
-    }, [allPartitionsData]);
-
-    if (partitionsError && !allPartitionsData) {
-        return <WorkspaceLayout><QueryErrorState error={partitionsError} onRetry={() => mutatePartitions()} /></WorkspaceLayout>;
+    if (partitionsError) {
+        return <WorkspaceLayout><QueryErrorState error={partitionsError} onRetry={retry} /></WorkspaceLayout>;
     }
 
     return (
@@ -73,12 +66,12 @@ function EmailPageContent() {
                 <PageHeader
                     title={
                         <span className="flex items-center gap-1.5">
-                            이메일
+                            콜드메일
                             <Button
                                 variant={activeTab === "settings" ? "secondary" : "ghost"}
                                 size="icon"
                                 className="size-7"
-                                aria-label={activeTab === "settings" ? "이메일 설정 닫기" : "이메일 설정 열기"}
+                                aria-label={activeTab === "settings" ? "콜드메일 설정 닫기" : "콜드메일 설정 열기"}
                                 aria-pressed={activeTab === "settings"}
                                 onClick={() => setActiveTab(activeTab === "settings" ? "dashboard" : "settings")}
                             >
@@ -121,8 +114,6 @@ function EmailPageContent() {
                         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
                         <TabsList className="[&>button]:flex-none">
                             <TabsTrigger value="dashboard">대시보드</TabsTrigger>
-                            <TabsTrigger value="templates">템플릿</TabsTrigger>
-                            <TabsTrigger value="links">템플릿 자동발송</TabsTrigger>
                             <TabsTrigger value="ai-auto">AI 자동발송</TabsTrigger>
                             <TabsTrigger value="ai-quality">AI 품질</TabsTrigger>
                             <TabsTrigger value="experiments">문구 실험</TabsTrigger>
@@ -136,14 +127,6 @@ function EmailPageContent() {
 
                         <TabsContent value="dashboard" className="mt-6">
                             <EmailDashboard onTabChange={setActiveTab} />
-                        </TabsContent>
-
-                        <TabsContent value="templates" className="mt-6">
-                            <EmailTemplateList />
-                        </TabsContent>
-
-                        <TabsContent value="links" className="mt-6">
-                            <EmailTemplateLinkList partitions={partitions} />
                         </TabsContent>
 
                         <TabsContent value="ai-auto" className="mt-6">

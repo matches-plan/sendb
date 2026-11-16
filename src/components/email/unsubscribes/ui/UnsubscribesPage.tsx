@@ -87,7 +87,7 @@ function UnsubscribeManager({ orgId, sessionEpoch }: { orgId: string; sessionEpo
 
     return (
         <PageContainer>
-            <PageHeader title="수신거부 목록" description="현재 조직의 모든 사업에 공통으로 적용되는 이메일 수신거부 목록입니다." actions={<Button variant="outline" asChild><Link href="/email">이메일로 돌아가기</Link></Button>} />
+            <PageHeader title="수신거부 목록" description="현재 조직의 모든 사업에 공통으로 적용되는 이메일 수신거부 목록입니다." actions={<Button variant="outline" asChild><Link href="/email">콜드메일로 돌아가기</Link></Button>} />
             <Alert><Ban className="size-4" /><AlertDescription className="space-y-2">
                 <p>등록된 주소는 같은 조직의 모든 사업에서 이메일 발송 대상에서 제외됩니다. 기존에 사업별로 받은 수신거부도 함께 적용됩니다.</p>
                 <p>발송 이력의 ‘거부’는 NHN 발송 서버가 거절한 상태이며, 이 수신거부 목록과 다릅니다.</p>

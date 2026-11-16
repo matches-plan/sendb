@@ -102,7 +102,7 @@ export default function EmailTemplateList() {
                         className="h-8 w-48 text-sm"
                     />
                 </div>
-                <Button onClick={() => router.push("/email/templates/new")} className="shrink-0">
+                <Button onClick={() => router.push("/crm-email/templates/new")} className="shrink-0">
                     <Plus className="h-4 w-4 mr-2" />
                     새 템플릿
                 </Button>
@@ -169,7 +169,7 @@ export default function EmailTemplateList() {
                                         >
                                             <Send className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => router.push(`/email/templates/${template.id}`)}>
+                                        <Button variant="ghost" size="icon" onClick={() => router.push(`/crm-email/templates/${template.id}`)}>
                                             <Pencil className="h-4 w-4" />
                                         </Button>
                                         <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)}>

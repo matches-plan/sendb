@@ -55,12 +55,12 @@ export default function EmailTemplateLinkList({ partitions }: EmailTemplateLinkL
 
     const handleCreate = () => {
         const params = selectedPartitionId !== "all" ? `?partitionId=${selectedPartitionId}` : "";
-        router.push(`/email/links/new${params}`);
+        router.push(`/crm-email/links/new${params}`);
     };
 
     const handleEdit = (linkId: number, partId?: number) => {
         const pId = partId || (selectedPartitionId !== "all" ? selectedPartitionId : null);
-        router.push(`/email/links/${linkId}?partitionId=${pId}`);
+        router.push(`/crm-email/links/${linkId}?partitionId=${pId}`);
     };
 
     // 서버 거부·응답 유실을 모두 안내한다 (UX-148)

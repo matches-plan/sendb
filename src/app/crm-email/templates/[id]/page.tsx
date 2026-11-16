@@ -27,12 +27,12 @@ export default function EditTemplatePage() {
         const result = await updateTemplate(template.id, data);
         if (result.success && data.status === "published") {
             toast.success("템플릿이 수정되었습니다.");
-            router.push("/email?tab=templates");
+            router.push("/crm-email?tab=templates");
         }
         return result;
     };
 
-    const handleCancel = () => router.push("/email?tab=templates");
+    const handleCancel = () => router.push("/crm-email?tab=templates");
 
     if (isLoading) {
         return (

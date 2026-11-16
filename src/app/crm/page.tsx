@@ -20,7 +20,7 @@ function CrmPageContent() {
     return (
         <WorkspaceLayout>
             <PageContainer>
-                <PageHeader title="CRM 관리" />
+                <PageHeader title="고객 여정" />
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList>
                         <TabsTrigger value="alerts">고객 여정 알림</TabsTrigger>

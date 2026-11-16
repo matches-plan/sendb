@@ -10,7 +10,7 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
         items: [
             { href: "/leadgen/stats", label: "리드젠통계", icon: TrendingUp },
             { href: "/records", label: "레코드", icon: Table2 },
-            { href: "/email", label: "이메일", icon: Mail },
+            { href: "/email", label: "콜드메일", icon: Mail },
             { href: "/email/unsubscribes", label: "수신거부 목록", icon: Ban },
             { href: "/web-forms", label: "웹 폼", icon: FileText },
         ],
@@ -30,15 +30,22 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
         ],
     },
     {
-        group: "고객관리",
+        group: "상담관리",
         items: [
             { href: "/inbox", label: "고객 상담", icon: MessageSquare },
             { href: "/inbox/stats", label: "상담통계", icon: TrendingUp },
             { href: "/inbox/settings", label: "상담 설정", icon: Settings2 },
             { href: "/customer-contacts", label: "고객 연락처", icon: Contact },
             { href: "/customer-ai", label: "AI 응대", icon: Bot },
-            { href: "/alimtalk", label: "알림톡", icon: MessageCircle },
             { href: "/customer-crm", label: "고객 관리", icon: Building2 },
+        ],
+    },
+    {
+        // 이미 고객사가 된 곳에 보내는 안내(가입 축하·신청 안내·소개서 등)
+        group: "CRM관리",
+        items: [
+            { href: "/crm-email", label: "이메일", icon: Mail },
+            { href: "/alimtalk", label: "알림톡", icon: MessageCircle },
         ],
     },
     {
@@ -46,7 +53,7 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
         items: [
             { href: "/tracker", label: "트래커", icon: Activity },
             { href: "/logs", label: "발송 이력", icon: History },
-            { href: "/crm", label: "CRM 관리", icon: BarChart3 },
+            { href: "/crm", label: "고객 여정", icon: BarChart3 },
         ],
     },
     {
@@ -88,8 +95,8 @@ const INTERNAL_ID = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 
 // 이 경로들은 독립 페이지 대신 상위 화면의 탭에서 목록을 제공한다.
 const ancestorLinks: Record<string, string> = {
-    "/email/templates": "/email?tab=templates",
-    "/email/links": "/email?tab=links",
+    "/crm-email/templates": "/crm-email?tab=templates",
+    "/crm-email/links": "/crm-email?tab=links",
     "/email/ai-auto": "/email?tab=ai-auto",
     "/alimtalk/templates": "/alimtalk?tab=templates",
     "/alimtalk/links": "/alimtalk?tab=links",

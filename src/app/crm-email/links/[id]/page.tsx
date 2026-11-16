@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import WorkspaceLayout, { QueryErrorState } from "@/components/layouts/WorkspaceLayout";
 import { PageContainer } from "@/components/common/page-container";
 import { Button } from "@/components/ui/button";
@@ -59,29 +59,29 @@ function HelpTip({ text }: { text: string }) {
             <TooltipTrigger asChild>
                 <HelpCircle className="h-3.5 w-3.5 text-muted-foreground inline ml-1 cursor-help" />
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[240px]">
+            <TooltipContent side="top" className="max-w-60">
                 <p className="text-xs">{text}</p>
             </TooltipContent>
         </Tooltip>
     );
 }
 
-function NewLinkPageContent() {
+function EditLinkPageContent() {
     const router = useRouter();
+    const params = useParams();
     const searchParams = useSearchParams();
-    const partitionIdParam = searchParams.get("partitionId");
-    const [selectedPartitionId, setSelectedPartitionId] = useState<number | null>(
-        partitionIdParam ? Number(partitionIdParam) : null
-    );
-    const partitionId = selectedPartitionId ?? 0;
+    const linkId = Number(params.id);
+    const partitionId = Number(searchParams.get("partitionId"));
 
     const { data: allPartitionsData, error: partitionsError, mutate: mutatePartitions } = useSWR("/api/partitions", defaultFetcher);
-    const { createLink } = useEmailTemplateLinks(partitionId || null);
+    const { templateLinks, isLoading, updateLink } = useEmailTemplateLinks(partitionId || null);
     const { fields } = useResolvedFields(partitionId || null);
+    const link = templateLinks.find((l) => l.id === linkId);
 
-    const sender = useRuleSenderPool();
+    const sender = useRuleSenderPool(link);
 
     const [saving, setSaving] = useState(false);
+    const [loaded, setLoaded] = useState(false);
     const [name, setName] = useState("");
     const [emailTemplateId, setEmailTemplateId] = useState<number | null>(null);
     const [recipientField, setRecipientField] = useState("");
@@ -100,6 +100,22 @@ function NewLinkPageContent() {
     const templateOptions = useEmailTemplateOptions(templateSearch, linkTemplateIds(emailTemplateId, followupConfig));
     const templates = templateOptions.templates;
 
+    useEffect(() => {
+        if (link && !loaded) {
+            setName(link.name);
+            setEmailTemplateId(link.emailTemplateId);
+            setRecipientField(link.recipientField);
+            setVariableMappings((link.variableMappings as Record<string, string>) || {});
+            setTriggerType(link.triggerType);
+            setTriggerCondition(link.triggerCondition ?? null);
+            setUseRepeat(!!link.repeatConfig);
+            setRepeatConfig(link.repeatConfig ?? null);
+            setFollowupConfig(link.followupConfig ?? null);
+            setPreventDuplicate(link.preventDuplicate ?? 0);
+            setLoaded(true);
+        }
+    }, [link, loaded]);
+
     const selectedTemplate = templates.find((t) => t.id === emailTemplateId);
     // 첫 메일과 후속 단계 템플릿의 변수 모두 — 후속 템플릿에만 있는 변수도 여기서 매핑한다 (UX-163)
     const { all: variables, unmapped: unmappedVariables, mappedCount } = linkVariableStatus(
@@ -111,8 +127,7 @@ function NewLinkPageContent() {
 
     const save = async () => {
         if (!emailTemplateId) throw new Error("필수 항목을 입력해주세요.");
-        const result = await createLink({
-            partitionId,
+        const result = await updateLink(linkId, {
             name,
             emailTemplateId,
             recipientField,
@@ -126,8 +141,8 @@ function NewLinkPageContent() {
             ...templateLinkSenderBody(triggerType, sender.ids),
         });
         if (!result.success) throw new Error(result.error || "저장에 실패했습니다.");
-        toast.success("연결이 생성되었습니다.");
-        router.push("/email?tab=links");
+        toast.success("연결이 수정되었습니다.");
+        router.push("/crm-email?tab=links");
     };
 
     const handleSave = async () => {
@@ -160,33 +175,22 @@ function NewLinkPageContent() {
         return <WorkspaceLayout><QueryErrorState error={partitionsError} onRetry={() => mutatePartitions()} /></WorkspaceLayout>;
     }
 
-    if (!selectedPartitionId) {
-        const rawPartitions = (allPartitionsData?.data as Array<{ id: number; name: string; workspaceId: number; workspaceName: string }>) ?? [];
-        const hasMultiWs = new Set(rawPartitions.map((p) => p.workspaceId)).size > 1;
-        const partitionList = rawPartitions.map((p) => ({ ...p, name: hasMultiWs ? `[${p.workspaceName}] ${p.name}` : p.name }));
+    if (isLoading) {
         return (
             <WorkspaceLayout>
-                <PageContainer>
-                    <div className="flex items-center gap-3 mb-6">
-                        <Button variant="ghost" size="icon" onClick={() => router.push("/email?tab=links")}>
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
-                        <h1 className="text-xl font-semibold">이메일 자동발송 규칙 추가</h1>
-                    </div>
-                    <div className="flex flex-col items-center justify-center p-12 border rounded-lg border-dashed gap-4">
-                        <p className="text-muted-foreground">연결할 파티션을 선택하세요.</p>
-                        <Select onValueChange={(v) => setSelectedPartitionId(Number(v))}>
-                            <SelectTrigger className="w-[300px]">
-                                <SelectValue placeholder="파티션 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {partitionList.map((p) => (
-                                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </PageContainer>
+                <div className="flex items-center justify-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+            </WorkspaceLayout>
+        );
+    }
+
+    if (!link) {
+        return (
+            <WorkspaceLayout>
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    연결을 찾을 수 없습니다.
+                </div>
             </WorkspaceLayout>
         );
     }
@@ -198,17 +202,17 @@ function NewLinkPageContent() {
                 <PageContainer>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <Button variant="ghost" size="icon" onClick={() => router.push("/email?tab=links")}>
+                            <Button variant="ghost" size="icon" onClick={() => router.push("/crm-email?tab=links")}>
                                 <ArrowLeft className="h-5 w-5" />
                             </Button>
-                            <h1 className="text-xl font-semibold">새 연결</h1>
+                            <h1 className="text-xl font-semibold">연결 편집</h1>
                             <span className="text-sm text-muted-foreground">
                                 {(() => { const items = (allPartitionsData?.data as Array<{ id: number; name: string; workspaceId: number; workspaceName: string }>) ?? []; const p = items.find((x) => x.id === partitionId); if (!p) return ""; const multi = new Set(items.map((x) => x.workspaceId)).size > 1; return multi ? `[${p.workspaceName}] ${p.name}` : p.name; })()}
                             </span>
                         </div>
                         <Button onClick={handleSave} disabled={saving || !name || !emailTemplateId || !recipientField}>
                             {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            연결
+                            수정
                         </Button>
                     </div>
 
@@ -277,7 +281,7 @@ function NewLinkPageContent() {
                                             </Label>
                                             {variables.map((v) => (
                                                 <div key={v} className="flex items-center gap-2">
-                                                    <span className="text-sm font-mono w-[120px] shrink-0">{v}</span>
+                                                    <span className="text-sm font-mono w-30 shrink-0">{v}</span>
                                                     <span className="text-muted-foreground">&rarr;</span>
                                                     <Select
                                                         value={variableMappings[v] || ""}
@@ -425,11 +429,11 @@ function NewLinkPageContent() {
                                         <TemplateLinkSenderSummary triggerType={triggerType} ids={sender.ids} />
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">연결 이름</span>
-                                            <span className="font-medium truncate ml-2 max-w-[160px]">{name || "—"}</span>
+                                            <span className="font-medium truncate ml-2 max-w-40">{name || "—"}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">템플릿</span>
-                                            <span className="font-medium truncate ml-2 max-w-[160px]">{selectedTemplate?.name || "—"}</span>
+                                            <span className="font-medium truncate ml-2 max-w-40">{selectedTemplate?.name || "—"}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">수신 필드</span>
@@ -478,10 +482,10 @@ function NewLinkPageContent() {
     );
 }
 
-export default function NewLinkPage() {
+export default function EditLinkPage() {
     return (
         <Suspense>
-            <NewLinkPageContent />
+            <EditLinkPageContent />
         </Suspense>
     );
 }

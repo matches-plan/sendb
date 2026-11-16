@@ -30,6 +30,8 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
     sent: { label: "발송됨", variant: "default" },
     failed: { label: "실패", variant: "destructive" },
     skipped: { label: "건너뜀", variant: "outline" },
+    // 판정은 남기되 체류 60초 미만·체류시간 미확인이라 구글챗으로만 보내지 않은 줄
+    suppressed: { label: "알림 제외", variant: "outline" },
     dry_run: { label: "테스트", variant: "outline" },
 };
 
@@ -137,6 +139,7 @@ export default function JourneyAlertTable() {
                         <SelectItem value="pending">대기</SelectItem>
                         <SelectItem value="failed">실패</SelectItem>
                         <SelectItem value="skipped">건너뜀</SelectItem>
+                        <SelectItem value="suppressed">알림 제외</SelectItem>
                         <SelectItem value="dry_run">테스트</SelectItem>
                     </SelectContent>
                 </Select>
