@@ -26,3 +26,9 @@ test("같은 기업명은 한 묶음, 기업명이 없으면 한 명씩, 고른 
     assert.deepEqual(byName.map((g) => g.rows[0].id), ["2", "1", "4"]);
     assert.equal(groupContacts(rows, { key: "name", dir: "asc" }, "백오").length, 1);
 });
+
+test("(주)·띄어쓰기만 다른 기업명은 같은 묶음, 유입경로로도 찾는다", () => {
+    const rows = [row("1", "(주)조이웍스", "가", "2026-11-01"), row("2", "조이 웍스", "나", "2026-11-02"), { ...row("3", "", "다", "2026-11-03"), attributes: { utmSource: "google" } }];
+    assert.deepEqual(groupContacts(rows, { key: "createdAt", dir: "desc" }).map((g) => g.rows.length), [1, 2]);
+    assert.deepEqual(groupContacts(rows, { key: "createdAt", dir: "desc" }, "google").map((g) => g.rows[0].id), ["3"]);
+});

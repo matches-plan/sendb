@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { inboxRequest } from "@/components/inbox/api";
 import type { InboxBootstrap } from "@/components/inbox/types";
-import { InboxChannelTabs } from "@/components/inbox/ui/InboxChannelTabs";
+import { InboxChannelTabs, useFirstChannel } from "@/components/inbox/ui/InboxChannelTabs";
 import { OperationsView } from "./OperationsView";
 
 /** 상담통계 — 사업부 탭 + 응대 성과 (예전 상담톡 "운영·성과" 창) */
@@ -13,7 +13,8 @@ export function InboxStatsPage() {
     const bootstrap = useSWR<InboxBootstrap>("/api/inbox", inboxRequest);
     const data = bootstrap.data;
     const [chosen, setChosen] = useState<number | null>(null);
-    const channelId = chosen ?? data?.channels[0]?.id ?? null;
+    const first = useFirstChannel(data);
+    const channelId = chosen ?? first ?? null;
     const channel = data?.channels.find((c) => c.id === channelId);
     return (
         <div className="flex h-full min-h-0 flex-col">
@@ -23,7 +24,7 @@ export function InboxStatsPage() {
             <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
                 {bootstrap.error ? (
                     <p role="alert" className="text-sm text-red-700">{bootstrap.error.message}</p>
-                ) : !data ? (
+                ) : !data || (!channel && first === undefined) ? (
                     <p className="text-sm text-muted-foreground">불러오는 중…</p>
                 ) : !channel ? (
                     <p className="text-sm text-muted-foreground">아직 상담창이 있는 사업이 없습니다.</p>

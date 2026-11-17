@@ -15,7 +15,32 @@ import {
 import { workspaceLabel } from "@/lib/workspace-label";
 import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useFirstTab } from "@/components/leads/hooks/useFirstTab";
 import type { InboxBootstrap } from "../types";
+
+/** 탭에 기본으로 보이는 사업부(상담창이 있는 곳)와 "사업부 추가"에서 고를 사업부 */
+function channelTabItems(bootstrap: InboxBootstrap | undefined, workspaces: { id: number; name: string; displayNo?: string | null }[]) {
+    const channels = bootstrap?.channels ?? [];
+    const label = (id: number, fallback: string) => {
+        const ws = workspaces.find((w) => w.id === id);
+        return { name: ws?.name ?? bootstrap?.workspaces.find((w) => w.id === id)?.name ?? fallback, displayNo: ws?.displayNo ?? null };
+    };
+    const items = channels
+        .filter((c, i) => channels.findIndex((x) => x.workspaceId === c.workspaceId) === i)
+        .map((c) => ({ id: c.workspaceId, ...label(c.workspaceId, c.name) }));
+    const pool = (bootstrap?.workspaces ?? []).map((w) => ({ id: w.id, ...label(w.id, w.name) }));
+    return { items, pool };
+}
+
+/** 처음 들어왔을 때 열 상담창 — 탭 줄 맨 앞 사업부의 첫 상담창. 불러오는 중이면 undefined */
+export function useFirstChannel(bootstrap: InboxBootstrap | undefined): number | null | undefined {
+    const { workspaces } = useWorkspaces();
+    const { items, pool } = channelTabItems(bootstrap, workspaces);
+    const first = useFirstTab("inbox", bootstrap ? items : undefined, pool);
+    if (first === undefined) return undefined;
+    const channels = bootstrap?.channels ?? [];
+    return (channels.find((c) => c.workspaceId === first) ?? channels[0])?.id ?? null;
+}
 
 /**
  * 상담톡·상담통계·상담 설정 맨 윗줄 사업부 탭. 다른 화면과 같은 탭을 쓰고, 기본은 상담창이 있는 사업만 보인다.
@@ -40,14 +65,7 @@ export function InboxChannelTabs({
     const [asking, setAsking] = useState<{ id: number; name: string } | null>(null);
     const { workspaces } = useWorkspaces();
     const channels = bootstrap?.channels ?? [];
-    const label = (id: number, fallback: string) => {
-        const ws = workspaces.find((w) => w.id === id);
-        return { name: ws?.name ?? bootstrap?.workspaces.find((w) => w.id === id)?.name ?? fallback, displayNo: ws?.displayNo ?? null };
-    };
-    const items = channels
-        .filter((c, i) => channels.findIndex((x) => x.workspaceId === c.workspaceId) === i)
-        .map((c) => ({ id: c.workspaceId, ...label(c.workspaceId, c.name) }));
-    const pool = (bootstrap?.workspaces ?? []).map((w) => ({ id: w.id, ...label(w.id, w.name) }));
+    const { items, pool } = channelTabItems(bootstrap, workspaces);
     const current = channels.find((c) => c.id === channelId);
     return (
         <>

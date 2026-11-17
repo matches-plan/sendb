@@ -51,6 +51,17 @@ const tabClass = (active: boolean) =>
     );
 
 const byName = (a: TabItem, b: TabItem) => workspaceLabel(a).localeCompare(workspaceLabel(b), "ko", { numeric: true });
+/** 숨긴 탭은 빼고 꺼낸 탭은 더한 이름순 목록 (저장한 순서는 applyOrder로 따로 입힌다) */
+export function visibleTabs(base: TabItem[], pool: TabItem[], prefs: TabPrefs): TabItem[] {
+    const hidden = new Set(prefs.hidden ?? []);
+    const defaultIds = new Set(base.map((w) => w.id));
+    const extra = (prefs.added ?? []).filter((id) => !defaultIds.has(id) && !hidden.has(id)).flatMap((id) => pool.find((w) => w.id === id) ?? []);
+    return [...base.filter((w) => !hidden.has(w.id)), ...extra].sort(byName);
+}
+/** 사업부 번호가 없으면 워크스페이스 설정의 번호를 붙인다 (모든 화면이 같은 "1-디하" 표시) */
+export function withDisplayNo(items: TabItem[], orgPool: TabItem[]): TabItem[] {
+    return items.map((w) => (w.displayNo ? w : { ...w, displayNo: orgPool.find((p) => p.id === w.id)?.displayNo ?? null }));
+}
 // 끌 때 옆으로만, 탭 줄 안에서만 움직인다 (밖으로 나가면 탭 줄에 스크롤이 생긴다)
 const horizontalOnly: Modifier = ({ transform, draggingNodeRect, containerNodeRect }) => {
     let x = transform.x;
@@ -86,13 +97,8 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
     const lead = useLeadWorkspaces();
     const all = useWorkspaces();
     const orgPool: TabItem[] = all.workspaces.map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo ?? null }));
-    const pool: TabItem[] = poolProp
-        ? poolProp.map((w) => (w.displayNo ? w : { ...w, displayNo: orgPool.find((p) => p.id === w.id)?.displayNo ?? null }))
-        : orgPool;
-    // 번호 없이 넘어온 사업부는 워크스페이스 설정의 번호를 붙인다 (모든 화면이 같은 "1-디하" 표시)
-    const base: TabItem[] = (items ?? (source === "all" ? pool : lead.workspaces)).map((w) =>
-        w.displayNo ? w : { ...w, displayNo: orgPool.find((p) => p.id === w.id)?.displayNo ?? null },
-    );
+    const pool: TabItem[] = poolProp ? withDisplayNo(poolProp, orgPool) : orgPool;
+    const base: TabItem[] = withDisplayNo(items ?? (source === "all" ? pool : lead.workspaces), orgPool);
     const isLoading = loading || (items ? false : source === "all" ? all.isLoading : lead.isLoading);
 
     // 내 설정 — 숨긴 탭은 빼고, 꺼낸 탭은 더한다. 끌어서 바꾼 순서(draft)는 저장 전까지 이 화면에만
@@ -103,10 +109,7 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
     const added = prefKey ? (prefs.added ?? []) : [];
     const defaultIds = new Set(base.map((w) => w.id));
     const find = (id: number) => base.find((w) => w.id === id) ?? pool.find((w) => w.id === id);
-    const shown = [
-        ...base.filter((w) => !hidden.has(w.id)),
-        ...added.filter((id) => !defaultIds.has(id) && !hidden.has(id)).flatMap((id) => find(id) ?? []),
-    ].sort(byName);
+    const shown = visibleTabs(base, pool, prefKey ? prefs : {});
     // 숨긴 사업부로 바로 들어온 경우(링크 등) 그 탭만 잠깐 보인다
     if (value !== null && !shown.some((w) => w.id === value) && (defaultIds.has(value) || added.includes(value))) {
         const current = find(value);
@@ -182,6 +185,8 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
 
     // 오른쪽 클릭 메뉴 — 누른 자리에 뜬다
     const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+    // 아래 contextMenu보다 먼저 계산해야 한다 (뒤에 두면 처음 그릴 때 값이 남아 오른쪽 클릭 메뉴가 안 뜬다)
+    const canHide = !!prefKey && (!!allTab || workspaces.length > 1);
     const contextMenu = (id: number) =>
         prefKey || menuItems
             ? (e: React.MouseEvent) => {
@@ -191,7 +196,6 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
                   setMenu({ id, x: e.clientX, y: e.clientY });
               }
             : undefined;
-    const canHide = !!prefKey && (!!allTab || workspaces.length > 1);
     const extraItems = menu && menuItems ? menuItems(menu.id) : [];
 
     const tabs =

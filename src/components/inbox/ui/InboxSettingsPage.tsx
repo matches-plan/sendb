@@ -16,7 +16,7 @@ import { connectionResultMessage, connectionSucceeded } from "@/components/inbox
 import { inboxRequest } from "../api";
 import type { InboxBootstrap } from "../types";
 import { ChannelSettings } from "./ChannelSettings";
-import { InboxChannelTabs } from "./InboxChannelTabs";
+import { InboxChannelTabs, useFirstChannel } from "./InboxChannelTabs";
 import { AiSettingsPanel } from "@/components/customer-ai/ui/AiSettingsPanel";
 import { MacroSettings } from "@/components/inbox-macros/ui/MacroSettings";
 import { ReplyNoticeSettings } from "@/components/customer-messenger/ui/ReplyNoticeSettings";
@@ -38,7 +38,8 @@ export function InboxSettingsPage() {
     // ?open=ai&workspaceId=로 들어오면(예전 AI 응대 주소) 그 사업의 상담창을 연다
     const openAi = ["ai", "rules", "knowledge"].includes(params.get("open") ?? "");
     const aiWorkspace = openAi ? Number(params.get("workspaceId")) || null : null;
-    const channelId = chosen ?? data?.channels.find((c) => c.workspaceId === aiWorkspace)?.id ?? data?.channels[0]?.id ?? null;
+    const first = useFirstChannel(data);
+    const channelId = chosen ?? data?.channels.find((c) => c.workspaceId === aiWorkspace)?.id ?? first ?? null;
     const channel = data?.channels.find((c) => c.id === channelId);
     const abilities = workspaceAbilities(data, channel?.workspaceId);
     const canCreate = !!data?.workspaces.some((w) => w.abilities.manage);
@@ -140,7 +141,7 @@ export function InboxSettingsPage() {
             )}
             {bootstrap.error ? (
                 <p role="alert" className="p-8 text-sm text-red-700">{bootstrap.error.message}</p>
-            ) : !data ? (
+            ) : !data || (!channel && first === undefined) ? (
                 <p className="p-8 text-sm text-muted-foreground">불러오는 중…</p>
             ) : !channel && current !== "new" ? (
                 <p className="p-8 text-sm text-muted-foreground">

@@ -12,7 +12,7 @@ import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
 import { workspaceAbilities } from "@/components/customer-access/utils/abilities";
 import { crmRequest, crmWrite } from "@/components/customer-crm/api";
 import type { InboxBootstrap } from "@/components/inbox/types";
-import { sortByDisplayNo } from "@/lib/workspace-label";
+import { useFirstTab } from "@/components/leads/hooks/useFirstTab";
 import { cn } from "@/lib/utils";
 import { groupContacts, type Sort, type SortKey } from "../utils/contact-columns";
 import type { ContactListRow } from "../types";
@@ -39,11 +39,10 @@ export function ContactList() {
     const [query, setQuery] = useState("");
     const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: "desc" });
     const workspaceItems = (bootstrap.data?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo }));
-    const workspaceId =
-        chosen ??
-        sortByDisplayNo(workspaceItems.filter((w) => contactWorkspaces.data?.includes(w.id)))[0]?.id ??
-        sortByDisplayNo(workspaceItems)[0]?.id ??
-        null;
+    const tabItems = bootstrap.data && contactWorkspaces.data ? workspaceItems.filter((w) => contactWorkspaces.data!.includes(w.id)) : undefined;
+    // 처음엔 탭 줄 맨 앞 사업부
+    const first = useFirstTab("customer-contacts", tabItems, workspaceItems);
+    const workspaceId = chosen ?? first ?? null;
     const { manage } = workspaceAbilities(bootstrap.data, workspaceId);
     const list = useSWR<ContactListRow[]>(workspaceId ? `/api/customer-crm/contact-list?workspaceId=${workspaceId}` : null, crmRequest);
     const groups = useMemo(() => groupContacts(list.data ?? [], sort, query), [list.data, sort, query]);
@@ -67,7 +66,7 @@ export function ContactList() {
             {confirmationDialog}
             <LeadWorkspaceTabs
                 value={workspaceId}
-                items={contactWorkspaces.data ? workspaceItems.filter((w) => contactWorkspaces.data!.includes(w.id)) : undefined}
+                items={tabItems}
                 pool={workspaceItems}
                 prefKey="customer-contacts"
                 loading={!bootstrap.data || !contactWorkspaces.data}
@@ -79,7 +78,7 @@ export function ContactList() {
             <div className="flex flex-wrap items-center gap-2 border-b p-3">
                 <div className="relative w-72">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input aria-label="연락처 검색" className="border-border/70 pl-9" placeholder="기업명·이름·이메일·전화 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+                    <Input aria-label="연락처 검색" className="border-border/70 pl-9" placeholder="기업명·이름·이메일·전화·유입경로 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
                 </div>
                 {query && (
                     <Button variant="ghost" onClick={() => setQuery("")}>
@@ -133,11 +132,11 @@ export function ContactList() {
                         )}
                         {groups.map((group) =>
                             group.rows.map((contact, i) => (
-                                <tr key={contact.id} className="group border-b hover:bg-muted/40">
+                                <tr key={contact.id} className="group border-b last:border-b-0 hover:bg-muted/40">
                                     {i === 0 && (
-                                        <td rowSpan={group.rows.length} className={cn(CELL, group.rows.length > 1 && "border-r bg-muted/30")}>
+                                        <td rowSpan={group.rows.length} className="border-r bg-muted/30 px-3 py-2.5 align-top text-xs">
                                             <div className="break-words font-medium">{group.company || "-"}</div>
-                                            {group.rows.length > 1 && <div className="text-xs text-muted-foreground">{group.rows.length}명</div>}
+                                            {group.company && <div className="text-muted-foreground">{group.rows.length}명</div>}
                                         </td>
                                     )}
                                     <td className={cn(CELL, "truncate")}>{contact.name}</td>

@@ -19,7 +19,7 @@ import { useInbox } from "../hooks/useInbox";
 import { useInboxSearch } from "../hooks/useInboxSearch";
 import { useStaffDraftSession, type SubscribeSessionInvalidation } from "../hooks/useStaffDraftSession";
 import { useEmailMailboxes } from "@/components/inbox-email/hooks/useEmailMailboxes";
-import { InboxChannelTabs } from "./InboxChannelTabs";
+import { InboxChannelTabs, useFirstChannel } from "./InboxChannelTabs";
 import { Switch } from "@/components/ui/switch";
 import { ConversationPane, statusNames } from "./ConversationPane";
 import type { ConversationFilter, ConversationStatus } from "../types";
@@ -63,7 +63,8 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
     void role;
     const initial = useInbox(null, null),
         bootstrap = initial.bootstrap.data;
-    const channelId = chosenChannel ?? bootstrap?.channels[0]?.id ?? null;
+    const firstChannel = useFirstChannel(bootstrap);
+    const channelId = chosenChannel ?? firstChannel ?? null;
     const searchQuery = useInboxSearch(query);
     const { list, detail, patch, receiveMessage } = useInbox(channelId, selected, {
         q: searchQuery,
@@ -167,7 +168,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                     </button>
                 </div>
             )}
-            {!bootstrap ? (
+            {!bootstrap || (!channel && firstChannel === undefined) ? (
                 <p className="m-auto p-10 text-muted-foreground">
                     상담함을 불러오고 있습니다…
                 </p>
