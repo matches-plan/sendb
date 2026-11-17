@@ -187,6 +187,7 @@ export async function generateAiFollowupPreview(
     const signatureJson = await resolveSignature(orgId, {
         requestedId: link.signatureId ?? undefined,
         config: emailConfig,
+        workspaceId: await resolveWorkspaceId(link.partitionId),
     });
 
     let recordData: Record<string, unknown> = {};
@@ -638,8 +639,6 @@ async function handleTemplateFollowup(
 
     // 4. 서명 결정. 발신 주소는 로그 insert 직전에 정한다 (자리 잡기를 보낼 게 확실해진 뒤로 미룬다)
     const emailConfig = await getEmailConfig(item.orgId);
-    // emailTemplateLinks에는 signatureId 컬럼이 없다 — 템플릿 규칙은 서명을 지정할 수 없으므로 기본 서명을 쓴다
-    const signatureJson = await resolveSignature(item.orgId, { config: emailConfig });
 
     // 5. 원본 레코드 조회 (변수 치환용)
     let data: Record<string, unknown> = {};
@@ -655,6 +654,8 @@ async function handleTemplateFollowup(
     // 6. 수신거부 확인 — 첫 메일 이후 거부했을 수 있으므로 후속 발송 직전에 다시 본다
     const workspaceId = await resolveWorkspaceId(link.partitionId);
     if (!workspaceId) return SKIPPED;
+    // emailTemplateLinks에는 signatureId 컬럼이 없다 — 템플릿 규칙은 서명을 지정할 수 없으므로 이 사업부 기본 서명을 쓴다
+    const signatureJson = await resolveSignature(item.orgId, { config: emailConfig, workspaceId });
     if (await isUnsubscribed(workspaceId, parentLog.recipientEmail)) return SKIPPED;
     // 6-1. 보내기 직전 막기 — 이 사업에서 회신했거나 조직에서 hard 반송된 주소면 멈춘다 (DESIGN-RPL 7-4, on일 때만)
     const replyStop = await findReplyStop(item.orgId, workspaceId, parentLog.recipientEmail);
@@ -758,7 +759,7 @@ async function handleTemplateFollowup(
             ...(unsubscribeToken
                 ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                 : {}),
-        });
+        }, { workspaceId });
 
         const sendResult = nhnResult.data?.results?.[0];
         const submissionStatus = classifyEmailSubmission(nhnResult);
@@ -884,6 +885,7 @@ async function handleAiFollowup(
         const signatureJson = await resolveSignature(item.orgId, {
             requestedId: link.signatureId ?? undefined,
             config: emailConfig,
+            workspaceId,
         });
 
         // 5. 원본 레코드 + 제품 조회
@@ -1010,7 +1012,7 @@ async function handleAiFollowup(
             ...(unsubscribeToken
                 ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                 : {}),
-        });
+        }, { workspaceId });
 
         const sendResult = nhnResult.data?.results?.[0];
         const submissionStatus = classifyEmailSubmission(nhnResult);

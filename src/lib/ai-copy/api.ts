@@ -13,11 +13,13 @@ export async function copyAdminApi(
         conn: CopyConnection,
         user: NonNullable<Awaited<ReturnType<typeof getActiveUserFromNextRequest>>>,
     ) => Promise<unknown>,
+    /** 규칙 편집처럼 일반 구성원도 쓰는 요청 (AB 테스트) */
+    options: { allowMembers?: boolean } = {},
 ) {
     const user = await getActiveUserFromNextRequest(req);
     if (!user)
         return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
-    if (user.role === "member")
+    if (user.role === "member" && !options.allowMembers)
         return NextResponse.json(
             { success: false, error: "이 기능은 관리자 권한이 필요합니다." },
             { status: 403 },

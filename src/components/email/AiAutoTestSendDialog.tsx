@@ -139,7 +139,7 @@ export default function AiAutoTestSendDialog({
                     {preview && (
                         <div className="space-y-2">
                             <Label>생성된 이메일 미리보기</Label>
-                            <div className="rounded-md border p-3 space-y-2">
+                            <div className="rounded-md border border-border/40 p-3 space-y-2">
                                 <p className="text-sm font-medium">제목: {preview.subject}</p>
                                 <div className="border-t pt-2">
                                     <iframe

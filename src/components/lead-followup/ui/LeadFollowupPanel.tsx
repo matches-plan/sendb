@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useLeadFollowup } from "../hooks/useLeadFollowup";
 import { FOLLOWUP_LABELS, type FollowupPatch, type FollowupStatus, type FollowupDetail, type FollowupHistory } from "../types";
@@ -24,9 +25,10 @@ function FollowupForm({ detail, save }: { detail: FollowupDetail; save: (patch: 
     return <form onSubmit={submit} className="space-y-3">
         <fieldset disabled={saving} className="space-y-3">
             <div className="space-y-1"><Label htmlFor={`${id}-status`}>처리 상태</Label>
-                <select id={`${id}-status`} value={status} onChange={(e) => setStatus(e.target.value as FollowupStatus)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
-                    {Object.entries(FOLLOWUP_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                </select></div>
+                <Select value={status} disabled={saving} onValueChange={(value) => setStatus(value as FollowupStatus)}>
+                    <SelectTrigger id={`${id}-status`} className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>{Object.entries(FOLLOWUP_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
+                </Select></div>
             {status === "planned" && <div className="space-y-1"><Label htmlFor={`${id}-due`}>연락 예정 시각 (한국 시간)</Label>
                 <Input id={`${id}-due`} type="datetime-local" required value={due} onChange={(e) => setDue(e.target.value)} />
                 <p className="text-xs text-muted-foreground">핵심 리드는 이 시각이 지나면 근무시간에 담당자에게 재알림합니다.</p></div>}

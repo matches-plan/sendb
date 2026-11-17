@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailAutoPersonalizedLinks, emailCopyExperiments, emailSendQueue, products, partitions, workspaces } from "@/lib/db";
+import { db, emailAutoPersonalizedLinks, emailCopyExperiments, emailSendQueue, emailTemplateLinks, products, partitions, workspaces } from "@/lib/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { reviveOrphanHeldRows } from "@/lib/partition-hold";
 import { wakeSendQueue } from "@/lib/email-send-queue";
@@ -99,6 +99,8 @@ export async function PUT(
         if (companyField !== undefined) updateData.companyField = companyField;
         if (ctaUrl !== undefined) updateData.ctaUrl = ctaUrl || null;
         if (prompt !== undefined) updateData.prompt = prompt || null;
+        // 옮겨 온 고정 문구를 사람이 AI 방식으로 고치면 '수정 필요'가 없어진다
+        if (prompt !== undefined && existing.needsReview === 1 && (prompt || null) !== existing.prompt) updateData.needsReview = 0;
         if (tone !== undefined) updateData.tone = tone || null;
         if (model !== undefined) updateData.model = model || null;
         if (format !== undefined) updateData.format = format || "plain";
@@ -134,6 +136,8 @@ export async function PUT(
                     eq(emailCopyExperiments.orgId, user.orgId),
                     eq(emailCopyExperiments.ruleId, linkId),
                     inArray(emailCopyExperiments.state, ACTIVE_EXPERIMENT_STATES),
+                    // AB 테스트(지시사항 비교)는 A·B 지시사항을 따로 담아 두고 저장 때 새로 맞추므로 막지 않는다
+                    sql`coalesce(${emailCopyExperiments.config}->>'kind', 'policy') <> 'prompt'`,
                 ));
             if (experiments.length > 0) {
                 return NextResponse.json({
@@ -150,6 +154,12 @@ export async function PUT(
             .set(updateData)
             .where(eq(emailAutoPersonalizedLinks.id, linkId))
             .returning();
+
+        // 고정 본문 규칙에서 옮겨 온 규칙을 켜면 원래 템플릿 규칙은 끈다 — 같은 사람에게 두 규칙이 같이 나가지 않게
+        if (updated && updated.isActive === 1 && existing.isActive !== 1 && updated.sourceTemplateLinkId) {
+            await db.update(emailTemplateLinks).set({ isActive: 0, updatedAt: new Date() })
+                .where(eq(emailTemplateLinks.id, updated.sourceTemplateLinkId));
+        }
 
         // 켜지는 규칙: 꺼 둔 동안 held로 둔 대기 줄을 되살려 원래 순서대로 이어 보낸다 (UX-228).
         // 실패해도 저장은 끝났다 — 워커가 회차 첫머리에 같은 조건으로 되살린다

@@ -9,6 +9,7 @@ import { copyTransaction, CopyDeferredError } from "../ai-copy/generation";
 import { CopyActionError } from "../ai-copy/errors";
 import { normalizeEmail } from "../deep-visitor-alert-rules";
 import { kstParts } from "../kst";
+import { scopedPrompt } from "./prompt-scope";
 import { chooseBalancedArm, DAY_MS, experimentInputSchema, plannedSamplePerArm } from "./rules";
 import type { Assignment, Experiment, ExperimentConfig, ExperimentState } from "./types";
 
@@ -303,9 +304,18 @@ export type EnrollmentResult =
           kind: "assigned";
           experiment: Experiment;
           assignment: Assignment;
-          policy: CopyVersion<PolicySnapshot>;
-          knowledge: CopyVersion<KnowledgeSnapshot>;
+          /** 작성 지침 비교 실험(policy)의 고정 버전 — prompt 실험에는 없다 */
+          policy?: CopyVersion<PolicySnapshot>;
+          knowledge?: CopyVersion<KnowledgeSnapshot>;
+          /** prompt 실험: 이 수신자 집단(A·B)의 AI 지시사항 */
+          armPrompt?: string;
       };
+const armPromptOf = (experiment: Experiment, arm: "A" | "B") => {
+    const { kind, promptA, promptB, scope } = experiment.config;
+    if (kind !== "prompt") return undefined;
+    if (arm === "A" || !promptB) return (arm === "A" ? promptA : promptB) || undefined;
+    return scopedPrompt(promptA ?? "", promptB, scope);
+};
 export async function enrollForPreparation(
     conn: CopyConnection,
     input: {
@@ -354,9 +364,16 @@ export async function enrollForPreparation(
                 "실험 준비 보류",
                 true,
             );
-        if (input.internal) return { kind: "excluded", reason: "internal" };
-        const rule = await loadExperimentRule(conn, input.orgId, input.workspaceId, input.ruleId);
-        if (
+        const promptKind = experiment.config.kind === "prompt";
+        // AB 테스트에서 빠지는 수신자(내부·다른 실험 중·이미 연락함)는 막지 않고 규칙 그대로 보낸다
+        const skip = (reason: string): EnrollmentResult =>
+            promptKind ? { kind: "none" } : { kind: "excluded", reason };
+        if (input.internal) return skip("internal");
+        // 끝난 AB 테스트(이긴 안 적용·끄기)는 규칙의 지금 지시사항으로 보낸다
+        if (promptKind && experiment.state === "closed") return { kind: "none" };
+        const rule = promptKind ? null : await loadExperimentRule(conn, input.orgId, input.workspaceId, input.ruleId);
+        // AB 테스트는 A·B 지시사항을 실험에 담아 두므로 규칙의 다른 항목(켜기·발신자 등)이 바뀌어도 이어 간다
+        if (rule && 
             fingerprint(ruleSnapshotOf(rule)) !== experiment.config.ruleFingerprint &&
             !(experiment.state === "closed" && previous?.generation_job_id)
         ) {
@@ -371,7 +388,7 @@ export async function enrollForPreparation(
             });
             return { kind: "excluded", reason: "invalidated" };
         }
-        const [blocked] = await conn<
+        const [blocked] = promptKind ? [{ blocked: false }] : await conn<
             { blocked: boolean }[]
         >`SELECT EXISTS(SELECT 1 FROM ai_copy_policy_versions WHERE id IN(${experiment.config.policyAId},${experiment.config.policyBId}) AND state='blocked')
             OR EXISTS(SELECT 1 FROM ai_copy_knowledge_versions WHERE id=${experiment.config.knowledgeVersionId} AND state='blocked') AS blocked`;
@@ -380,19 +397,20 @@ export async function enrollForPreparation(
                 await conn`UPDATE email_copy_experiments SET state='invalidated',invalidation_reason='사용 버전 차단',pending_mode='hold' WHERE id=${experiment.id}`;
             return { kind: "excluded", reason: "invalidated" };
         }
-        const { A, B, knowledge } = await loadVersions(conn, experiment, false);
+        const versions = promptKind ? null : await loadVersions(conn, experiment, false);
         if (previous)
             return {
                 kind: "assigned",
                 assignment: previous,
                 experiment,
-                policy: previous.arm === "A" ? A : B,
-                knowledge,
+                policy: versions ? (previous.arm === "A" ? versions.A : versions.B) : undefined,
+                knowledge: versions?.knowledge,
+                armPrompt: armPromptOf(experiment, previous.arm),
             };
         const [overlap] =
             await conn`SELECT a.id FROM email_copy_assignments a JOIN email_copy_experiments e ON e.id=a.experiment_id WHERE a.org_id=${input.orgId} AND a.normalized_email=${email}
             AND e.id<>${experiment.id} AND e.state IN('running','paused','enrollment_closed','observing','decision_ready','data_check','insufficient_sample') LIMIT 1`;
-        if (overlap) return { kind: "excluded", reason: "concurrent_experiment" };
+        if (overlap) return skip("concurrent_experiment");
         const recipientAnalysis = experiment.config.analysisUnit === "recipient";
         const [contact] = recipientAnalysis
             ? []
@@ -410,7 +428,7 @@ export async function enrollForPreparation(
         if (!recipientAnalysis && companyKey) {
             const [company] =
                 await conn`SELECT id FROM email_copy_assignments WHERE experiment_id=${experiment.id} AND company_key=${companyKey} AND cohort='primary' LIMIT 1`;
-            if (company) return { kind: "excluded", reason: "company_representative_exists" };
+            if (company) return skip("company_representative_exists");
         }
         if (experiment.state !== "running") return { kind: "none" };
         const [counts] = await conn<
@@ -440,7 +458,7 @@ export async function enrollForPreparation(
         const [priorSend] =
             await conn`SELECT l.id FROM email_send_logs l JOIN partitions p ON p.id=l.partition_id WHERE l.org_id=${input.orgId} AND p.workspace_id=${input.workspaceId}
             AND lower(trim(l.recipient_email))=${email} AND (l.status IN('pending','sent','delivered','uncertain') OR l.status='failed' AND l.request_id IS NOT NULL AND (l.nhn_status_code IS NOT NULL OR l.delivery_fail_source IS NOT NULL)) LIMIT 1`;
-        if (priorSend) return { kind: "excluded", reason: "already_contacted" };
+        if (priorSend) return skip("already_contacted");
         const tier = contact?.tier ?? "unclassified";
         const stratum = fingerprint([
             input.workspaceId,
@@ -462,6 +480,13 @@ export async function enrollForPreparation(
             Assignment[]
         >`INSERT INTO email_copy_assignments(experiment_id,org_id,workspace_id,normalized_email,customer_key,arm,cohort,company_key,record_id,initial_scheduled_at,planned_sender_id,planned_sender_email,stratum,tier,assigned_at)
             VALUES(${experiment.id},${input.orgId},${input.workspaceId},${email},${customerKey},${arm},${cohort},${companyKey},${input.recordId},${input.plannedAt.toISOString()},${input.senderId},${input.senderEmail ? normalizeEmail(input.senderEmail) : null},${stratum},${tier},${input.now.toISOString()}) RETURNING *`;
-        return { kind: "assigned", assignment, experiment, policy: arm === "A" ? A : B, knowledge };
+        return {
+            kind: "assigned",
+            assignment,
+            experiment,
+            policy: versions ? (arm === "A" ? versions.A : versions.B) : undefined,
+            knowledge: versions?.knowledge,
+            armPrompt: armPromptOf(experiment, arm),
+        };
     });
 }

@@ -1,4 +1,5 @@
 import type { FieldDefinition } from "@/types";
+import { BASIC_FIELD_DEFAULTS, BASIC_ROLES, findBasicFields, type BasicRole } from "@/lib/leads/basic-fields";
 import type { LeadRecord, LeadSummary } from "../types";
 
 // 사업부(파티션)마다 같은 뜻의 칸 key가 달라 후보를 순서대로 찾는다
@@ -42,7 +43,6 @@ export const SUMMARY_KEYS = new Set([
     ...AUTO_FILLED_KEYS,
 ]);
 
-/** 기본 항목마다 실제로 저장할 key와 필드 정의 */
 /** 영업관리 리드 추가 창 — 모든 사업 같은 칸 (상태·요청사항·유입경로 없음) */
 const SALES_SLOTS = [
     { id: "company", label: "기업명", keys: COMPANY_KEYS },
@@ -54,15 +54,50 @@ const SALES_SLOTS = [
     { id: "memo", label: "메모", keys: ["profileNote"] },
 ] as const;
 
+const BASIC_SLOT_ID: Record<BasicRole, string> = { name: "contactName", email: "email", phone: "phone" };
+const BASIC_SLOT_ID_SET = new Set(Object.values(BASIC_SLOT_ID));
+const BASIC_FALLBACK_KEYS: Record<BasicRole, string[]> = { name: CONTACT_KEYS, email: EMAIL_KEYS, phone: PHONE_KEYS };
+
+/** 필드를 정해진 순서(sort_order)대로 */
+export function bySortOrder<T extends { sortOrder?: number | null }>(fields: T[]): T[] {
+    return [...fields].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/**
+ * 리드관리 기본 칸(이름·이메일·연락처) — 항상 이 순서로 맨 앞에 보인다.
+ * 파티션에 같은 뜻의 칸이 없어도(예: 연락처를 안 받는 사업) 빈 칸으로 보여주고, 저장은 이미 쓰는 key 또는 기본 key로.
+ */
+export function resolveBasicSlots(fields: FieldDefinition[], data?: Record<string, unknown>) {
+    const found = findBasicFields(fields);
+    return BASIC_ROLES.map((role) => {
+        const field = found[role];
+        const fallback = BASIC_FALLBACK_KEYS[role];
+        const key = field?.key ?? (data && fallback.find((k) => data[k] !== undefined && data[k] !== null && data[k] !== "")) ?? BASIC_FIELD_DEFAULTS[role].key;
+        return { id: BASIC_SLOT_ID[role], role, label: BASIC_FIELD_DEFAULTS[role].label, key, field };
+    });
+}
+
+/** 기본 항목마다 실제로 저장할 key와 필드 정의 — 리드관리는 이름·이메일·연락처가 맨 앞, 나머지는 sort_order 순 */
 export function resolveBaseSlots(fields: FieldDefinition[], mode: "lead" | "sales" = "lead") {
     const byKey = new Map(fields.map((f) => [f.key, f]));
-    const list: ReadonlyArray<{ id: string; label: string; keys: readonly string[] }> = mode === "sales" ? SALES_SLOTS : BASE_SLOTS;
-    return list.map((slot) => {
+    const resolve = (slot: { id: string; label: string; keys: readonly string[] }) => {
         const candidates: string[] = slot.id === "request" ? requestKeys(fields) : [...slot.keys];
         const key = candidates.find((k) => byKey.has(k)) ?? candidates[0];
         return { id: slot.id, label: slot.label, key, field: byKey.get(key) ?? null };
-    });
+    };
+    if (mode === "sales") return SALES_SLOTS.map(resolve);
+    const basics = resolveBasicSlots(fields).map(({ id, label, key, field }) => ({ id, label, key, field }));
+    const basicKeys = new Set(basics.map((b) => b.key));
+    const rest = BASE_SLOTS.filter((s) => !BASIC_SLOT_ID_SET.has(s.id))
+        .map(resolve)
+        .filter((s) => !basicKeys.has(s.key))
+        // 칸이 있는 항목은 sort_order 순, 칸이 없는 항목은 원래 순서대로 뒤에
+        .map((s, i) => ({ s, order: s.field ? s.field.sortOrder : Number.MAX_SAFE_INTEGER, i }))
+        .sort((a, b) => a.order - b.order || a.i - b.i)
+        .map((x) => x.s);
+    return [...basics, ...rest];
 }
+
 
 function text(v: unknown): string {
     if (v === null || v === undefined) return "";
@@ -84,23 +119,28 @@ export function requestKeys(fields: FieldDefinition[]): string[] {
     return [...byLabel, ...REQUEST_KEYS];
 }
 
+const withBasic = (f: FieldDefinition | null, keys: string[]) => (f ? [f.key, ...keys.filter((k) => k !== f.key)] : keys);
+
 export function summarizeLead(record: LeadRecord, fields: FieldDefinition[]): LeadSummary {
     const data = (record.data ?? {}) as Record<string, unknown>;
+    // 이름·이메일·연락처는 파티션마다 key가 달라 공용 규칙(src/lib/leads/basic-fields)으로 찾은 칸을 먼저 본다
+    const found = findBasicFields(fields);
     return {
         company: pick(data, COMPANY_KEYS),
-        contactName: pick(data, CONTACT_KEYS),
-        phone: pick(data, PHONE_KEYS),
-        email: pick(data, EMAIL_KEYS),
+        contactName: pick(data, withBasic(found.name, CONTACT_KEYS)),
+        phone: pick(data, withBasic(found.phone, PHONE_KEYS)),
+        email: pick(data, withBasic(found.email, EMAIL_KEYS)),
         request: pick(data, requestKeys(fields)),
         status: text(data[STATUS_KEY]),
     };
 }
 
-/** 상세 "기타 정보"에 보일 칸 — 공통 항목 외에 값이 있는 칸 */
+/** 상세 "기타 정보"에 보일 칸 — 공통·기본 항목(이름·이메일·연락처) 외에 값이 있는 칸, sort_order 순 */
 export function extraFields(record: LeadRecord, fields: FieldDefinition[]) {
     const data = (record.data ?? {}) as Record<string, unknown>;
-    const skip = new Set([...SUMMARY_KEYS, ...requestKeys(fields)]);
-    return fields
+    const basic = Object.values(findBasicFields(fields)).flatMap((f) => (f ? [f.key] : []));
+    const skip = new Set([...SUMMARY_KEYS, ...requestKeys(fields), ...basic]);
+    return bySortOrder(fields)
         .filter((f) => !skip.has(f.key) && !f.isSystem)
         .map((f) => ({ key: f.key, label: f.label, value: text(data[f.key]) }))
         .filter((f) => f.value);

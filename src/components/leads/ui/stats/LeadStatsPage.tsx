@@ -1,7 +1,7 @@
 "use client";
 
 import { useLeadTabs } from "../../hooks/useTabGroups";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { CalendarRange, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,15 +39,18 @@ const dayText = (v: number | null) => (v === null ? "-" : v < 1 ? "1일 미만" 
 const hourText = (v: number | null): [string, string] =>
     v === null ? ["-", ""] : v < 1 ? [String(Math.round(v * 60)), "분"] : v < 48 ? [v.toFixed(1), "시간"] : [(v / 24).toFixed(1), "일"];
 
-/** 리드 통계 — 사업(워크스페이스)별 유입·전환·응답 KPI */
+/** 리드 통계 — 전체(모든 사업부 합계) 또는 사업(워크스페이스)별 유입·전환·응답 KPI */
 export function LeadStatsPage() {
+    // null = 전체 (모든 사업부 합계)
     const [workspaceId, setWorkspaceId] = useState<number | null>(null);
+    const scope = workspaceId ?? "all";
+    const allTab = useMemo(() => ({ onSelect: () => setWorkspaceId(null) }), []);
     // 빠른 기간(30일 등) 또는 직접 고른 날짜 — 날짜를 고르면 빠른 기간 선택은 풀린다
     const [range, setRange] = useState("all");
     const [custom, setCustom] = useState<{ from?: Date; to?: Date }>({});
     const isCustom = range === "custom" && custom.from && custom.to;
     const { stats, isLoading } = useLeadStats(
-        workspaceId,
+        scope,
         isCustom
             ? {
                   from: format(custom.from!, "yyyy-MM-dd"),
@@ -67,7 +70,7 @@ export function LeadStatsPage() {
                 : periodRange(range === "all" || range === "custom" ? 90 : Number(range), new Date()),
         );
     const leadTabs = useLeadTabs();
-    const compared = useLeadStatsCompare(pc.periods ? workspaceId : null, pc.periods ?? []);
+    const compared = useLeadStatsCompare(pc.periods ? scope : null, pc.periods ?? []);
     const t = stats?.totals;
     const c = stats?.conversion;
     const r = stats?.response;
@@ -75,7 +78,7 @@ export function LeadStatsPage() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} prefKey="leads" {...leadTabs} />
+            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} allTab={allTab} prefKey="leads" {...leadTabs} />
             <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className="space-y-3 px-8 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

@@ -25,6 +25,7 @@ import { STALE_AFTER_MS } from "@/lib/deep-visitor-alert-rules";
 import { SEND_LOG_INDEXES_READY_SQL } from "@/lib/db/send-log-indexes";
 import { linkSenderPool } from "@/lib/email-sender-limit-rules";
 import { addDaysYmd } from "@/lib/kst";
+import { createSendHealthNotifications } from "@/lib/user-notifications/repository";
 import { resolveReplyConfig, describeReplyError } from "@/lib/email-reply-rules";
 import { countHeldQueue, holdPartition, pauseSenderForHealth } from "@/lib/partition-hold";
 import {
@@ -1139,16 +1140,26 @@ async function insertAlert(
     eventIds: number[],
     message: string,
     urgent: boolean,
-    scheduledAt?: Date | null
+    scheduledAt?: Date | null,
+    /** 화면 알림(머리 종)도 넣나 — 운영 글이 사업 글과 같은 사건을 담으면 false로 두 번 알리지 않는다 */
+    inApp: boolean = true
 ): Promise<void> {
     const st = initialAlertStatus(ctx.config, ctx.env, target, { urgent, now: ctx.now });
-    await db.execute(sql`
+    const rows = await q<{ id: number }>(sql`
         INSERT INTO email_health_alerts (org_id, batch_key, event_ids, target, workspace_id, message, status, last_error, scheduled_at)
         VALUES (${ctx.orgId}::uuid, ${batchKey.slice(0, 80)}, ${sql.param(eventIds)}::int[], ${target === "ops" ? "ops" : `ws:${target}`},
                 ${target === "ops" ? null : target}, ${message}, ${st.status}, ${st.lastError},
                 ${scheduledAt ? sql`${scheduledAt.toISOString()}::timestamptz` : sql`now()`})
         ON CONFLICT (org_id, batch_key, target) DO NOTHING
+        RETURNING id
     `);
+    // 구글 챗과 따로, 알림 담당자에게 화면 알림 — 새로 들어간 줄만(중복 방지는 위 ON CONFLICT를 따른다), alert·enforce 모드에서만.
+    // 웹훅이 없거나 밤이라 챗을 건너뛰어도 화면 알림은 넣는다. 실패해도 건강 확인은 계속한다
+    const live = ctx.config.mode === "alert" || ctx.config.mode === "enforce";
+    if (!rows[0] || !live || !inApp) return;
+    await createSendHealthNotifications({ orgId: ctx.orgId, alertId: num(rows[0].id), batchKey, target, message }).catch((e) =>
+        console.error(`[send-health] 화면 알림 넣기 실패: ${shortError(e)}`)
+    );
 }
 
 /**
@@ -1173,7 +1184,9 @@ async function queueBatchAlerts(ctx: OrgContext, batchKey: string, items: AlertI
         const worse = list.map((x) => x.ev.worsenedFromBucket !== null && x.ev.worsenedFromBucket !== undefined);
         const message = batchAlertText({ orgName: ctx.orgName, blocks, baseUrl: ctx.config.baseUrl, worse });
         const urgent = list.some(isUrgent);
-        await insertAlert(ctx, batchKey, target, list.map((x) => x.id), message, urgent);
+        // 운영 글은 사업 글과 같은 사건을 담는다 — 화면 알림은 어느 사업에도 속하지 않는 사건이 있을 때만
+        const inApp = target !== "ops" || list.some((x) => x.ev.workspaceIds.length === 0);
+        await insertAlert(ctx, batchKey, target, list.map((x) => x.id), message, urgent, null, inApp);
     }
 }
 
@@ -1682,7 +1695,7 @@ export async function notifyRelease(input: {
         });
         if (!ins.isNew) return;
         // 조직 이름은 글 첫 줄에 이미 있다 (머리를 두 번 붙이지 않는다, HR-9)
-        await insertAlert(ctx, key, "ops", [ins.id], text, true);
+        await insertAlert(ctx, key, "ops", [ins.id], text, true, null, input.workspaceIds.length === 0);
         for (const w of input.workspaceIds) await insertAlert(ctx, key, w, [ins.id], text, true);
         void deliverHealthAlerts({ env, batchKey: key }).catch((e) => console.error(`[send-health] 풀림 알림 보내기 실패: ${shortError(e)}`));
     } catch (e) {

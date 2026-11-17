@@ -2,7 +2,7 @@ import { db, emailConfigs } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
 import { createDroppedHeaderWarner, withSafeCustomHeaders } from "@/lib/nhn-email-headers";
 import { submitEmailWithGuard } from "@/lib/email-send-guard";
-import { isOrganizationUnsubscribed } from "@/lib/email-unsubscribe";
+import { isWorkspaceUnsubscribed } from "@/lib/email-unsubscribe";
 
 // ============================================
 // NHN Cloud Email API 타입
@@ -153,14 +153,18 @@ export class NhnEmailClient {
 
     // --- 개별 발송 ---
 
-    async sendEachMail(data: NhnEmailSendRequest): Promise<{
+    /**
+     * 보내기 직전 수신거부 확인은 발송한 사업부 기준 (그 사업부 거부 + 사업부 없는 예전 거부).
+     * workspaceId를 넘기지 않은 발송(사업부가 없는 메일)은 조직 안 어느 사업부의 거부든 막는다.
+     */
+    async sendEachMail(data: NhnEmailSendRequest, scope: { workspaceId?: number | null } = {}): Promise<{
         header: NhnEmailApiHeader;
         data: NhnEmailSendResult | null;
     }> {
         return submitEmailWithGuard(
             this.options.orgId,
             data.receiverList.map((receiver) => receiver.receiveMailAddr),
-            isOrganizationUnsubscribed,
+            (orgId, email) => isWorkspaceUnsubscribed(orgId, scope.workspaceId ?? null, email),
             (recipients) => this.request<NhnEmailSendResult>(
                 "POST",
                 "/email/v2.1/appKeys/{appKey}/sender/eachMail",

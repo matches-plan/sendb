@@ -31,7 +31,7 @@ export function kpiCards(data: KpiData) {
                 key: "openRate",
                 label: "사람 오픈율(추정)",
                 sub: `${n(c.opened)}/${n(c.openBase)}`,
-                tooltip: `사람 오픈·클릭 ÷ 픽셀을 넣은 성공 발송\n${OPEN_NOTICE_TITLE}`
+                tooltip: `사람 오픈·클릭 ÷ 픽셀을 넣은 성공 발송. ${OPEN_NOTICE_TITLE}`
             },
             {
                 key: "clickRate",

@@ -113,6 +113,8 @@ export async function PATCH(
 
             // 속성 타입을 바꾸거나 해제하면 새 속성 목록 전체 표시(null)로 되돌린다(UX-067)
             updateData.visibleFields = null;
+            // 리드관리 파티션은 바꾼 타입에도 이름·이메일·연락처 등 기본 칸을 갖춘다
+            if (access.partition.category === "lead" && category === undefined) moveToLead = true;
         }
 
         // null 또는 빈 배열 = 전체 표시
@@ -201,7 +203,7 @@ export async function PATCH(
             .set(updateData)
             .where(eq(partitions.id, partitionId))
             .returning();
-        if (moveToLead) await ensureCategoryFieldType(partitionId, category === "sales" ? "sales" : "lead");
+        if (moveToLead) await ensureCategoryFieldType(partitionId, (category ?? access.partition.category) === "sales" ? "sales" : "lead");
 
         return NextResponse.json({ success: true, data: updated });
     } catch (error) {

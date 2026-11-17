@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ export default function OutcomeEditor({
     if (error) return <p role="alert">성과 기록을 불러오지 못했습니다.</p>;
     if (!data) return <p>회신과 수정 이력을 불러오는 중입니다.</p>;
     return (
-        <section className="space-y-4 rounded-md border p-4">
+        <section className="space-y-4 rounded-md border border-border/40 p-4">
             <h3 className="font-semibold">{data.assignment.normalized_email} 성과 기록</h3>
             <p className="text-sm text-muted-foreground">
                 가격·자료·미팅·도입 문의는 관심 있음, 단순한 감사 인사는 중립으로 구분합니다. 자동
@@ -146,7 +147,7 @@ function OutcomeForm({
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="기록 종류">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={eventType}
@@ -162,14 +163,14 @@ function OutcomeForm({
                                     </option>
                                 ),
                             )}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 {eventType === "human_reply" && (
                     <>
                         <Field label="연결된 사람 회신">
                             {(id) => (
-                                <select
+                                <OptionSelect
                                     id={id}
                                     className={controlClass}
                                     value={replyId}
@@ -181,12 +182,12 @@ function OutcomeForm({
                                             #{r.id} {r.subject ?? "제목 없음"}
                                         </option>
                                     ))}
-                                </select>
+                                </OptionSelect>
                             )}
                         </Field>
                         <Field label="회신의 관심 여부">
                             {(id) => (
-                                <select
+                                <OptionSelect
                                     id={id}
                                     className={controlClass}
                                     value={intent}
@@ -197,7 +198,7 @@ function OutcomeForm({
                                             {intentLabel(i)}
                                         </option>
                                     ))}
-                                </select>
+                                </OptionSelect>
                             )}
                         </Field>
                     </>

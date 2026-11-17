@@ -42,7 +42,7 @@ export default function SendQueueOverviewCard() {
                     )}
                 </p>
                 {rows.length > 0 && (
-                    <ul className="divide-y rounded-md border">
+                    <ul className="divide-y rounded-md border border-border/40">
                         {rows.map((r) => (
                             <li key={r.linkId}>
                                 <Link

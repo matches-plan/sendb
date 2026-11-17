@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export function GenerationList({
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="사업 필터">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={workspace}
@@ -66,12 +67,12 @@ export function GenerationList({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="작업 분류">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={origin}
@@ -85,7 +86,7 @@ export function GenerationList({
                                     {o.label}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
             </div>
@@ -216,7 +217,7 @@ function GenerationDetail({
     if (!data) return <p>상세를 불러오는 중입니다.</p>;
     const { job, attempts } = data;
     return (
-        <section className="space-y-3 rounded-md border p-4">
+        <section className="space-y-3 rounded-md border border-border/40 p-4">
             {confirmationDialog}
             <h3 className="font-semibold">
                 작업 #{id} · {stateLabel(job.state)}

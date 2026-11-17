@@ -51,7 +51,7 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  // 드롭다운은 항상 선택칸 바로 아래(공간이 없으면 위)에 왼쪽 맞춰 연다 — 선택칸을 덮지 않게
+  // 목록은 항상 선택칸 바로 아래(공간이 없으면 위)에 왼쪽을 맞춰 연다 — 선택칸 위에 겹쳐 뜨지 않게
   position = "popper",
   align = "start",
   ...props

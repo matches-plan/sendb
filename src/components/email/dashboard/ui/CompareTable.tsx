@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InfoTip } from "@/components/ui/info-tip";
 import { StatCard } from "@/components/leads/ui/stats/Card";
@@ -25,8 +25,7 @@ export function CompareTable({ query }: { query: StatsQuery }) {
                                 <InfoTip text={column.tooltip} />
                             </div>
                         </TableHead>)}</TableRow></TableHeader>
-                        <TableBody><CompareRows rows={stats.rows} /></TableBody>
-                        <TableFooter><CompareRows rows={stats.total} /></TableFooter>
+                        <TableBody><CompareRows rows={stats.total} total /><CompareRows rows={stats.rows} /></TableBody>
                     </Table></div>}
     </StatCard>;
 }

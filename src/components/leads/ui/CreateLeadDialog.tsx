@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { FieldDefinition } from "@/types";
 import { createLead } from "../api";
-import { AUTO_FILLED_KEYS, resolveBaseSlots } from "../utils/lead-fields";
+import { AUTO_FILLED_KEYS, bySortOrder, resolveBaseSlots } from "../utils/lead-fields";
 import { useSession } from "@/contexts/SessionContext";
 import { OwnerSelect } from "@/components/sales/ui/OwnerSelect";
 import type { CardFields } from "@/components/sales/types";
@@ -72,7 +72,7 @@ function FieldInput({
     return <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />;
 }
 
-/** 리드 추가 — 기본 항목만 보이고, 나머지는 "항목 추가"로 골라서 넣는다 */
+/** 리드 추가 — 이름·이메일·연락처를 맨 앞에, 그 밖의 기본 항목은 sort_order 순으로 보이고, 나머지는 "항목 추가"로 골라서 넣는다 */
 export function CreateLeadDialog({ open, onOpenChange, partitionId, fields, onCreated, mode = "lead", prefill, workspaceId }: CreateLeadDialogProps) {
     const sales = mode === "sales";
     const { user } = useSession();
@@ -82,7 +82,7 @@ export function CreateLeadDialog({ open, onOpenChange, partitionId, fields, onCr
     const slots = useMemo(() => resolveBaseSlots(fields, mode), [fields, mode]);
     const slotKeys = useMemo(() => new Set(slots.map((s) => s.key)), [slots]);
     // 캠페인·광고 소재 등은 웹폼·메타 광고가 자동으로 채우는 유입 정보라 직접 넣는 항목에서 뺀다
-    const extraOptions = fields.filter((f) => !slotKeys.has(f.key) && !f.isSystem && !AUTO_FILLED_KEYS.has(f.key));
+    const extraOptions = bySortOrder(fields).filter((f) => !slotKeys.has(f.key) && !f.isSystem && !AUTO_FILLED_KEYS.has(f.key));
 
     const statusSlot = slots.find((s) => s.id === "status");
     const defaultStatus = statusSlot?.field?.options?.[0] ?? "";

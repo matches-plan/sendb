@@ -7,6 +7,7 @@ import { getEmailClient, getEmailConfig, appendSignature } from "@/lib/nhn-email
 import { getAiClient, getSearchAiClient, generateEmail, generateCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 import { resolveSender, resolveSignature } from "@/lib/email-sender-resolver";
 import { linkSenderPool } from "@/lib/email-sender-limit-rules";
+import { resolveWorkspaceId } from "@/lib/email-unsubscribe";
 import { substitutePromptVariables } from "@/lib/email-utils";
 
 // POST /api/email/auto-personalized/test-send
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
         const signatureJson = await resolveSignature(user.orgId, {
             requestedId: link.signatureId ?? undefined,
             config: emailConfig,
+            workspaceId: await resolveWorkspaceId(link.partitionId),
         });
 
         // 5. 회사 조사 (autoResearch ON && 레코드에 _companyResearch 없으면)

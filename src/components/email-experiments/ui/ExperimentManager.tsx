@@ -94,7 +94,7 @@ export default function ExperimentManager({
                 </TabsContent>
                 <TabsContent value="experiments" className="space-y-5 pt-3">
                     {!list.data.experiments.length ? (
-                        <div className="rounded-md border p-5">
+                        <div className="rounded-md border border-border/40 p-5">
                             <p>아직 만든 실험이 없습니다.</p>
                             <p className="mt-2 text-sm text-muted-foreground">
                                 먼저 AI 품질 화면에서 두 작성 지침을 평가·승인하고 A 지침을 해당
@@ -114,7 +114,7 @@ export default function ExperimentManager({
                                     key={e.id}
                                     type="button"
                                     onClick={() => onSelectExperiment(e.id)}
-                                    className={`space-y-2 rounded-md border p-4 text-left ${selected === e.id ? "border-primary bg-muted" : "hover:bg-muted/50"}`}
+                                    className={`space-y-2 rounded-md border border-border/40 p-4 text-left ${selected === e.id ?"border-primary bg-muted" : "hover:bg-muted/50"}`}
                                 >
                                     <p className="font-medium">
                                         {e.name} · #{e.id}

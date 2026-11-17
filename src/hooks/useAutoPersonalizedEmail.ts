@@ -38,6 +38,12 @@ export interface AutoPersonalizedLink {
     assetIds: number[] | null;
     isActive: number;
     isDraft?: number;
+    /** 고정 본문 규칙에서 옮겨 와 프롬프트를 아직 고치지 않음 ('수정 필요') */
+    needsReview?: number;
+    /** 진행 중인 AB 테스트가 있다 */
+    abTestActive?: boolean;
+    /** 옮겨 오기 전 고정 본문 규칙이 켜져 있으면 1 — 그 규칙으로 계속 나가는 중 */
+    sourceTemplateActive?: number | null;
     createdAt: string;
     updatedAt: string;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,7 @@ export function PriceSettings({
             >
                 <Field label="모델">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={model}
@@ -76,12 +77,12 @@ export function PriceSettings({
                                         : ""}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="통화">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={currency}
@@ -89,7 +90,7 @@ export function PriceSettings({
                         >
                             <option value="USD">USD</option>
                             <option value="KRW">KRW</option>
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 {(["input", "output"] as const).map((key) => (
@@ -186,7 +187,7 @@ export function PriceSettings({
             ) : (
                 <ul className="space-y-2 text-sm">
                     {data.map((p) => (
-                        <li key={p.id} className="rounded-md border p-3">
+                        <li key={p.id} className="rounded-md border border-border/40 p-3">
                             {p.model} · 입력 {p.input_per_million} / 출력 {p.output_per_million}{" "}
                             {p.currency} · {new Date(p.effective_at).toLocaleDateString("ko-KR")}
                             부터{p.fx_date && ` · 환율 기준 ${p.fx_date}`}

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import {
     DndContext,
     closestCenter,
@@ -79,6 +79,8 @@ interface FormBuilderProps {
     onFieldsChange: (fields: FormFieldItem[]) => void;
     workspaceFields: FieldDefinition[];
     slug?: string;
+    /** 폼 설정 탭 맨 위에 놓는 연결 파티션 선택 (수정 화면만) */
+    partitionPicker?: ReactNode;
 }
 
 const FIELD_TYPES = [
@@ -288,6 +290,7 @@ export default function FormBuilder({
     onFieldsChange,
     workspaceFields,
     slug,
+    partitionPicker,
 }: FormBuilderProps) {
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -378,6 +381,12 @@ export default function FormBuilder({
             </TabsContent>
 
             <TabsContent value="settings" className="space-y-4 mt-4">
+                {partitionPicker && (
+                    <div className="space-y-2">
+                        <Label>연결 파티션</Label>
+                        {partitionPicker}
+                    </div>
+                )}
                 <div className="space-y-2">
                     <Label>커버 이미지</Label>
                     <div className="space-y-3">

@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,7 @@ export default function AutomaticObservations({
                 firstOnly={mode === "outcomes"}
                 onOpenExperiment={onOpenExperiment}
             />
-            <div className="rounded-md border bg-muted/30 p-5 space-y-2">
+            <div className="rounded-md border border-border/40 bg-muted/30 p-5 space-y-2">
                 <div className="flex gap-2 items-center">
                     <h3 className="font-semibold">
                         {mode === "quality"
@@ -59,7 +60,7 @@ export default function AutomaticObservations({
             <div className="max-w-sm">
                 <Field label="자동 관찰 사업">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={workspace}
@@ -71,7 +72,7 @@ export default function AutomaticObservations({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
             </div>
@@ -92,7 +93,7 @@ export default function AutomaticObservations({
                             <div className="grid gap-4 lg:grid-cols-2">
                                 {data.purposes.map((p) => (
                                     <section
-                                        className="rounded-md border p-5 space-y-3"
+                                        className="rounded-md border border-border/40 p-5 space-y-3"
                                         key={p.purpose}
                                     >
                                         <h4 className="font-semibold">{purposeLabel(p.purpose)}</h4>

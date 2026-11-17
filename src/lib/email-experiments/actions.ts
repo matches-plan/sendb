@@ -4,6 +4,7 @@ import { CopyActionError } from "../ai-copy/errors";
 import { bindCopyVersions } from "../ai-copy/versions";
 import { loadExperimentResults } from "./results";
 import { experimentEvent } from "./repository";
+import { decidePromptTests } from "./prompt-tests";
 import type { Experiment } from "./types";
 export async function adoptExperiment(
     conn: CopyConnection,
@@ -57,7 +58,7 @@ export async function adoptExperiment(
     };
     return insideTransaction ? apply() : copyTransaction(conn, apply);
 }
-/** 새 발송이 없더라도 모집 종료와 14일 성숙 상태를 진행시킨다. 성과를 보고 조기 종료하지 않는다. */
+/** 새 발송이 없더라도 모집 종료와 14일 성숙 상태를 진행시킨다. 성과를 보고 조기 종료하지 않는다. AB 테스트는 관찰 뒤 자동 판정한다. */
 export async function advanceExperimentLifecycles(conn: CopyConnection, now: Date, orgId?: string) {
     return copyTransaction(conn, async () => {
         const changed = await conn<{ id: number; org_id: string; state: string }[]>`WITH counts AS (
@@ -76,6 +77,8 @@ export async function advanceExperimentLifecycles(conn: CopyConnection, now: Dat
             });
         await conn`UPDATE email_copy_experiments e SET state='decision_ready' WHERE e.state IN('enrollment_closed','observing') AND (${orgId ?? null}::uuid IS NULL OR e.org_id=${orgId ?? null}::uuid) AND NOT EXISTS(
         SELECT 1 FROM email_copy_assignments a WHERE a.experiment_id=e.id AND a.cohort='primary' AND a.initial_scheduled_at+interval '14 days'>${now.toISOString()}::timestamptz)`;
-        return { advanced: changed.length };
+        // AB 테스트(prompt)는 관찰이 끝나면 바로 판정해 닫는다 — 이긴 B안은 규칙에 넣는다
+        const { decided } = await decidePromptTests(conn, now, orgId);
+        return { advanced: changed.length, decided };
     });
 }

@@ -32,6 +32,7 @@ src/components/{feature-name}/
 - 한 줄에 같이 놓이는 버튼·입력창·셀렉트에 높이 클래스(`h-8`, `h-10` 등)를 따로 붙이지 않는다. 더 작은 컨트롤이 꼭 필요하면 `size="xs"`/`"icon-xs"`를 쓰고 같은 줄의 다른 컨트롤도 맞춘다.
 - 정사각 아이콘 버튼은 `size="icon"`(36px) 계열을 쓴다.
 - 브라우저 기본 UI를 쓰지 않는다. 날짜는 `<input type="date">` 대신 `DatePicker`(`src/components/ui/date-picker.tsx`, 달력 팝오버), 선택은 `<select>` 대신 `Select` 또는 `DropdownMenu`, 확인창은 `window.confirm`/`alert` 대신 `AlertDialog`·`AsyncAlertDialog`를 쓴다. 디자인된 컴포넌트가 없으면 `src/components/ui/`에 먼저 만들고 쓴다.
+- 드롭다운·선택 목록은 항상 선택칸 바로 아래(공간이 없으면 위)에 왼쪽을 맞춰 연다. 선택칸 위에 겹쳐 뜨면 안 된다 — `SelectContent` 기본값이 `position="popper"`·`align="start"`이니 `position="item-aligned"`로 바꾸지 않는다.
 - 입력창 안의 작은 도구 버튼(종류 선택·날짜 지정 등)은 genius-hub-erp처럼 테두리 없는 `h-7 px-2 text-xs hover:bg-accent` 트리거 + 디자인된 드롭다운/달력으로 만든다.
 - 카드·패널에는 그림자를 넣지 않는다. 테두리는 아주 연하게(`border-border/40`)만 쓰고, 바탕색 차이(페이지 옅은 회색 + 카드 흰색)로 구분한다. 라운드는 `rounded-lg` 이하로 쓴다 (`rounded-xl`·`rounded-2xl` 금지).
 - 카드 테두리는 `border-border/40`, 테두리 버튼(`variant="outline"`)·입력창·셀렉트·텍스트영역은 `border-border/70`으로 같은 진하기(한 줄에 놓일 때 높이가 같아 보이게). 그림자 없음. 필터처럼 값을 고르면 옆에 "초기화" 버튼을 둔다.

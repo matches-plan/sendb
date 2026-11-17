@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailAutoPersonalizedLinks, partitions, workspaces, products } from "@/lib/db";
-import { eq, and } from "drizzle-orm";
+import { db, emailAutoPersonalizedLinks, emailTemplateLinks, partitions, workspaces, products } from "@/lib/db";
+import { eq, and, sql } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { resolveRuleSenderPool } from "@/lib/email-sender-resolver";
 
@@ -41,6 +41,13 @@ export async function GET(req: NextRequest) {
             preventDuplicate: emailAutoPersonalizedLinks.preventDuplicate,
             isActive: emailAutoPersonalizedLinks.isActive,
             isDraft: emailAutoPersonalizedLinks.isDraft,
+            needsReview: emailAutoPersonalizedLinks.needsReview,
+            // 진행 중인 AB 테스트(사람이 켠 지시사항 비교 또는 자동 준비 실험)가 있는가 — 목록의 'AB 테스트' 표시
+            abTestActive: sql<boolean>`EXISTS (SELECT 1 FROM email_copy_experiments e WHERE e.rule_id = ${emailAutoPersonalizedLinks.id}
+                AND e.org_id = ${emailAutoPersonalizedLinks.orgId}
+                AND e.state IN ('running','paused','enrollment_closed','observing','decision_ready','data_check','insufficient_sample'))`,
+            // 옮겨 오기 전 고정 본문 규칙이 아직 켜져 있으면 그 규칙으로 계속 나간다
+            sourceTemplateActive: sql<number | null>`(SELECT ${emailTemplateLinks.isActive} FROM ${emailTemplateLinks} WHERE ${emailTemplateLinks.id} = ${emailAutoPersonalizedLinks.sourceTemplateLinkId})`,
             createdAt: emailAutoPersonalizedLinks.createdAt,
             updatedAt: emailAutoPersonalizedLinks.updatedAt,
         };

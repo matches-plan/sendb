@@ -38,7 +38,7 @@ export default function AssetPickerField({ value, onChange }: AssetPickerFieldPr
                     {value.map((id) => {
                         const asset = byId.get(id);
                         return (
-                            <div key={id} className="relative w-16 h-16 rounded border overflow-hidden group">
+                            <div key={id} className="relative w-16 h-16 rounded border border-border/40 overflow-hidden group">
                                 {asset ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />

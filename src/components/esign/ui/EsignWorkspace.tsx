@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/common/page-header";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { FileSignature, Plus, RefreshCw, Search } from "lucide-react";
@@ -23,14 +24,14 @@ export function EsignWorkspace() {
 }
 function PreviewWorkspace() {
     const [workspaceId, setWorkspaceId] = useState(101);
-    return <div className="space-y-5"><PageHeader title="전자서명 체험" description="가상 계약서로 직원 화면과 고객 화면을 모두 확인하세요." /><EsignPreviewNotice /><label className="flex items-center gap-3 text-sm">가상 사업<select aria-label="전자서명 체험 사업" className="h-10 rounded-md border bg-background px-3" value={workspaceId} onChange={event => setWorkspaceId(Number(event.target.value))}><option value={101}>디하 체험</option><option value={102}>백오랩 체험</option></select></label><EsignPreviewOutbox workspaceId={workspaceId} /><WorkspaceContent key={workspaceId} workspaceId={workspaceId} preview /></div>;
+    return <div className="space-y-5"><PageHeader title="전자서명 체험" description="가상 계약서로 직원 화면과 고객 화면을 모두 확인하세요." /><EsignPreviewNotice /><label className="flex items-center gap-3 text-sm">가상 사업<Select value={String(workspaceId)} onValueChange={value => setWorkspaceId(Number(value))}><SelectTrigger aria-label="전자서명 체험 사업" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="101">디하 체험</SelectItem><SelectItem value="102">백오랩 체험</SelectItem></SelectContent></Select></label><EsignPreviewOutbox workspaceId={workspaceId} /><WorkspaceContent key={workspaceId} workspaceId={workspaceId} preview /></div>;
 }
 function StandardWorkspace() {
     const params = useSearchParams();
     const { workspaces, isLoading: workspaceLoading } = useWorkspaces();
     const [selection, setSelection] = useState(Number(params.get("workspaceId")) || 0);
     const workspaceId = workspaces.find(item => item.id === selection)?.id || workspaces[0]?.id;
-    return <div className="space-y-6"><PageHeader title="전자서명" description="계약서를 준비하고 이메일·알림톡으로 서명을 요청하세요." />{workspaceLoading ? <p className="py-10 text-sm text-muted-foreground">워크스페이스를 불러오고 있습니다.</p> : !workspaceId ? <p className="rounded-xl border p-8 text-sm text-muted-foreground">사용할 수 있는 워크스페이스가 없습니다.</p> : <><label className="inline-flex items-center gap-3 text-sm"><span className="sr-only">워크스페이스</span><select aria-label="전자서명 워크스페이스" className="h-10 min-w-56 rounded-md border bg-background px-3" value={workspaceId} onChange={event => setSelection(Number(event.target.value))}>{workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><WorkspaceContent key={workspaceId} workspaceId={workspaceId} recordId={Number(params.get("recordId")) || undefined} contactId={params.get("contactId") || undefined} /></>}</div>;
+    return <div className="space-y-6"><PageHeader title="전자서명" description="계약서를 준비하고 이메일·알림톡으로 서명을 요청하세요." />{workspaceLoading ? <p className="py-10 text-sm text-muted-foreground">워크스페이스를 불러오고 있습니다.</p> : !workspaceId ? <p className="rounded-xl border p-8 text-sm text-muted-foreground">사용할 수 있는 워크스페이스가 없습니다.</p> : <><label className="inline-flex items-center gap-3 text-sm"><span className="sr-only">워크스페이스</span><Select value={String(workspaceId)} onValueChange={value => setSelection(Number(value))}><SelectTrigger aria-label="전자서명 워크스페이스" className="w-auto min-w-56"><SelectValue /></SelectTrigger><SelectContent>{workspaces.map(item => <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>)}</SelectContent></Select></label><WorkspaceContent key={workspaceId} workspaceId={workspaceId} recordId={Number(params.get("recordId")) || undefined} contactId={params.get("contactId") || undefined} /></>}</div>;
 }
 
 function WorkspaceContent({ workspaceId, recordId, contactId, preview = false }: { workspaceId: number; recordId?: number; contactId?: string; preview?: boolean }) {

@@ -177,7 +177,7 @@ export function ReplyDetailSheet({
                                     <p className="text-xs font-medium text-muted-foreground">
                                         {reply.alertStatus === "dry_run" ? "나갈 카드 (미리보기)" : "카드 글자"}
                                     </p>
-                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs">{reply.alertMessage}</pre>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border/40 bg-muted/40 p-3 text-xs">{reply.alertMessage}</pre>
                                 </div>
                             )}
 
@@ -191,7 +191,7 @@ export function ReplyDetailSheet({
                                     ) : (
                                         <ul className="space-y-1 text-xs">
                                             {candidates.map((c) => (
-                                                <li key={c.sendLogId} className="rounded border px-2 py-1">
+                                                <li key={c.sendLogId} className="rounded border border-border/40 px-2 py-1">
                                                     <span className="font-medium">{c.workspaceName ?? "사업 없음"}</span>
                                                     {c.ruleName ? ` · ${c.ruleName}` : ""} · {formatKstDateTime(c.sentAt)}
                                                     <p className="truncate text-muted-foreground">{c.subject ?? "(제목 없음)"}</p>

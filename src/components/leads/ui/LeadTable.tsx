@@ -127,10 +127,21 @@ export function LeadTable({
                     <colgroup>
                         <col className={sales ? "w-[160px]" : "w-[104px]"} />
                         <col className="w-[36px]" />
-                        {!sales && <col className="w-[180px]" />}
-                        <col className={sales ? "w-[150px]" : "w-[100px]"} />
-                        <col className="w-[130px]" />
-                        <col className="w-[180px]" />
+                        {sales ? (
+                            <>
+                                <col className="w-[150px]" />
+                                <col className="w-[130px]" />
+                                <col className="w-[180px]" />
+                            </>
+                        ) : (
+                            // 리드관리: 이름·이메일·연락처가 맨 앞, 그다음 기업명
+                            <>
+                                <col className="w-[110px]" />
+                                <col className="w-[180px]" />
+                                <col className="w-[130px]" />
+                                <col className="w-[160px]" />
+                            </>
+                        )}
                         {sales ? (
                             <>
                                 <col className="w-[120px]" />
@@ -153,10 +164,20 @@ export function LeadTable({
                             <th className={HEAD}>
                                 <Checkbox checked={allChecked} onCheckedChange={toggleAll} aria-label="전체 선택" />
                             </th>
-                            {!sales && <th className={HEAD}>기업명</th>}
-                            <th className={HEAD}>{sales ? "이름" : "담당자"}</th>
-                            <th className={HEAD}>연락처</th>
-                            <th className={HEAD}>이메일</th>
+                            {sales ? (
+                                <>
+                                    <th className={HEAD}>이름</th>
+                                    <th className={HEAD}>연락처</th>
+                                    <th className={HEAD}>이메일</th>
+                                </>
+                            ) : (
+                                <>
+                                    <th className={HEAD}>이름</th>
+                                    <th className={HEAD}>이메일</th>
+                                    <th className={HEAD}>연락처</th>
+                                    <th className={HEAD}>기업명</th>
+                                </>
+                            )}
                             {sales ? (
                                 <>
                                     <th className={HEAD}>담당자</th>
@@ -220,26 +241,32 @@ export function LeadTable({
                                                 aria-label="선택"
                                             />
                                         </td>
-                                        {!sales && (
-                                        <td className={CELL}>
-                                            <div className="truncate font-medium">
-                                                {lead.company || "-"}
-                                            </div>
-                                            {late && (
-                                                <span className="mt-1 inline-block rounded bg-rose-100 px-1 text-[10px] text-rose-700">
-                                                    24h 미응대
-                                                </span>
-                                            )}
-                                        </td>
+                                        {sales ? (
+                                            <>
+                                                <td className={cn(CELL, "truncate")}>
+                                                    {lead.contactName || "-"}
+                                                    {(record.data as Record<string, unknown>)?.contactTitle ? (
+                                                        <span className="text-muted-foreground"> · {String((record.data as Record<string, unknown>).contactTitle)}</span>
+                                                    ) : null}
+                                                </td>
+                                                <td className={cn(CELL, "truncate")}>{lead.phone || "-"}</td>
+                                                <td className={cn(CELL, "truncate")}>{lead.email || "-"}</td>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <td className={CELL}>
+                                                    <div className="truncate font-medium">{lead.contactName || "-"}</div>
+                                                    {late && (
+                                                        <span className="mt-1 inline-block rounded bg-rose-100 px-1 text-[10px] text-rose-700">
+                                                            24h 미응대
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className={cn(CELL, "truncate")}>{lead.email || "-"}</td>
+                                                <td className={cn(CELL, "truncate")}>{lead.phone || "-"}</td>
+                                                <td className={cn(CELL, "truncate")}>{lead.company || "-"}</td>
+                                            </>
                                         )}
-                                        <td className={cn(CELL, "truncate")}>
-                                            {lead.contactName || "-"}
-                                            {sales && (record.data as Record<string, unknown>)?.contactTitle ? (
-                                                <span className="text-muted-foreground"> · {String((record.data as Record<string, unknown>).contactTitle)}</span>
-                                            ) : null}
-                                        </td>
-                                        <td className={cn(CELL, "truncate")}>{lead.phone || "-"}</td>
-                                        <td className={cn(CELL, "truncate")}>{lead.email || "-"}</td>
                                         {sales ? (
                                             <SalesCells record={record} />
                                         ) : (

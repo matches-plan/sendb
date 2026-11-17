@@ -39,7 +39,7 @@ export default function ChatDeliverySection({ rows }: { rows: ChatDeliveryRow[] 
             {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">아직 보낸 알림이 없습니다. 연결 확인으로 웹훅을 미리 확인할 수 있습니다.</p>
             ) : (
-                <ul className="divide-y rounded-md border text-xs">
+                <ul className="divide-y rounded-md border border-border/40 text-xs">
                     {rows.map((r) => {
                         const waiting = r.waiting.deep + r.waiting.reply + r.waiting.health;
                         return (

@@ -17,4 +17,4 @@ export const OPEN_NOTICE_LINES: readonly string[] = [
     "Apple 메일은 열지 않아도 이미지를 미리 받아 오픈으로 잡힐 수 있습니다.",
     "오픈 추적을 넣은 뒤 보낸 메일만 오픈율에 셉니다.",
 ];
-export const OPEN_NOTICE_TITLE = OPEN_NOTICE_LINES.join("\n");
+export const OPEN_NOTICE_TITLE = OPEN_NOTICE_LINES.join(" ");

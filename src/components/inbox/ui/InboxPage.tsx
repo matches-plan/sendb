@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { toPlainText } from "@/lib/rich-text/format";
 import { workspaceAbilities } from "@/components/customer-access/utils/abilities";
 import { useAgentPresence } from "@/components/inbox-presence/hooks/useAgentPresence";
@@ -316,7 +317,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                                     ),
                                 )}
                             </div>
-                            <select
+                            <OptionSelect
                                 aria-label="모바일 상담 필터"
                                 className="w-full rounded-lg border p-2 text-xs md:hidden"
                                 value={filter}
@@ -331,7 +332,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                                         {m.label}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         </div>
                         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                             {list.isLoading && (

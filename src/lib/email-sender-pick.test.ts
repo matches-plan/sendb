@@ -147,3 +147,29 @@ test("후보도 config도 없으면 null이다 (B5)", () => {
     const r = pickSignature({ requestedId: undefined, candidates: [], config: null });
     assert.equal(r, null);
 });
+
+// ── 사업부별 기본 서명 ──
+
+const W_COMMON: SignatureCandidate = { id: 20, signature: "SIG_COMMON", isDefault: true, workspaceId: null };
+const W_A: SignatureCandidate = { id: 21, signature: "SIG_WS_A", isDefault: true, workspaceId: 1 };
+const W_B: SignatureCandidate = { id: 22, signature: "SIG_WS_B", isDefault: true, workspaceId: 2 };
+
+test("규칙 사업부의 기본 서명을 공통 기본보다 먼저 쓴다", () => {
+    const r = pickSignature({ requestedId: undefined, candidates: [W_COMMON, W_A, W_B], config: null, workspaceId: 2 });
+    assert.equal(r, "SIG_WS_B");
+});
+
+test("사업부 기본이 없으면 공통 기본을 쓴다", () => {
+    const r = pickSignature({ requestedId: undefined, candidates: [W_A, W_COMMON], config: null, workspaceId: 3 });
+    assert.equal(r, "SIG_COMMON");
+});
+
+test("다른 사업부의 기본 서명은 쓰지 않는다", () => {
+    const r = pickSignature({ requestedId: undefined, candidates: [W_A], config: CFG, workspaceId: 2 });
+    assert.equal(r, "SIG_LEGACY");
+});
+
+test("사업부를 모르면 공통 기본 → 아무 기본 순", () => {
+    assert.equal(pickSignature({ requestedId: undefined, candidates: [W_A, W_COMMON], config: null }), "SIG_COMMON");
+    assert.equal(pickSignature({ requestedId: undefined, candidates: [W_A], config: null }), "SIG_WS_A");
+});

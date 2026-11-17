@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FieldDefinition } from "@/types";
 import type { LeadRecord } from "../types";
-import { AUTO_FILLED_KEYS, extraFields, formatDate, formatDateTime, summarizeLead } from "../utils/lead-fields";
+import { AUTO_FILLED_KEYS, extraFields, formatDate, formatDateTime, resolveBasicSlots, summarizeLead } from "../utils/lead-fields";
 import { LeadCommentComposer, LeadCommentList } from "./LeadComments";
 import { InflowBadge } from "./InflowBadge";
 import { LeadActivitySection } from "./LeadActivitySection";
@@ -68,9 +68,9 @@ export function LeadDetailPanel({
     const [full, setFull] = useState(false);
     const sales = mode === "sales";
     const lead = summarizeLead(record, fields);
-    // 연락처는 사업부마다 칸 이름이 달라(phone/contact) 이미 쓰는 칸에 저장
-    const recData = (record.data ?? {}) as Record<string, unknown>;
-    const phoneKey = recData.phone === undefined && recData.contact !== undefined ? "contact" : "phone";
+    // 이름·이메일·연락처 — 사업부마다 칸 key가 달라 공용 규칙으로 찾은 칸에 저장 (칸이 없어도 빈 칸으로 보인다)
+    const basicSlots = resolveBasicSlots(fields, (record.data ?? {}) as Record<string, unknown>);
+    const basicValue = { name: lead.contactName, email: lead.email, phone: lead.phone };
     const extras = extraFields(record, fields);
     // 웹폼 유입 추적·메타 광고가 남긴 캠페인·광고 소재
     const attribution = [...AUTO_FILLED_KEYS]
@@ -192,12 +192,9 @@ export function LeadDetailPanel({
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4">
-                                        <EditableField
-                                            label="연락처"
-                                            value={lead.phone}
-                                            onSave={(v) => onFieldChange?.(phoneKey, v)}
-                                        />
-                                        <EditableField label="이메일" value={lead.email} onSave={(v) => onFieldChange?.("email", v)} />
+                                        {basicSlots.map((b) => (
+                                            <EditableField key={b.role} label={b.label} value={basicValue[b.role]} onSave={(v) => onFieldChange?.(b.key, v)} />
+                                        ))}
                                         <Field label="요청사항" value={lead.request} wide />
                                     </div>
 

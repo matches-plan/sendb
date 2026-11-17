@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ImageIcon, Search } from "lucide-react";
 import { useEmailAssets } from "../hooks/useEmailAssets";
 import AssetCard from "./AssetCard";
+import AssetUploadDropzone from "./AssetUploadDropzone";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SelectedAsset } from "../types";
 
 interface AssetPickerProps {
@@ -38,9 +40,12 @@ function AssetPickerContent({
     onClose,
     onConfirm,
 }: Omit<AssetPickerProps, "open">) {
-    const { assets, isLoading } = useEmailAssets(true);
+    const { assets, isLoading, upload } = useEmailAssets(true);
     const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
     const [query, setQuery] = useState("");
+    // 고른 적이 없으면 올린 이미지가 없을 때만 '새로 올리기'를 먼저 보인다
+    const [pickedTab, setPickedTab] = useState<"pick" | "upload" | null>(null);
+    const tab = pickedTab ?? (!isLoading && assets.length === 0 ? "upload" : "pick");
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -60,15 +65,33 @@ function AssetPickerContent({
         onClose();
     };
 
+    // 올린 이미지는 바로 선택해 두고 선택 칸으로 돌아간다
+    const handleUploaded = (uploaded: { id: number }[]) => {
+        setSelectedIds((prev) => [...prev, ...uploaded.map((a) => a.id).filter((id) => !prev.includes(id))]);
+        setQuery("");
+        setPickedTab("pick");
+    };
+
     const hasAssets = assets.length > 0;
 
     return (
             <DialogContent className="max-w-2xl gap-0">
                 <DialogHeader>
                     <DialogTitle>이미지 에셋 선택</DialogTitle>
-                    <DialogDescription>본문에 넣을 이미지를 고르세요. Tab으로 이동하고 Enter·Space로 선택합니다.</DialogDescription>
+                    <DialogDescription className="sr-only">본문에 넣을 이미지를 고르거나 새로 올립니다.</DialogDescription>
                 </DialogHeader>
 
+                <Tabs value={tab} onValueChange={(v) => setPickedTab(v as "pick" | "upload")} className="mt-4 gap-0">
+                    <TabsList>
+                        <TabsTrigger value="pick">기존에서 선택</TabsTrigger>
+                        <TabsTrigger value="upload">새로 올리기</TabsTrigger>
+                    </TabsList>
+
+                <TabsContent value="upload" className="mt-4">
+                    <AssetUploadDropzone upload={upload} onUploaded={handleUploaded} />
+                </TabsContent>
+
+                <TabsContent value="pick">
                 {hasAssets && (
                     <div className="relative mt-4">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -90,7 +113,8 @@ function AssetPickerContent({
                     ) : !hasAssets ? (
                         <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
                             <ImageIcon className="h-8 w-8" />
-                            <p className="text-sm">업로드된 에셋이 없습니다. 이메일 → 에셋 탭에서 먼저 업로드하세요.</p>
+                            <p className="text-sm">올린 이미지가 없습니다.</p>
+                            <Button variant="outline" size="sm" onClick={() => setPickedTab("upload")}>새로 올리기</Button>
                         </div>
                     ) : filtered.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
@@ -110,6 +134,8 @@ function AssetPickerContent({
                         </div>
                     )}
                 </div>
+                </TabsContent>
+                </Tabs>
 
                 <DialogFooter className="mt-4 border-t pt-4 sm:justify-between">
                     <span className="text-sm text-muted-foreground self-center" aria-live="polite">

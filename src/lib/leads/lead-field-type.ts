@@ -30,7 +30,17 @@ export async function ensureCategoryFieldType(partitionId: number, category: "le
         .where(eq(partitions.id, partitionId));
     if (!row) return;
     const sourceType = row.fieldTypeId ?? row.defaultFieldTypeId;
-    if (!sourceType) return;
+    const typeName = `${row.wsName} 리드`.slice(0, 100);
+    // 속성 타입이 없는 새 사업부(워크스페이스) — 리드 전용 타입을 만들어 붙이고 기본 칸을 채운다
+    if (!sourceType) {
+        const targetId = await db.transaction(async (tx) => {
+            const id = await leadTypeId(tx, row.orgId, typeName);
+            await tx.update(partitions).set({ fieldTypeId: id, updatedAt: sql`now()` }).where(eq(partitions.id, partitionId));
+            return id;
+        });
+        await ensureLeadBaseFields(targetId);
+        return;
+    }
 
     // 같은 타입을 쓰는 콜드 파티션이 있는지 (파티션 타입이 비면 워크스페이스 기본 타입을 쓴다)
     const [shared] = await db
@@ -53,18 +63,8 @@ export async function ensureCategoryFieldType(partitionId: number, category: "le
         return;
     }
 
-    const typeName = `${row.wsName} 리드`.slice(0, 100);
     const targetId = await db.transaction(async (tx) => {
-        let [target] = await tx
-            .select({ id: fieldTypes.id })
-            .from(fieldTypes)
-            .where(and(eq(fieldTypes.orgId, row.orgId), eq(fieldTypes.name, typeName)));
-        if (!target) {
-            [target] = await tx
-                .insert(fieldTypes)
-                .values({ orgId: row.orgId, name: typeName, description: "리드관리 전용 속성 타입 — 레코드(콜드)와 분리", category: "lead" })
-                .returning({ id: fieldTypes.id });
-        }
+        const target = { id: await leadTypeId(tx, row.orgId, typeName) };
         const [source, existing] = await Promise.all([
             tx.select().from(fieldDefinitions).where(eq(fieldDefinitions.fieldTypeId, sourceType)),
             tx.select({ key: fieldDefinitions.key }).from(fieldDefinitions).where(eq(fieldDefinitions.fieldTypeId, target.id)),
@@ -87,6 +87,22 @@ export async function ensureCategoryFieldType(partitionId: number, category: "le
         return target.id;
     });
     await ensureLeadBaseFields(targetId);
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** 조직의 "<워크스페이스> 리드" 속성 타입 id — 없으면 만든다 */
+async function leadTypeId(tx: Tx, orgId: string, typeName: string): Promise<number> {
+    const [found] = await tx
+        .select({ id: fieldTypes.id })
+        .from(fieldTypes)
+        .where(and(eq(fieldTypes.orgId, orgId), eq(fieldTypes.name, typeName)));
+    if (found) return found.id;
+    const [created] = await tx
+        .insert(fieldTypes)
+        .values({ orgId, name: typeName, description: "리드관리 전용 속성 타입 — 레코드(콜드)와 분리", category: "lead" })
+        .returning({ id: fieldTypes.id });
+    return created.id;
 }
 
 /** 영업관리 공통 속성 타입 이름 — 조직에 하나, 모든 사업이 같이 쓴다 */

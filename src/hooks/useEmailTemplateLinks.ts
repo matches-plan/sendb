@@ -8,13 +8,13 @@ interface TemplateLinksResponse {
 }
 
 
-export function useEmailTemplateLinks(partitionId: number | null | "all") {
+export function useEmailTemplateLinks(partitionId: number | null | "all", purpose?: "cold" | "crm") {
+    const params = new URLSearchParams();
+    if (partitionId !== "all" && partitionId) params.set("partitionId", String(partitionId));
+    if (purpose) params.set("purpose", purpose);
+    const qs = params.toString();
     const { data, error, isLoading, mutate } = useSWR<TemplateLinksResponse>(
-        partitionId === "all"
-            ? "/api/email/template-links"
-            : partitionId
-                ? `/api/email/template-links?partitionId=${partitionId}`
-                : null,
+        partitionId ? `/api/email/template-links${qs ? `?${qs}` : ""}` : null,
         defaultFetcher
     );
 

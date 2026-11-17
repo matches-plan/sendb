@@ -1,4 +1,4 @@
-import { Home, Table2, MessageSquare, MessageCircle, Mail, Package, FileText, FileSignature, Building2, CreditCard, Layers, History, Activity, Ban, Users, BarChart3, TrendingUp, Briefcase, ListTodo, Contact, Settings2, Store } from "lucide-react";
+import { Home, Table2, MessageSquare, MessageCircle, Mail, Package, FileText, FileSignature, CreditCard, Layers, History, Activity, Users, BarChart3, TrendingUp, Briefcase, ListTodo, Contact, Settings, Store, UserSearch } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: typeof Home };
 
@@ -8,34 +8,45 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
     {
         group: "리드젠",
         items: [
-            { href: "/leadgen/stats", label: "리드젠통계", icon: TrendingUp },
+            { href: "/leadgen/stats", label: "콜드메일통계", icon: TrendingUp },
             { href: "/records", label: "레코드", icon: Table2 },
             { href: "/email", label: "콜드메일", icon: Mail },
-            { href: "/email/unsubscribes", label: "수신거부 목록", icon: Ban },
             { href: "/web-forms", label: "웹 폼", icon: FileText },
+            { href: "/leadgen/settings", label: "리드젠 설정", icon: Settings },
         ],
     },
     {
-        group: "리드관리",
+        group: "잠재리드",
+        items: [{ href: "/leadgen/prospects", label: "잠재리드", icon: UserSearch }],
+    },
+    {
+        group: "리드",
         items: [
             { href: "/leads/stats", label: "리드통계", icon: TrendingUp },
             { href: "/leads", label: "리드관리", icon: Users },
         ],
     },
     {
-        group: "영업관리",
+        group: "영업",
         items: [
             { href: "/sales", label: "영업고객", icon: Briefcase },
             { href: "/sales/todo", label: "영업ToDo", icon: ListTodo },
         ],
     },
     {
-        group: "고객관리",
+        group: "상담",
         items: [
             { href: "/inbox", label: "상담톡", icon: MessageSquare },
             { href: "/inbox/stats", label: "상담통계", icon: TrendingUp },
-            { href: "/inbox/settings", label: "상담 설정", icon: Settings2 },
+            { href: "/inbox/settings", label: "상담 설정", icon: Settings },
             { href: "/customer-contacts", label: "상담 연락처", icon: Contact },
+        ],
+    },
+    {
+        // 이미 고객사가 된 곳에 보내는 안내(가입 축하·신청 안내·소개서 등)
+        group: "CRM",
+        items: [
+            { href: "/crm-email", label: "이메일", icon: Mail },
             { href: "/alimtalk", label: "알림톡", icon: MessageCircle },
         ],
     },
@@ -44,7 +55,7 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
         items: [
             { href: "/tracker", label: "트래커", icon: Activity },
             { href: "/logs", label: "발송 이력", icon: History },
-            { href: "/crm", label: "CRM 관리", icon: BarChart3 },
+            { href: "/crm", label: "고객 여정", icon: BarChart3 },
         ],
     },
     {
@@ -62,7 +73,7 @@ export const bottomNavItems = [
     { href: "/settings/business", label: "사업부 관리", icon: Store },
     { href: "/settings/workspace", label: "워크스페이스", icon: Layers },
     { href: "/settings/billing", label: "요금제", icon: CreditCard },
-    { href: "/settings/organization", label: "조직 설정", icon: Building2 },
+    { href: "/settings/organization", label: "조직 설정", icon: Settings },
 ];
 
 const routeLabels: Record<string, string> = {
@@ -77,7 +88,7 @@ const routeLabels: Record<string, string> = {
 };
 
 const segmentLabels: Record<string, string> = {
-    profile: "프로필", templates: "템플릿", links: "연결", "ai-auto": "AI 자동발송",
+    profile: "프로필", templates: "템플릿", links: "연결", "ai-auto": "AI콜드메일 설정",
     new: "새로 만들기", visitors: "방문자", journey: "고객 여정", edit: "수정",
     users: "사용자", organizations: "조직", payments: "결제", plans: "요금제",
     contracts: "계약", settings: "설정", versions: "버전",
@@ -87,8 +98,11 @@ const INTERNAL_ID = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 
 // 이 경로들은 독립 페이지 대신 상위 화면의 탭에서 목록을 제공한다.
 const ancestorLinks: Record<string, string> = {
-    "/email/templates": "/email?tab=templates",
-    "/email/links": "/email?tab=links",
+    // 콜드메일 고정 본문 규칙·템플릿은 AI 자동발송 목록에서 연다
+    "/email/templates": "/email?tab=ai-auto",
+    "/email/links": "/email?tab=ai-auto",
+    "/crm-email/templates": "/crm-email?tab=templates",
+    "/crm-email/links": "/crm-email?tab=links",
     "/email/ai-auto": "/email?tab=ai-auto",
     "/alimtalk/templates": "/alimtalk?tab=templates",
     "/alimtalk/links": "/alimtalk?tab=links",

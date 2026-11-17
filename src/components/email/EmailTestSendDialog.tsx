@@ -130,7 +130,7 @@ export default function EmailTestSendDialog({
                         </div>
                     )}
 
-                    <div className="rounded-md border p-3 bg-muted/50">
+                    <div className="rounded-md border border-border/40 p-3 bg-muted/50">
                         <p className="text-xs text-muted-foreground mb-1">제목 미리보기</p>
                         <p className="text-sm font-medium">{previewSubject}</p>
                     </div>

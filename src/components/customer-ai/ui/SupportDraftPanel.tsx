@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useRef, useState } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
@@ -165,7 +166,7 @@ export function SupportDraftPanel({
                         </p>
                     )}
                     {!!rows.length && (
-                        <select
+                        <OptionSelect
                             aria-label="AI 생성 기록"
                             className="w-full rounded-lg border bg-background p-2"
                             value={selected ?? ""}
@@ -182,7 +183,7 @@ export function SupportDraftPanel({
                                     {supportStateNames[r.state] ?? r.state}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                     {(pages.isLoading || (detail.isLoading && selected)) && (
                         <p role="status" className="text-muted-foreground">

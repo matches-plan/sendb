@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { workspaceAbilities } from "@/components/customer-access/utils/abilities";
 import { CustomerRecordPanel } from "@/components/customer-records/ui/CustomerRecordPanel";
 import { useState } from "react";
@@ -274,7 +275,7 @@ export function CustomerCrmPage({
                 </div>
                 <label className="text-xs">
                     사업
-                    <select
+                    <OptionSelect
                         aria-label="고객 관리 사업"
                         className="ml-3 rounded-lg border bg-background px-3 py-2 text-sm"
                         value={workspaceId ?? ""}
@@ -289,7 +290,7 @@ export function CustomerCrmPage({
                                 {workspaceLabel(w)}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
             </header>
             <nav
@@ -365,7 +366,7 @@ export function CustomerCrmPage({
                                 </label>
                             )}
                             {resource === "tasks" && (
-                                <select
+                                <OptionSelect
                                     aria-label="할 일 상태 필터"
                                     className="rounded-lg border bg-background p-2 text-sm"
                                     value={taskStatus}
@@ -377,12 +378,12 @@ export function CustomerCrmPage({
                                     <option value="done">완료</option>
                                     <option value="cancelled">취소</option>
                                     <option value="all">전체</option>
-                                </select>
+                                </OptionSelect>
                             )}
                         </div>
                         {(resource === "contacts" ||
                             resource === "companies") && (
-                            <select
+                            <OptionSelect
                                 aria-label="고객·회사 보관 필터"
                                 className="rounded-lg border bg-background p-2 text-sm"
                                 value={objectView}
@@ -391,7 +392,7 @@ export function CustomerCrmPage({
                                 <option value="active">사용 중</option>
                                 <option value="archived">보관함</option>
                                 <option value="all">전체</option>
-                            </select>
+                            </OptionSelect>
                         )}
                         <button
                             className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50"

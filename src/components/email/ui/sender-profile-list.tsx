@@ -28,7 +28,7 @@ export default function SenderProfileList<T extends SenderProfile>({ profiles, o
                 {query && <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
                     onClick={handleClear} aria-label="검색어 지우기"><X className="h-4 w-4" /></Button>}
             </div>
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden rounded-lg border border-border/40">
                 <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_6.5rem] gap-4 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:grid">
                     <span>프로필</span><span>발신 이름 · 이메일</span><span className="text-right">관리</span>
                 </div>

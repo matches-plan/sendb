@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
         const statusFilter = searchParams.get("status") || undefined;
         const q = searchParams.get("q")?.trim();
         const categoryParam = searchParams.get("categoryId");
+        const purposeParam = searchParams.get("purpose");
         // 선택칸에 이미 연결된 템플릿을 보이기 위한 id 조회 (목록 밖·초안이어도)
         const ids = (searchParams.get("ids") ?? "")
             .split(",")
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
         const conditions: SQL[] = [eq(emailTemplates.orgId, user.orgId)];
         if (ids.length > 0) conditions.push(inArray(emailTemplates.id, ids));
         if (statusFilter) conditions.push(eq(emailTemplates.status, statusFilter));
+        if (purposeParam === "cold" || purposeParam === "crm") conditions.push(eq(emailTemplates.purpose, purposeParam));
         if (q) conditions.push(or(ilike(emailTemplates.name, `%${q}%`), ilike(emailTemplates.subject, `%${q}%`))!);
         if (categoryParam === "none") conditions.push(isNull(emailTemplates.categoryId));
         else if (categoryParam && Number(categoryParam) > 0) conditions.push(eq(emailTemplates.categoryId, Number(categoryParam)));
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const { name, subject, htmlBody, templateType, status, categoryId, useUnsubscribe } = await req.json();
+        const { name, subject, htmlBody, templateType, status, categoryId, useUnsubscribe, purpose } = await req.json();
         if (status !== "draft" && (!name || !subject || !htmlBody)) {
             return NextResponse.json({ success: false, error: "name, subject, htmlBody는 필수입니다." }, { status: 400 });
         }
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest) {
                 categoryId: categoryId || null,
                 status: status || "published",
                 useUnsubscribe: useUnsubscribe ? 1 : 0,
+                purpose: purpose === "cold" ? "cold" : "crm",
             })
             .returning();
 

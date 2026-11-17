@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { IdCard } from "lucide-react";
 import { useToday } from "../hooks/useRelationship";
@@ -28,7 +29,7 @@ export function RelationshipToday({
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <select
+                    <OptionSelect
                         aria-label="인맥 범위"
                         className="rounded-lg border bg-background p-2 text-sm"
                         value={scope}
@@ -36,7 +37,7 @@ export function RelationshipToday({
                     >
                         <option value="mine">내 인맥</option>
                         <option value="all">사업 전체</option>
-                    </select>
+                    </OptionSelect>
                     <button
                         className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50"
                         disabled={!canRespond}

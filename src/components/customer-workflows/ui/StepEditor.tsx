@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import type { ReactNode } from "react";
 import type { WorkflowStep } from "../types";
 import { ConditionEditor } from "./ConditionEditor";
@@ -87,7 +88,7 @@ export function StepEditor({
         id: string | null,
         onSelect: (id: string | null) => void,
     ) => (
-        <select
+        <OptionSelect
             aria-label={`단계 ${index + 1} 담당자`}
             className={input}
             value={id ?? ""}
@@ -99,7 +100,7 @@ export function StepEditor({
                     {m.name}
                 </option>
             ))}
-        </select>
+        </OptionSelect>
     );
     return (
         <article className="space-y-3 rounded-xl border p-4">
@@ -143,7 +144,7 @@ export function StepEditor({
                     }
                 />,
             )}
-            <select
+            <OptionSelect
                 aria-label={`단계 ${index + 1} 행동`}
                 className={input}
                 value={value.kind}
@@ -160,7 +161,7 @@ export function StepEditor({
                         {label}
                     </option>
                 ))}
-            </select>
+            </OptionSelect>
             {value.kind === "wait" &&
                 field(
                     "대기 시간 · 분",
@@ -190,7 +191,7 @@ export function StepEditor({
                             onChange({ ...value, tag: e.target.value })
                         }
                     />
-                    <select
+                    <OptionSelect
                         className={input}
                         value={String(value.remove)}
                         onChange={(e) =>
@@ -202,7 +203,7 @@ export function StepEditor({
                     >
                         <option value="false">추가</option>
                         <option value="true">제거</option>
-                    </select>
+                    </OptionSelect>
                 </div>
             )}
             {value.kind === "assign" &&
@@ -216,7 +217,7 @@ export function StepEditor({
                 <>
                     {field(
                         "배정할 상담팀",
-                        <select
+                        <OptionSelect
                             aria-label={`단계 ${index + 1} 상담팀`}
                             className={input}
                             value={value.teamId}
@@ -247,11 +248,11 @@ export function StepEditor({
                                           : "수동 배정"}
                                 </option>
                             ))}
-                        </select>,
+                        </OptionSelect>,
                     )}
                     {field(
                         "기존 배정 처리",
-                        <select
+                        <OptionSelect
                             aria-label={`단계 ${index + 1} 팀 배정 방식`}
                             className={input}
                             value={String(value.onlyUnassigned)}
@@ -268,7 +269,7 @@ export function StepEditor({
                             <option value="false">
                                 기존 팀·개인 배정을 선택한 팀으로 교체
                             </option>
-                        </select>,
+                        </OptionSelect>,
                     )}
                     <p className="text-xs text-muted-foreground">
                         선택한 팀의 설정을 따릅니다. 수동 팀이거나 응대 가능한
@@ -292,7 +293,7 @@ export function StepEditor({
             {value.kind === "status" &&
                 field(
                     "변경할 상담 상태",
-                    <select
+                    <OptionSelect
                         className={input}
                         value={value.status}
                         onChange={(e) =>
@@ -305,7 +306,7 @@ export function StepEditor({
                         <option value="open">진행중</option>
                         <option value="snoozed">보류중</option>
                         <option value="closed">종료됨</option>
-                    </select>,
+                    </OptionSelect>,
                 )}
             {value.kind === "task" && (
                 <>
@@ -359,7 +360,7 @@ export function StepEditor({
             {value.kind === "contact_stage" &&
                 field(
                     "고객 단계",
-                    <select
+                    <OptionSelect
                         className={input}
                         value={value.stage}
                         onChange={(e) =>
@@ -376,11 +377,11 @@ export function StepEditor({
                                 </option>
                             ),
                         )}
-                    </select>,
+                    </OptionSelect>,
                 )}
             {value.kind === "deal_stage" && (
                 <>
-                    <select
+                    <OptionSelect
                         aria-label={`단계 ${index + 1} 파이프라인`}
                         className={input}
                         value={value.pipelineId}
@@ -398,8 +399,8 @@ export function StepEditor({
                                 {p.name}
                             </option>
                         ))}
-                    </select>
-                    <select
+                    </OptionSelect>
+                    <OptionSelect
                         aria-label={`단계 ${index + 1} 딜 단계`}
                         className={input}
                         value={value.stageId}
@@ -415,7 +416,7 @@ export function StepEditor({
                                     {s.name}
                                 </option>
                             ))}
-                    </select>
+                    </OptionSelect>
                 </>
             )}
             {value.kind === "reply" && (

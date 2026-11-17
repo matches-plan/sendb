@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { TIERS, TIER_LABEL, DEFAULT_CADENCE } from "@/lib/relationship-care/rules";
@@ -115,7 +116,7 @@ export function RelationshipPanel({
                     <div className="grid grid-cols-2 gap-3">
                         <label>
                             <span className="text-xs text-muted-foreground">점검 등급</span>
-                            <select
+                            <OptionSelect
                                 className={input}
                                 value={form.tier}
                                 disabled={!canRespond}
@@ -126,7 +127,7 @@ export function RelationshipPanel({
                                         {TIER_LABEL[t]} · {DEFAULT_CADENCE[t]}일
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         </label>
                         <label>
                             <span className="text-xs text-muted-foreground">개별 주기(일, 비우면 등급 기본값)</span>
@@ -142,7 +143,7 @@ export function RelationshipPanel({
                         </label>
                         <label>
                             <span className="text-xs text-muted-foreground">담당자</span>
-                            <select
+                            <OptionSelect
                                 className={input}
                                 value={form.ownerUserId}
                                 disabled={!canRespond}
@@ -154,7 +155,7 @@ export function RelationshipPanel({
                                         {m.name}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         </label>
                         <label>
                             <span className="text-xs text-muted-foreground">마지막 연락일</span>
@@ -266,7 +267,7 @@ export function RelationshipPanel({
                         {care && (
                             <>
                                 <span className="flex items-center gap-1 rounded-lg border px-1">
-                                    <select
+                                    <OptionSelect
                                         aria-label="연락한 방법"
                                         className="bg-transparent py-2 text-sm"
                                         value={logChannel}
@@ -277,7 +278,7 @@ export function RelationshipPanel({
                                         <option value="sms">문자</option>
                                         <option value="kakao">카카오톡</option>
                                         <option value="email">메일</option>
-                                    </select>
+                                    </OptionSelect>
                                     <button
                                         className="px-2 py-2 disabled:opacity-50"
                                         disabled={!canRespond || busy}

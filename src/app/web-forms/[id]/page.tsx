@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import WorkspaceLayout from "@/components/layouts/WorkspaceLayout";
 import { useResolvedFields } from "@/hooks/useResolvedFields";
 import { useWebForms } from "@/hooks/useWebForms";
+import { usePartitions } from "@/hooks/usePartitions";
 import FormBuilder, { type FormFieldItem } from "@/components/web-forms/FormBuilder";
 import FormPreview from "@/components/web-forms/FormPreview";
 import EmbedCodeDialog from "@/components/web-forms/EmbedCodeDialog";
@@ -27,6 +28,8 @@ import {
 import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
 import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { unlinkedFields, webFormEditorSnapshot, type WebFormEditorValues } from "@/components/web-forms/utils/editor-snapshot";
+import { autoLinkBasic, remapToPartition } from "@/components/web-forms/utils/remap-fields";
+import type { FieldDefinition } from "@/types";
 
 export default function EditWebFormPage() {
     const { confirm, confirmationDialog } = useAsyncConfirm();
@@ -67,6 +70,12 @@ export default function EditWebFormPage() {
 
     const { fields: workspaceFields } = useResolvedFields(partitionId);
     const { updateForm } = useWebForms(wsId);
+    const { partitionTree } = usePartitions(wsId);
+    // 웹 폼 리드는 리드관리 파티션으로만 — 지금 연결된 파티션은 레코드(콜드)여도 목록에 남긴다
+    const partitionOptions = useMemo(() => partitionTree
+        ? [...partitionTree.folders.flatMap((f) => f.partitions), ...partitionTree.ungrouped]
+              .filter((p) => p.category === "lead" || p.id === partitionId)
+        : [], [partitionTree, partitionId]);
 
     useEffect(() => {
         if (!formId) return;
@@ -87,6 +96,7 @@ export default function EditWebFormPage() {
                         coverImageUrl: form.coverImageUrl || "",
                         coverColor: form.coverColor || "",
                         defaultValues: form.defaultValues || [],
+                        partitionId: form.partitionId,
                         fields: (form.fields || []).map((f: any) => ({
                             tempId: crypto.randomUUID(),
                             id: f.id,
@@ -129,7 +139,7 @@ export default function EditWebFormPage() {
     const editorValues: WebFormEditorValues = {
         name: formName, title: formTitle, description: formDescription,
         completionTitle, completionMessage, completionButtonText, completionButtonUrl,
-        coverImageUrl, coverColor, defaultValues, fields: formFields,
+        coverImageUrl, coverColor, defaultValues, fields: formFields, partitionId,
     };
     const currentSnapshot = webFormEditorSnapshot(editorValues);
     const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot;
@@ -165,6 +175,7 @@ export default function EditWebFormPage() {
                     coverImageUrl,
                     coverColor,
                     defaultValues,
+                    partitionId,
                     fields: formFields.map((f) => ({
                         id: f.id,
                         label: f.label,
@@ -191,8 +202,59 @@ export default function EditWebFormPage() {
     }, [
         formId, formName, formTitle, formDescription,
         completionTitle, completionMessage, completionButtonText, completionButtonUrl,
-        coverImageUrl, coverColor, defaultValues, formFields, updateForm, currentSnapshot,
+        coverImageUrl, coverColor, defaultValues, formFields, partitionId, updateForm, currentSnapshot,
     ]);
+
+    /** 연결 파티션 변경 — 질문·기본값의 연결 칸을 새 파티션 칸으로 다시 잇고, 결과를 보여준 뒤 바꾼다 */
+    const changePartition = useCallback(async (nextId: number) => {
+        if (!nextId || nextId === partitionId) return;
+        let nextFields: FieldDefinition[];
+        try {
+            const res = await fetch(`/api/partitions/${nextId}/resolved-fields`);
+            const json = await res.json();
+            if (!json.success) throw new Error();
+            nextFields = json.data;
+        } catch {
+            toast.error("파티션 속성을 불러오지 못했습니다.");
+            return;
+        }
+        const remap = remapToPartition(formFields, defaultValues, workspaceFields, nextFields);
+        const name = partitionOptions.find((p) => p.id === nextId)?.name ?? "새 파티션";
+        confirm({
+            title: "연결 파티션 변경",
+            confirmLabel: "변경",
+            description: (
+                <div className="space-y-3 text-sm">
+                    <p>저장하면 이후 제출되는 리드가 &quot;{name}&quot;에 쌓입니다. 이미 들어온 리드는 옮겨지지 않습니다.</p>
+                    {remap.relinked.length > 0 && (
+                        <div>
+                            <p className="font-medium text-foreground">다시 연결되는 질문</p>
+                            <ul className="mt-1 space-y-0.5">
+                                {remap.relinked.map((r, i) => <li key={i}>{r.label || "이름 없는 질문"}: {r.from} → {r.to}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                    {remap.unlinked.length > 0 && (
+                        <div>
+                            <p className="font-medium text-destructive">연결할 속성이 없는 질문</p>
+                            <p className="mt-1">{remap.unlinked.join(", ")}</p>
+                        </div>
+                    )}
+                    {remap.droppedDefaults.length > 0 && (
+                        <div>
+                            <p className="font-medium text-destructive">빠지는 기본값</p>
+                            <p className="mt-1">{remap.droppedDefaults.join(", ")}</p>
+                        </div>
+                    )}
+                </div>
+            ),
+            onConfirm: async () => {
+                setPartitionId(nextId);
+                setFormFields(remap.fields);
+                setDefaultValues(remap.defaultValues);
+            },
+        });
+    }, [partitionId, formFields, defaultValues, workspaceFields, partitionOptions, confirm]);
 
     const handleSave = useCallback(async () => {
         // 연결 속성이 없는 질문의 답은 레코드에 저장되지 않으므로 저장 전에 알린다 (UX-045)
@@ -253,7 +315,7 @@ export default function EditWebFormPage() {
                 if (data.name) setFormName(data.name);
                 setFormTitle(data.title);
                 setFormDescription(data.description);
-                setFormFields(
+                setFormFields(autoLinkBasic(
                     data.fields.map((f: any) => ({
                         tempId: crypto.randomUUID(),
                         label: f.label,
@@ -263,8 +325,9 @@ export default function EditWebFormPage() {
                         linkedFieldKey: f.linkedFieldKey || "",
                         isRequired: !!f.isRequired,
                         options: f.options || [],
-                    }))
-                );
+                    })),
+                    workspaceFields,
+                ));
                 toast.success(`${data.fields.length}개 필드가 생성되었습니다.`);
                 setAiOpen(false);
                 setAiPrompt("");
@@ -397,6 +460,23 @@ export default function EditWebFormPage() {
                             onFieldsChange={setFormFields}
                             workspaceFields={workspaceFields}
                             slug={slug}
+                            partitionPicker={
+                                <Select
+                                    value={partitionId ? String(partitionId) : undefined}
+                                    onValueChange={(v) => void changePartition(Number(v))}
+                                >
+                                    <SelectTrigger className="w-full" aria-label="연결 파티션">
+                                        <SelectValue placeholder="파티션 선택" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {partitionOptions.map((p) => (
+                                            <SelectItem key={p.id} value={String(p.id)}>
+                                                {p.name}{p.category !== "lead" ? " (레코드)" : ""}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            }
                         />
                     </div>
                     <div className="w-full border-t p-4 sm:p-6 lg:w-[400px] lg:shrink-0 lg:border-l lg:border-t-0 lg:overflow-y-auto">

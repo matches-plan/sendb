@@ -18,7 +18,7 @@ export function ReplySyncBanner({ sync, isAdmin }: { sync: ReplySyncStatus | nul
     return (
         <div
             className={cn(
-                "rounded-md border px-4 py-3 text-sm",
+                "rounded-md border border-border/40 px-4 py-3 text-sm",
                 view.tone === "error" && "border-red-300 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100",
                 view.tone === "warn" && "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100",
                 view.tone === "ok" && "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"

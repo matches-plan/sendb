@@ -32,7 +32,7 @@ export function compareColumns(axis: CompareAxis, connections: StatsEnvelope["co
     if (axis === "sender" || axis === "domain")
         columns.push({ key: "senderSideRate", label: "발신 쪽 실패율", tooltip: "발신 쪽 실패 ÷ 결과 확정" });
     columns.push(
-        { key: "openRate", label: "오픈율", tooltip: `사람 오픈·클릭 ÷ 오픈 추적 성공 발송\n${OPEN_NOTICE_TITLE}` },
+        { key: "openRate", label: "오픈율", tooltip: `사람 오픈·클릭 ÷ 오픈 추적 성공 발송. ${OPEN_NOTICE_TITLE}` },
         { key: "clickRate", label: "클릭률", tooltip: "사람 클릭 ÷ 성공" },
         { key: "ctor", label: "CTOR", tooltip: "오픈 중 클릭 ÷ 오픈" },
         {

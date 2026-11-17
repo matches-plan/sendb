@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, emailSignatures } from "@/lib/db";
-import { eq } from "drizzle-orm";
+import { workspaceInOrg } from "@/lib/workspace-in-org";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -10,10 +11,15 @@ export async function GET(req: NextRequest) {
     }
 
     try {
+        // ?workspaceId= 가 있으면 그 사업부 서명과 공통 서명(사업부 없음)만
+        const workspaceId = Number(req.nextUrl.searchParams.get("workspaceId")) || null;
         const signatures = await db
             .select()
             .from(emailSignatures)
-            .where(eq(emailSignatures.orgId, user.orgId))
+            .where(and(
+                eq(emailSignatures.orgId, user.orgId),
+                workspaceId ? or(eq(emailSignatures.workspaceId, workspaceId), isNull(emailSignatures.workspaceId)) : undefined,
+            ))
             .orderBy(emailSignatures.createdAt);
 
         return NextResponse.json({ success: true, data: signatures });
@@ -30,16 +36,24 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const { name, signature } = await req.json();
+        const { name, signature, workspaceId: rawWorkspaceId } = await req.json();
         if (!name || !signature) {
             return NextResponse.json({ success: false, error: "이름과 서명 내용은 필수입니다." }, { status: 400 });
         }
+        const workspaceId = rawWorkspaceId == null ? null : Number(rawWorkspaceId);
+        if (workspaceId !== null && !(await workspaceInOrg(user.orgId, workspaceId))) {
+            return NextResponse.json({ success: false, error: "사업부를 찾을 수 없습니다." }, { status: 404 });
+        }
 
-        // 첫 서명이면 isDefault=true
+        // 기본 서명은 사업부마다 하나 + 공통에 하나. 쓰일 기본 서명이 아직 없으면(사업부 서명은 공통 기본도 없을 때) 새 서명이 기본이 된다
         const existing = await db
             .select({ id: emailSignatures.id })
             .from(emailSignatures)
-            .where(eq(emailSignatures.orgId, user.orgId))
+            .where(and(
+                eq(emailSignatures.orgId, user.orgId),
+                eq(emailSignatures.isDefault, true),
+                workspaceId === null ? isNull(emailSignatures.workspaceId) : or(eq(emailSignatures.workspaceId, workspaceId), isNull(emailSignatures.workspaceId)),
+            ))
             .limit(1);
 
         const isDefault = existing.length === 0;
@@ -48,6 +62,7 @@ export async function POST(req: NextRequest) {
             .insert(emailSignatures)
             .values({
                 orgId: user.orgId,
+                workspaceId,
                 name: name.trim(),
                 signature: typeof signature === "string" ? signature : JSON.stringify(signature),
                 isDefault,

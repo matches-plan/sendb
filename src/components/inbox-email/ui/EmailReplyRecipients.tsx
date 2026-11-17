@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import type { useEmailReply } from "../hooks/useEmailReply";
 export function EmailReplyRecipients({
     state,
@@ -16,7 +17,7 @@ export function EmailReplyRecipients({
         >
             <label className="flex items-center gap-2">
                 회신 방식
-                <select
+                <OptionSelect
                     aria-label="메일 회신 방식"
                     className="rounded border bg-background p-1"
                     value={draft.mode}
@@ -27,7 +28,7 @@ export function EmailReplyRecipients({
                     <option value="reply">답장</option>
                     <option value="reply_all">전체 회신</option>
                     <option value="custom">받는 사람 직접 지정</option>
-                </select>
+                </OptionSelect>
             </label>
             {draft.mode === "custom" ? (
                 <>

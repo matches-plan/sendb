@@ -21,6 +21,8 @@ export interface EmailTemplateQuery {
     status?: "draft" | "published";
     /** 특정 템플릿만(선택칸에 이미 고른 값 표시용) */
     ids?: number[];
+    /** cold: 콜드메일 / crm: CRM관리 > 이메일 */
+    purpose?: "cold" | "crm";
 }
 
 /** 선택칸이 한 번에 받는 최대 건수(서버 상한). 넘으면 검색으로 좁힌다 */
@@ -36,6 +38,7 @@ export function emailTemplatesKey(query: EmailTemplateQuery = {}) {
     if (query.categoryId !== undefined) params.set("categoryId", String(query.categoryId));
     if (query.status) params.set("status", query.status);
     if (query.ids) params.set("ids", query.ids.join(","));
+    if (query.purpose) params.set("purpose", query.purpose);
     const qs = params.toString();
     return qs ? `${TEMPLATES_KEY}?${qs}` : TEMPLATES_KEY;
 }
@@ -69,9 +72,9 @@ export function useEmailTemplate(id: number | null) {
  * 연결 화면 선택지: 발행 템플릿을 검색어로 최대 100건 + 이미 고른 템플릿(목록 밖·초안이어도)을 합친다.
  * truncated면 화면이 "검색으로 좁혀 주세요"를 안내한다.
  */
-export function useEmailTemplateOptions(q: string, selectedIds: (number | null | undefined)[]) {
+export function useEmailTemplateOptions(q: string, selectedIds: (number | null | undefined)[], purpose?: "cold" | "crm") {
     const { data, error, isLoading } = useSWR<TemplatesResponse>(
-        emailTemplatesKey({ status: "published", pageSize: TEMPLATE_OPTION_LIMIT, q }),
+        emailTemplatesKey({ status: "published", pageSize: TEMPLATE_OPTION_LIMIT, q, purpose }),
         defaultFetcher
     );
     const listed = data?.data ?? [];
@@ -111,6 +114,7 @@ export function useEmailTemplates(query: EmailTemplateQuery = {}) {
         templateType?: string;
         status?: "draft" | "published";
         categoryId?: number | null;
+        purpose?: "cold" | "crm";
     }) => {
         const res = await fetch("/api/email/templates", {
             method: "POST",

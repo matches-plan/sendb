@@ -4,8 +4,8 @@ import { buildPublicUnsubscribeUrl, isPublicUnsubscribeUrl } from "./email-publi
 import { nanoid } from "nanoid";
 
 export const {
-    isOrganizationUnsubscribed, isUnsubscribed, resolveWorkspaceId, resolveUnsubscribeTarget,
-    recordUnsubscribe, attachUnsubscribeReason,
+    isWorkspaceUnsubscribed, isOrganizationUnsubscribed, isUnsubscribed, resolveWorkspaceId, resolveUnsubscribeTarget,
+    recordUnsubscribe, removeUnsubscribe, attachUnsubscribeReason,
 } = createEmailUnsubscribeStore(db);
 
 /**

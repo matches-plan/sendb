@@ -132,7 +132,7 @@ export default function SenderPoolField({ value, onChange, showBulkScheduleNotic
                             </span>
                         </div>
                     )}
-                    <div className="rounded-md border divide-y max-h-96 overflow-y-auto">
+                    <div className="rounded-md border border-border/40 divide-y max-h-96 overflow-y-auto">
                         {value.map((id) => {
                             const p = byId.get(id);
                             return (

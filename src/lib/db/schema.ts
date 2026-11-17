@@ -827,6 +827,8 @@ export const emailTemplates = pgTable("email_templates", {
     status: varchar("status", { length: 20 }).default("published").notNull(),
     isActive: integer("is_active").default(1).notNull(),
     useUnsubscribe: integer("use_unsubscribe").default(0).notNull(),  // 본문 하단에 수신거부 링크 삽입
+    // cold: 콜드메일(리드젠 영업) / crm: CRM관리 > 이메일(가입·광고 동의 고객 관계관리)
+    purpose: varchar("purpose", { length: 20 }).$type<"cold" | "crm">().default("crm").notNull(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
     updatedAt: timestamptz("updated_at").defaultNow().notNull(),
 });
@@ -932,6 +934,7 @@ export const emailSendLogs = pgTable("email_send_logs", {
     index("email_send_logs_partition_recipient_idx").on(table.partitionId, table.recipientEmail),
     index("email_send_logs_template_link_recipient_idx").on(table.templateLinkId, table.recipientEmail).where(sql`template_link_id IS NOT NULL`),
     index("email_send_logs_record_idx").on(table.recordId).where(sql`record_id IS NOT NULL`),
+    index("email_send_logs_parent_log_idx").on(table.parentLogId).where(sql`parent_log_id IS NOT NULL`),
 ]);
 
 // ============================================
@@ -1079,6 +1082,10 @@ export const emailAutoPersonalizedLinks = pgTable("email_auto_personalized_links
     assetIds: jsonb("asset_ids").$type<number[]>(),
     isActive: integer("is_active").default(1).notNull(),
     isDraft: integer("is_draft").default(0).notNull(),
+    // 콜드메일 고정 본문(템플릿) 규칙에서 옮겨 온 규칙 — 원래 템플릿 규칙 id. 이 규칙을 켜면 원래 규칙은 꺼진다
+    sourceTemplateLinkId: integer("source_template_link_id"),
+    // 보내던 문구를 프롬프트에 그대로 넣어 둔 규칙 — 사람이 프롬프트를 고치면 0 ('수정 필요' 배지)
+    needsReview: integer("needs_review").default(0).notNull(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
     updatedAt: timestamptz("updated_at").defaultNow().notNull(),
 });
@@ -1570,6 +1577,8 @@ export const emailSignatures = pgTable("email_signatures", {
     orgId: uuid("org_id")
         .references(() => organizations.id, { onDelete: "cascade" })
         .notNull(),
+    // 사업부 서명 (리드젠 설정 › 사업부 › 이메일 서명). null이면 공통 서명 — 모든 사업부에서 고를 수 있다
+    workspaceId: integer("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     name: varchar("name", { length: 100 }).notNull(),
     signature: text("signature").notNull(),
     isDefault: boolean("is_default").default(false).notNull(),
@@ -2293,6 +2302,9 @@ export const emailHealthEvents = pgTable("email_health_events", {
     summary: text("summary").notNull(),
     actorUserId: uuid("actor_user_id"),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
+    /** 발송 이력 "확인할 문제"에서 손으로 해결 완료한 때·사람 */
+    resolvedAt: timestamptz("resolved_at"),
+    resolvedBy: uuid("resolved_by"),
 }, (table) => [
     uniqueIndex("ehe_org_dedupe_idx").on(table.orgId, table.dedupeKey),
     index("ehe_org_created_idx").on(table.orgId, table.createdAt),
@@ -2409,6 +2421,47 @@ export const chatWebhookStatus = pgTable("chat_webhook_status", {
 });
 
 export type ChatWebhookStatus = typeof chatWebhookStatus.$inferSelect;
+
+/** 콜드메일 알림 담당자 — 리드젠 설정 › 알림 담당자에서 사업부마다 켠 직원. 발송 경고를 화면 알림으로 받는다 */
+export const emailHealthRecipients = pgTable("email_health_recipients", {
+    orgId: uuid("org_id")
+        .references(() => organizations.id, { onDelete: "cascade" })
+        .notNull(),
+    workspaceId: integer("workspace_id")
+        .references(() => workspaces.id, { onDelete: "cascade" })
+        .notNull(),
+    userId: uuid("user_id")
+        .references(() => users.id, { onDelete: "cascade" })
+        .notNull(),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+}, (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    index("email_health_recipients_org").on(table.orgId),
+]);
+
+/** 화면 알림 (머리 종) — kind: send_health. dedupe_key로 같은 알림을 두 번 넣지 않는다 */
+export const userNotifications = pgTable("user_notifications", {
+    id: serial("id").primaryKey(),
+    orgId: uuid("org_id")
+        .references(() => organizations.id, { onDelete: "cascade" })
+        .notNull(),
+    userId: uuid("user_id")
+        .references(() => users.id, { onDelete: "cascade" })
+        .notNull(),
+    kind: varchar("kind", { length: 30 }).notNull(),
+    workspaceId: integer("workspace_id"),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    dedupeKey: varchar("dedupe_key", { length: 120 }).notNull(),
+    readAt: timestamptz("read_at"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+}, (table) => [
+    uniqueIndex("user_notifications_user_dedupe").on(table.userId, table.dedupeKey),
+    index("user_notifications_user_read_created").on(table.userId, table.readAt, table.createdAt.desc()),
+]);
+
+export type UserNotification = typeof userNotifications.$inferSelect;
 
 export * from "./inbox-operations-schema";
 export * from "./inbox-chat-alerts-schema";

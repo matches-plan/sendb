@@ -51,12 +51,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: "발신 이메일 주소를 설정해주세요." }, { status: 400 });
         }
 
-        // signatureId는 body에서 온 값을 그대로 넘긴다 — null(서명 없음)과 undefined(미지정)의 구분이 사용자 선택이다
-        const signatureJson = await resolveSignature(user.orgId, {
-            requestedId: signatureId,
-            config,
-        });
-
         if (!templateLinkId || !recordIds || !Array.isArray(recordIds) || recordIds.length === 0) {
             return NextResponse.json({
                 success: false,
@@ -91,6 +85,12 @@ export async function POST(req: NextRequest) {
 
         const templateLink = linkRow.email_template_links;
         const workspaceId = linkRow.workspaces.id;
+        // signatureId는 body에서 온 값을 그대로 넘긴다 — null(서명 없음)과 undefined(미지정)의 구분이 사용자 선택이다
+        const signatureJson = await resolveSignature(user.orgId, {
+            requestedId: signatureId,
+            config,
+            workspaceId,
+        });
         const access = await requirePartitionAccess(user, templateLink.partitionId, "read");
         if (!access.ok) return NextResponse.json({ success: false, error: access.error }, { status: access.status });
         const ids = [...new Set(recordIds.map(Number))];
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
                     ...(unsubscribeToken
                         ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                         : {}),
-                });
+                }, { workspaceId });
 
                 const sendResult = nhnResult.data?.results?.[0];
                 const isSuccess = nhnResult.header.isSuccessful && Boolean(nhnResult.data?.requestId) && sendResult?.resultCode === 0;

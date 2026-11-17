@@ -17,6 +17,8 @@ export interface SignatureCandidate {
     id: number;
     signature: string;
     isDefault: boolean;
+    /** null이면 공통 서명. 기본 서명은 사업부마다 하나, 공통에 하나 */
+    workspaceId?: number | null;
 }
 
 /** 레거시 email_configs (프로필 테이블 도입 이전 org가 여기에만 발신자를 갖고 있다) */
@@ -81,6 +83,9 @@ function toResolved(profile: SenderCandidate): ResolvedSender {
  *   null      → 명시적 "서명 없음". fallback 금지
  *   undefined → 미지정. 기본 서명 → 레거시 config 순
  *
+ * 기본 서명은 사업부마다 하나다. workspaceId를 주면 그 사업부 기본 → 공통 기본 순,
+ * 안 주면(사업부를 모르는 발송) 공통 기본 → 아무 기본 순.
+ *
  * HTTP body에서 온 값은 이 구분이 사용자 선택이므로 중간에서 정규화하면 안 된다.
  * DB row에서 온 값(link.signatureId)만 `?? undefined`로 넘긴다 — DB의 null은 "미지정"이다.
  */
@@ -88,8 +93,10 @@ export function pickSignature(input: {
     requestedId: number | null | undefined;
     candidates: ReadonlyArray<SignatureCandidate>;
     config: LegacyEmailConfig | null;
+    /** 발송 규칙의 사업부. 그 사업부 기본 서명을 먼저 쓴다 */
+    workspaceId?: number | null;
 }): string | null {
-    const { requestedId, candidates, config } = input;
+    const { requestedId, candidates, config, workspaceId } = input;
 
     if (requestedId === null) return null;
 
@@ -98,7 +105,11 @@ export function pickSignature(input: {
         if (match) return match.signature;
     }
 
-    const defaultSig = candidates.find((c) => c.isDefault);
+    const defaults = candidates.filter((c) => c.isDefault);
+    const defaultSig =
+        (workspaceId != null ? defaults.find((c) => c.workspaceId === workspaceId) : undefined) ??
+        defaults.find((c) => c.workspaceId == null) ??
+        (workspaceId == null ? defaults[0] : undefined);
     if (defaultSig) return defaultSig.signature;
 
     if (config?.signatureEnabled && config?.signature) return config.signature;

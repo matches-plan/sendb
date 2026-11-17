@@ -48,7 +48,7 @@ export default function BindingHistory({
             ) : (
                 <ul className="space-y-2 text-sm">
                     {data.events.map((e) => (
-                        <li key={e.id} className="rounded-md border p-3">
+                        <li key={e.id} className="rounded-md border border-border/40 p-3">
                             {names.workspace(e.workspace_id)} · {purposeLabel(e.purpose)}
                             {e.rule_id > 0 && ` · ${names.rule(e.rule_id)}`}
                             <br />

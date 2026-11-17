@@ -19,6 +19,7 @@ import {
 import { AsyncAlertDialog } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useEmailSection } from "@/components/email/hooks/useEmailSection";
 
 interface Partition {
     id: number;
@@ -38,12 +39,13 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 export default function EmailTemplateLinkList({ partitions }: EmailTemplateLinkListProps) {
     const router = useRouter();
+    const { base, purpose } = useEmailSection();
     const [selectedPartitionId, setSelectedPartitionId] = useState<number | "all">("all");
     const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
     // 활성 전환 요청 중인 규칙 — 같은 행 중복 조작을 막는다 (UX-148)
     const [pendingIds, setPendingIds] = useState<Set<number>>(() => new Set());
 
-    const { templateLinks, isLoading, updateLink, deleteLink, loadError, mutate } = useEmailTemplateLinks(selectedPartitionId);
+    const { templateLinks, isLoading, updateLink, deleteLink, loadError, mutate } = useEmailTemplateLinks(selectedPartitionId, purpose);
     const selectedPartition = selectedPartitionId !== "all" ? partitions.find((p) => p.id === selectedPartitionId) : null;
     const { fields } = useFields(selectedPartition?.workspaceId ?? null);
     const partitionMap = useMemo(() => Object.fromEntries(partitions.map((p) => [p.id, p.name])), [partitions]);
@@ -55,12 +57,12 @@ export default function EmailTemplateLinkList({ partitions }: EmailTemplateLinkL
 
     const handleCreate = () => {
         const params = selectedPartitionId !== "all" ? `?partitionId=${selectedPartitionId}` : "";
-        router.push(`/email/links/new${params}`);
+        router.push(`${base}/links/new${params}`);
     };
 
     const handleEdit = (linkId: number, partId?: number) => {
         const pId = partId || (selectedPartitionId !== "all" ? selectedPartitionId : null);
-        router.push(`/email/links/${linkId}?partitionId=${pId}`);
+        router.push(`${base}/links/${linkId}?partitionId=${pId}`);
     };
 
     // 서버 거부·응답 유실을 모두 안내한다 (UX-148)
@@ -144,7 +146,7 @@ export default function EmailTemplateLinkList({ partitions }: EmailTemplateLinkL
                         {templateLinks.map((link) => (
                             <div
                                 key={link.id}
-                                className="border rounded-lg p-4 flex items-start justify-between gap-4"
+                                className="border border-border/40 rounded-lg p-4 flex items-start justify-between gap-4"
                             >
                                 <div className="flex-1 space-y-1">
                                     <div className="flex items-center gap-2">

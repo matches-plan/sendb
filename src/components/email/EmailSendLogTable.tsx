@@ -4,10 +4,13 @@ import { OpenColumnHead } from "@/components/email/opens/ui/OpenColumnHead";
 import { OpenCountCell } from "@/components/email/opens/ui/OpenCountCell";
 import type { ClickSignal } from "@/components/email/clicks/types";
 import { ClickCountCell } from "@/components/email/clicks/ui/ClickCountCell";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { Fragment, useState, useCallback, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { useEmailLogs } from "@/hooks/useEmailLogs";
-import { useEmailTemplateLinks } from "@/hooks/useEmailTemplateLinks";
+import { RangePills } from "@/components/leads/ui/stats/RangePills";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { calendarDate } from "@/components/email/dashboard/utils/period";
+import { cn } from "@/lib/utils";
 import { defaultFetcher } from "@/lib/swr-fetcher";
 import { presetRange } from "@/lib/email-stats/rules";
 import {
@@ -36,7 +39,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, RefreshCw, Loader2, Search, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, Search, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import type { EmailSendLog } from "@/lib/db";
 import {
@@ -46,13 +50,20 @@ import {
     type LogSenderSource,
 } from "@/components/email/sender-profiles/utils/logSender";
 import { ReplyKindBadge } from "@/components/email/replies/ui/ReplyKindBadge";
+import { FollowupRows } from "@/components/email/followups/ui/FollowupRows";
+import HealthFocusPanel from "@/components/email/send-health/ui/HealthFocusPanel";
+import { useHealthLogFilter } from "@/components/email/send-health/hooks/useHealthLogFilter";
+import { useHealthProblems } from "@/components/email/send-health/hooks/useHealthProblems";
+import HealthProblems from "@/components/email/send-health/ui/HealthProblems";
+import type { HealthProblem } from "@/components/email/send-health/types";
+import { dsnLabel } from "@/lib/email-status-sync-rules";
 
 /**
  * 서버가 붙여 주는 클릭 수·보낸 주소(보낼 때 주소 senderEmail, 프로필의 지금 값 senderProfile)·회신(사람 회신 먼저, DESIGN-RPL 11절)까지
  * 담은 이력 한 줄
  */
 type EmailSendLogRow = EmailSendLog &
-    LogSenderSource & Partial<OpenSignal> & Partial<ClickSignal> & { reply?: { id: number; kind: string; receivedAt: string } | null };
+    LogSenderSource & Partial<OpenSignal> & Partial<ClickSignal> & { reply?: { id: number; kind: string; receivedAt: string } | null; followupCount?: number; followupPending?: number };
 
 /** 표의 "보낸 주소" 칸. 보낼 때 주소가 없는 옛 이력은 프로필의 지금 주소 아래에 "(현재 프로필)"을 붙인다 */
 function LogSenderCell({ log }: { log: LogSenderSource }) {
@@ -67,7 +78,8 @@ function LogSenderCell({ log }: { log: LogSenderSource }) {
 }
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
-    unknown: { label: "접수 결과 확인 필요", variant: "secondary" },
+    // NHN에 보냈지만 응답이 끊겨 실제로 나갔는지 모르는 메일 — 중복 발송이 될까 봐 자동으로 다시 보내지 않는다
+    unknown: { label: "발송 여부 확인 필요", variant: "secondary" },
     uncertain: { label: "결과 미확인", variant: "secondary" },
     cancelled: { label: "발송 취소", variant: "secondary" },
     pending: { label: "대기", variant: "secondary" },
@@ -76,66 +88,90 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
     rejected: { label: "거부", variant: "destructive" },
 };
 
-const TRIGGER_TYPE_MAP: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-    manual: { label: "수동", variant: "outline" },
-    auto: { label: "자동", variant: "default" },
-    repeat: { label: "반복", variant: "secondary" },
-    ai_auto: { label: "AI 자동", variant: "default" },
-    ai_followup: { label: "후속발송", variant: "secondary" },
-    visit_ack: { label: "방문 감사", variant: "secondary" },
-    // 템플릿 후속(email-followup.ts)·AI 후속 테스트 발송(test-followup API)이 남기는 값 — 없으면 영어 그대로 보였다
-    followup: { label: "템플릿 후속", variant: "secondary" },
-    test_followup: { label: "후속 테스트", variant: "outline" },
-};
-
-type FilterChip = { key: string; value: string; label: string };
 
 const PERIOD_OPTIONS = [
+    { value: "", label: "전체" },
     { value: "7", label: "7일" },
     { value: "30", label: "30일" },
     { value: "90", label: "90일" },
 ];
 
-const STATUS_OPTIONS = Object.entries(STATUS_MAP).map(([value, { label }]) => ({ value, label }));
-
-const TRIGGER_OPTIONS = [
-    { value: "manual", label: "수동" },
-    { value: "auto", label: "자동" },
-    { value: "repeat", label: "반복" },
-    { value: "ai_auto", label: "AI 자동" },
-    { value: "ai_followup", label: "후속발송" },
-    { value: "visit_ack", label: "방문 감사" },
-    { value: "followup", label: "템플릿 후속" },
-];
-
 const CLICK_OPTIONS = [
+    { value: "__all__", label: "클릭 전체" },
     { value: "1", label: "클릭" },
     { value: "0", label: "미클릭" },
 ];
 
-export default function EmailSendLogTable() {
+/** NHN 결과로 본 배달 실패 (발송 상태가 '발송'이어도 받는 쪽이 반송한 메일) */
+function deliveryFailBadge(log: Pick<EmailSendLog, "nhnStatusCode" | "deliveryFailSide" | "deliveryFailSource" | "deliveryStatusCode">) {
+    const sender = log.deliveryFailSide === "sender" || log.nhnStatusCode === "SST7" || log.nhnStatusCode === "SST8";
+    const label = sender ? "발신 인증 실패" : log.nhnStatusCode === "SST3" ? "반송" : log.deliveryFailSource === "dsn" ? "반송 안내" : null;
+    if (!label) return null;
+    return { label, title: log.deliveryStatusCode ? dsnLabel(log.deliveryStatusCode) : undefined };
+}
+
+/** workspaceId: 화면 위 사업부 탭이 고른 사업부 (null·없음: 전체) */
+/** 유형 칸: 후속 메일만 '후속'이라고 적는다 */
+export function logTypeLabel(log: { parentLogId?: number | null; triggerType?: string | null }) {
+    return log.parentLogId || /followup/.test(log.triggerType ?? "") ? "후속" : "";
+}
+
+/**
+ * healthAlertId: 발송 경고 알림(?health=)으로 열면 그 사건의 메일만 걸러 보이고 위에 문제 칸을 띄운다.
+ * 표 위에 이 사업부(전체면 모두, 조직 공통 문제는 어느 사업부에나)의 확인할 문제 카드를 늘 보이고, 카드를 고르면 onPickHealth로 같은 거르기를 건다
+ */
+export default function EmailSendLogTable({ workspaceId = null, partitions = [], healthAlertId = null, healthEventId = null, onClearHealth, onPickHealth }: {
+    workspaceId?: number | null;
+    partitions?: Array<{ id: number; workspaceId: number }>;
+    healthAlertId?: number | null;
+    healthEventId?: number | null;
+    onClearHealth?: () => void;
+    onPickHealth?: (p: HealthProblem) => void;
+} = {}) {
     const [page, setPage] = useState(1);
     const [searchInput, setSearchInput] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [status, setStatus] = useState("");
-    const [triggerType, setTriggerType] = useState("");
-    const [ruleFilter, setRuleFilter] = useState("");  // "link:ID" or "ai:ID"
+    const [ruleFilter, setRuleFilter] = useState("");  // AI 규칙 번호
     const [isClicked, setIsClicked] = useState("");
     const [hasReply, setHasReply] = useState("");
     const [period, setPeriod] = useState("");
+    const [custom, setCustom] = useState<{ from?: Date; to?: Date }>({});
+    const [hasFollowup, setHasFollowup] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [selectedLog, setSelectedLog] = useState<EmailSendLogRow | null>(null);
+    const [expanded, setExpanded] = useState<Set<number>>(new Set());
+    const toggleExpanded = (id: number) => setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+    const health = useHealthLogFilter(healthAlertId, healthEventId, workspaceId);
+    const problems = useHealthProblems(workspaceId);
+    const [showProblems, setShowProblems] = useState(false);
+    // 사업부·알림 거르기를 바꾸면 첫 페이지부터
+    const scopeKey = `${workspaceId ?? ""}|${health.params ? JSON.stringify(health.params) : ""}`;
+    const [seenScope, setSeenScope] = useState(scopeKey);
+    if (seenScope !== scopeKey) {
+        setSeenScope(scopeKey);
+        setPage(1);
+    }
 
     // 연결 규칙 + AI 규칙 목록
-    const { templateLinks } = useEmailTemplateLinks("all");
-    const { data: aiRulesData } = useSWR<{ success: boolean; data?: Array<{ id: number; name: string | null; partitionName?: string; prompt?: string | null }> }>(
+    const { data: aiRulesData } = useSWR<{ success: boolean; data?: Array<{ id: number; partitionId: number; name: string | null; partitionName?: string; prompt?: string | null }> }>(
         "/api/email/auto-personalized",
         defaultFetcher
     );
-    const aiRules = aiRulesData?.data ?? [];
+    // 사업부 탭을 고르면 그 사업부 파티션의 규칙만
+    const aiRules = (aiRulesData?.data ?? []).filter((r) => {
+        if (!workspaceId) return true;
+        const partition = partitions.find((p) => p.id === r.partitionId);
+        return partition?.workspaceId === workspaceId;
+    });
 
     // 최근 N일 = 오늘(KST) 포함 N일 — 이메일 통계 대시보드와 같은 기간 계약
     const dateRange = (() => {
+        if (custom.from && custom.to) return { startDate: calendarDate(custom.from), endDate: calendarDate(custom.to) };
         if (!period) return {};
         const { from, to } = presetRange(Number(period), new Date());
         return { startDate: from, endDate: to };
@@ -151,24 +187,21 @@ export default function EmailSendLogTable() {
         return () => clearTimeout(debounceRef.current);
     }, [searchInput]);
 
-    // ruleFilter → templateLinkId / autoPersonalizedLinkId 변환
-    const ruleParams = (() => {
-        if (!ruleFilter) return {};
-        const [type, id] = ruleFilter.split(":");
-        if (type === "link") return { templateLinkId: Number(id) };
-        if (type === "ai") return { autoPersonalizedLinkId: Number(id) };
-        return {};
-    })();
 
     const { logs, totalCount, isLoading, syncLogs, loadError, mutate } = useEmailLogs({
         page,
         search: debouncedSearch || undefined,
         status: status || undefined,
-        triggerType: triggerType || undefined,
-        ...ruleParams,
+        autoPersonalizedLinkId: ruleFilter ? Number(ruleFilter) : undefined,
+        hasFollowup: hasFollowup || undefined,
         isClicked: isClicked || undefined,
         hasReply: hasReply || undefined,
         ...dateRange,
+        // 알림 거르기는 후속 메일 실패도 함께 본다
+        roots: !health.params,
+        workspaceId: workspaceId ?? undefined,
+        extra: health.params ?? undefined,
+        paused: health.waiting,
     });
 
     const totalPages = Math.ceil(totalCount / 50);
@@ -195,49 +228,15 @@ export default function EmailSendLogTable() {
         }
     };
 
-    const toggleFilter = useCallback((setter: (v: string) => void, current: string, value: string) => {
-        setter(current === value ? "" : value);
-        setPage(1);
-    }, []);
-
-    const activeFilters: FilterChip[] = [];
-    if (period) activeFilters.push({ key: "period", value: period, label: `최근 ${period}일` });
-    if (status) activeFilters.push({ key: "status", value: status, label: STATUS_MAP[status]?.label || status });
-    if (triggerType) activeFilters.push({ key: "triggerType", value: triggerType, label: TRIGGER_TYPE_MAP[triggerType]?.label || triggerType });
-    if (ruleFilter) {
-        const [type, id] = ruleFilter.split(":");
-        let ruleLabel = ruleFilter;
-        if (type === "link") {
-            const link = templateLinks.find(l => l.id === Number(id));
-            ruleLabel = link ? `연결: ${link.name}` : `연결 #${id}`;
-        } else if (type === "ai") {
-            const rule = aiRules.find(r => r.id === Number(id));
-            ruleLabel = rule?.name || rule?.partitionName ? `AI: ${rule.name || rule.partitionName}` : `AI 규칙 #${id}`;
-        }
-        activeFilters.push({ key: "ruleFilter", value: ruleFilter, label: ruleLabel });
-    }
-    if (isClicked) activeFilters.push({ key: "isClicked", value: isClicked, label: isClicked === "1" ? "클릭" : "미클릭" });
-    if (hasReply) activeFilters.push({ key: "hasReply", value: hasReply, label: "회신 있음" });
-    if (debouncedSearch) activeFilters.push({ key: "search", value: debouncedSearch, label: `"${debouncedSearch}"` });
-
-    const clearFilter = useCallback((key: string) => {
-        if (key === "period") setPeriod("");
-        if (key === "status") setStatus("");
-        if (key === "triggerType") setTriggerType("");
-        if (key === "ruleFilter") setRuleFilter("");
-        if (key === "isClicked") setIsClicked("");
-        if (key === "hasReply") setHasReply("");
-        if (key === "search") { setSearchInput(""); setDebouncedSearch(""); }
-        setPage(1);
-    }, []);
-
+    const hasFilters = !!(period || custom.from || status || ruleFilter || isClicked || hasReply || hasFollowup || debouncedSearch);
     const clearAll = useCallback(() => {
         setPeriod("");
+        setCustom({});
         setStatus("");
-        setTriggerType("");
         setRuleFilter("");
         setIsClicked("");
         setHasReply("");
+        setHasFollowup(false);
         setSearchInput("");
         setDebouncedSearch("");
         setPage(1);
@@ -260,184 +259,130 @@ export default function EmailSendLogTable() {
                     발송 이력
                     <span className="text-sm font-normal text-muted-foreground ml-2">{totalCount.toLocaleString()}건</span>
                 </h3>
-                <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="shrink-0">
-                    {syncing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
-                    동기화
-                </Button>
+                <div className="flex items-center gap-2">
+                    {problems.length > 0 && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn("shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-500/40 dark:text-amber-400", showProblems && "bg-amber-50 dark:bg-amber-500/10")}
+                            onClick={() => setShowProblems((v) => !v)}
+                        >
+                            <AlertTriangle className="h-4 w-4 mr-1.5" />
+                            확인할 문제 {problems.length}건
+                            <ChevronDown className={cn("ml-1 h-3.5 w-3.5 transition-transform", showProblems && "rotate-180")} />
+                        </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="shrink-0">
+                        {syncing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+                        동기화
+                    </Button>
+                </div>
             </div>
 
-            {/* 검색 + 발송 규칙 */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                <div className="relative flex-1 sm:max-w-sm">
+            {onPickHealth && onClearHealth ? (
+                (showProblems || health.active) && <HealthProblems
+                    problems={problems}
+                    filter={health}
+                    selectedEventId={healthEventId}
+                    showCommon={workspaceId !== null}
+                    onPick={onPickHealth}
+                    onClear={onClearHealth}
+                />
+            ) : (
+                health.active && onClearHealth && <HealthFocusPanel filter={health} onClear={onClearHealth} />
+            )}
+
+            {/* 거르기 — 한 줄 (리드젠통계와 같은 기간 고르기) */}
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-full sm:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="수신자 이메일 주소 전체 또는 제목"
+                        placeholder="수신자 이메일 또는 제목"
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
                         className="pl-9"
                     />
                 </div>
-                {(templateLinks.length > 0 || aiRules.length > 0) && (
+                {aiRules.length > 0 && (
                     <Select value={ruleFilter || "__all__"} onValueChange={(v) => { setRuleFilter(v === "__all__" ? "" : v); setPage(1); }}>
-                        <SelectTrigger className="w-full sm:w-45">
-                            <SelectValue placeholder="발송 규칙" />
+                        <SelectTrigger className="w-full sm:w-48">
+                            <SelectValue placeholder="규칙" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="__all__">전체 규칙</SelectItem>
-                            {templateLinks.length > 0 && (
-                                <>
-                                    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">템플릿 자동발송</div>
-                                    {templateLinks.map((link) => (
-                                        <SelectItem key={`link:${link.id}`} value={`link:${link.id}`}>
-                                            {link.name}
-                                        </SelectItem>
-                                    ))}
-                                </>
-                            )}
-                            {aiRules.length > 0 && (
-                                <>
-                                    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">AI 자동발송</div>
-                                    {aiRules.map((rule) => (
-                                        <SelectItem key={`ai:${rule.id}`} value={`ai:${rule.id}`}>
-                                            {rule.name || rule.partitionName || `AI 규칙 #${rule.id}`}
-                                        </SelectItem>
-                                    ))}
-                                </>
-                            )}
+                            <SelectItem value="__all__">규칙 전체</SelectItem>
+                            {aiRules.map((rule) => (
+                                <SelectItem key={rule.id} value={String(rule.id)}>
+                                    {rule.name || rule.partitionName || `규칙 #${rule.id}`}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 )}
-            </div>
-
-            {/* 필터 칩 그룹 */}
-            <div className="space-y-2">
-                {/* 기간 */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-medium text-muted-foreground w-10 shrink-0">기간</span>
-                    {PERIOD_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            onClick={() => toggleFilter(setPeriod, period, opt.value)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                                period === opt.value
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                            }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-
-                    <span className="text-xs text-muted-foreground mx-1">|</span>
-
-                    {/* 상태 */}
-                    <span className="text-xs font-medium text-muted-foreground w-10 shrink-0">상태</span>
-                    {STATUS_OPTIONS.map((opt) => {
-                        // '미클릭'은 발송된 메일만 본다 — 다른 상태와 함께 고르면 늘 0건이라 고를 수 없게 한다 (UX-231)
-                        const blockedByUnclicked = isClicked === "0" && opt.value !== "sent";
-                        return (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={status === opt.value}
-                                disabled={blockedByUnclicked}
-                                title={blockedByUnclicked ? "'미클릭'은 발송된 메일만 봅니다. 미클릭 거르기를 풀면 고를 수 있습니다." : undefined}
-                                onClick={() => toggleFilter(setStatus, status, opt.value)}
-                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    status === opt.value
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                }`}
-                            >
-                                {opt.label}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {/* 방식 */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-medium text-muted-foreground w-10 shrink-0">방식</span>
-                    {TRIGGER_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            onClick={() => toggleFilter(setTriggerType, triggerType, opt.value)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                                triggerType === opt.value
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                            }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-
-                    <span className="text-xs text-muted-foreground mx-1">|</span>
-
-                    {/* 클릭 */}
-                    {CLICK_OPTIONS.map((opt) => (
-                        <button
-                            key={`click-${opt.value}`}
-                            type="button"
-                            aria-pressed={isClicked === opt.value}
-                            onClick={() => {
-                                // 미클릭은 발송된 메일만 — 발송이 아닌 상태 거르기는 함께 쓸 수 없어 푼다 (UX-231)
-                                if (opt.value === "0" && isClicked !== "0" && status && status !== "sent") setStatus("");
-                                toggleFilter(setIsClicked, isClicked, opt.value);
-                            }}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                                isClicked === opt.value
-                                    ? "bg-blue-600 text-white"
-                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                            }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-
-                    <span className="text-xs text-muted-foreground mx-1">|</span>
-
-                    {/* 회신 (DESIGN-RPL 11절 2번) */}
-                    <button
-                        onClick={() => toggleFilter(setHasReply, hasReply, "1")}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                            hasReply === "1"
-                                ? "bg-emerald-600 text-white"
-                                : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
-                    >
-                        회신 있음
-                    </button>
-                </div>
-
-                {/* 적용된 필터 요약 + 초기화 */}
-                {activeFilters.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                        {activeFilters.map((f) => (
-                            <Badge
-                                key={f.key}
-                                variant="secondary"
-                                className="gap-1 cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                onClick={() => clearFilter(f.key)}
-                            >
-                                {f.label}
-                                <X className="h-3 w-3" />
-                            </Badge>
+                <Select value={status || "__all__"} onValueChange={(v) => {
+                    const next = v === "__all__" ? "" : v;
+                    // '미클릭'은 발송된 메일만 본다 — 다른 상태를 고르면 미클릭 거르기를 푼다 (UX-231)
+                    if (next && next !== "sent" && isClicked === "0") setIsClicked("");
+                    setStatus(next); setPage(1);
+                }}>
+                    <SelectTrigger className="w-full sm:w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="__all__">상태 전체</SelectItem>
+                        {Object.entries(STATUS_MAP).map(([value, { label }]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
                         ))}
-                        <button
-                            onClick={clearAll}
-                            className="text-xs text-muted-foreground hover:text-destructive ml-1"
-                        >
-                            전체 초기화
-                        </button>
-                    </div>
+                    </SelectContent>
+                </Select>
+                <Select value={isClicked || "__all__"} onValueChange={(v) => {
+                    const next = v === "__all__" ? "" : v;
+                    if (next === "0" && status && status !== "sent") setStatus("");
+                    setIsClicked(next); setPage(1);
+                }}>
+                    <SelectTrigger className="w-full sm:w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        {CLICK_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <label className="flex h-9 cursor-pointer items-center gap-2 px-1 text-sm">
+                    <Checkbox
+                        checked={hasFollowup}
+                        onCheckedChange={(v) => { setHasFollowup(v === true); setExpanded(new Set()); setPage(1); }}
+                    />
+                    후속 있음
+                </label>
+                <label className="flex h-9 cursor-pointer items-center gap-2 px-1 text-sm">
+                    <Checkbox
+                        checked={hasReply === "1"}
+                        onCheckedChange={(v) => { setHasReply(v === true ? "1" : ""); setPage(1); }}
+                    />
+                    회신 있음
+                </label>
+                {hasFilters && (
+                    <Button variant="ghost" className="text-muted-foreground" onClick={clearAll}>
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                        초기화
+                    </Button>
                 )}
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                <RangePills
+                    ranges={PERIOD_OPTIONS}
+                    value={custom.from ? "custom" : period}
+                    onChange={(v) => { setPeriod(v); setCustom({}); setPage(1); }}
+                />
+                <DateRangePicker
+                    from={custom.from}
+                    to={custom.to}
+                    maxDate={new Date()}
+                    placeholder="날짜 직접 선택"
+                    triggerClassName={cn("bg-background", custom.from && "border-primary/40 text-primary")}
+                    onChange={(r) => { setCustom(r); setPage(1); }}
+                />
+                </div>
             </div>
 
             {/* 테이블 — 실패해도 검색·필터는 남겨 조건을 바꿀 수 있게 한다 */}
             {loadError ? (
                 <QueryErrorState error={loadError} onRetry={() => mutate()} />
-            ) : isLoading ? (
+            ) : isLoading || health.waiting ? (
                 <div className="space-y-3">
                     {[1, 2, 3, 4, 5].map((i) => (
                         <Skeleton key={i} className="h-10 w-full" />
@@ -445,7 +390,7 @@ export default function EmailSendLogTable() {
                 </div>
             ) : logs.length === 0 ? (
                 <div className="text-center text-muted-foreground py-12">
-                    {activeFilters.length > 0 ? "조건에 맞는 이력이 없습니다." : "발송 이력이 없습니다."}
+                    {hasFilters || health.active ? "조건에 맞는 이력이 없습니다." : "발송 이력이 없습니다."}
                 </div>
             ) : (
                 <>
@@ -453,27 +398,38 @@ export default function EmailSendLogTable() {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-8" />
                                 <TableHead>수신자</TableHead>
                                 <TableHead>보낸 주소</TableHead>
                                 <TableHead>제목</TableHead>
                                 <TableHead>상태</TableHead>
                                 <TableHead>클릭</TableHead>
                                 <TableHead><OpenColumnHead /></TableHead>
-                                <TableHead>방식</TableHead>
+                                <TableHead>유형</TableHead>
+                                <TableHead>후속</TableHead>
                                 <TableHead>발송일</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {(logs as EmailSendLogRow[]).map((log) => {
                                 const statusInfo = STATUS_MAP[log.status] || { label: log.status, variant: "secondary" as const };
-                                const triggerInfo = TRIGGER_TYPE_MAP[log.triggerType || "manual"] || { label: log.triggerType, variant: "outline" as const };
+                                const failBadge = deliveryFailBadge(log);
 
+                                const followupTotal = (log.followupCount ?? 0) + (log.followupPending ?? 0);
+                                // '후속 있음'으로 거르면 처음부터 펼쳐 첫 메일과 후속을 같이 본다 (그때 expanded는 접은 줄)
+                                const isOpen = hasFollowup ? !expanded.has(log.id) : expanded.has(log.id);
                                 return (
+                                    <Fragment key={log.id}>
                                     <TableRow
-                                        key={log.id}
                                         className="cursor-pointer"
-                                        onClick={() => setSelectedLog(log)}
+                                        aria-expanded={followupTotal > 0 ? isOpen : undefined}
+                                        onClick={() => (followupTotal > 0 ? toggleExpanded(log.id) : setSelectedLog(log))}
                                     >
+                                        <TableCell className="w-8 pr-0">
+                                            {followupTotal > 0 && (
+                                                <ChevronDown className={`size-4 text-muted-foreground transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                                            )}
+                                        </TableCell>
                                         <TableCell className="font-mono text-sm">{log.recipientEmail}</TableCell>
                                         <TableCell
                                             className="max-w-[220px] text-xs text-muted-foreground"
@@ -498,18 +454,40 @@ export default function EmailSendLogTable() {
                                         <TableCell>
                                             <div className="flex flex-wrap items-center gap-1">
                                                 <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                                                {failBadge && (
+                                                    <Badge variant="destructive" title={failBadge.title}>{failBadge.label}</Badge>
+                                                )}
                                                 {log.reply && <ReplyKindBadge kind={log.reply.kind} />}
                                             </div>
                                         </TableCell>
                                         <TableCell><ClickCountCell log={log} /></TableCell>
                                         <TableCell><OpenCountCell log={log} /></TableCell>
-                                        <TableCell>
-                                            <Badge variant={triggerInfo.variant}>{triggerInfo.label}</Badge>
+                                        <TableCell className="text-sm text-muted-foreground">{logTypeLabel(log)}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm">
+                                            {followupTotal === 0 ? (
+                                                <span className="text-muted-foreground">—</span>
+                                            ) : (
+                                                <>
+                                                    {(log.followupCount ?? 0) > 0 && <span>{log.followupCount}건</span>}
+                                                    {(log.followupPending ?? 0) > 0 && (
+                                                        <span className="ml-1 text-xs text-muted-foreground">예정 {log.followupPending}</span>
+                                                    )}
+                                                </>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-sm">
                                             {formatDate(log.sentAt as unknown as string)}
                                         </TableCell>
                                     </TableRow>
+                                    {isOpen && (
+                                        <FollowupRows
+                                            logId={log.id}
+                                            colSpan={10}
+                                            statusMap={STATUS_MAP}
+                                            onOpen={(f) => setSelectedLog(f as unknown as EmailSendLogRow)}
+                                        />
+                                    )}
+                                    </Fragment>
                                 );
                             })}
                         </TableBody>
@@ -547,7 +525,6 @@ export default function EmailSendLogTable() {
                 <SheetContent className="sm:max-w-lg overflow-y-auto">
                     {selectedLog && (() => {
                         const statusInfo = STATUS_MAP[selectedLog.status] || { label: selectedLog.status, variant: "secondary" as const };
-                        const triggerInfo = TRIGGER_TYPE_MAP[selectedLog.triggerType || "manual"] || { label: selectedLog.triggerType, variant: "outline" as const };
 
                         return (
                             <>
@@ -578,12 +555,12 @@ export default function EmailSendLogTable() {
                                                 <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                                             </span>
                                         </div>
-                                        <div className="grid grid-cols-3 gap-2 py-2 border-b">
-                                            <span className="text-sm text-muted-foreground">방식</span>
-                                            <span className="col-span-2">
-                                                <Badge variant={triggerInfo.variant}>{triggerInfo.label}</Badge>
-                                            </span>
-                                        </div>
+                                        {logTypeLabel(selectedLog) && (
+                                            <div className="grid grid-cols-3 gap-2 py-2 border-b">
+                                                <span className="text-sm text-muted-foreground">유형</span>
+                                                <span className="col-span-2 text-sm">{logTypeLabel(selectedLog)}</span>
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-3 gap-2 py-2 border-b">
                                             <span className="text-sm text-muted-foreground">발송일시</span>
                                             <span className="col-span-2 text-sm">
@@ -615,7 +592,7 @@ export default function EmailSendLogTable() {
                                     <div className="space-y-2">
                                         <h4 className="text-sm font-medium text-muted-foreground">본문</h4>
                                         {selectedLog.body ? (
-                                            <div className="border rounded-lg overflow-hidden">
+                                            <div className="border border-border/40 rounded-lg overflow-hidden">
                                                 <iframe
                                                     srcDoc={selectedLog.body}
                                                     className="w-full min-h-[400px] bg-white"

@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { workflowRequest, workflowWrite } from "../api";
@@ -217,7 +218,7 @@ export function WorkflowEditor({
                             <summary className="cursor-pointer text-xs">
                                 이전 버전에서 다시 시작
                             </summary>
-                            <select
+                            <OptionSelect
                                 aria-label="불러올 자동화 버전"
                                 className={field}
                                 value={loadedId}
@@ -231,7 +232,7 @@ export function WorkflowEditor({
                                             : "초안"}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                             <button
                                 type="button"
                                 className="mt-2 text-xs underline"
@@ -405,7 +406,7 @@ export function WorkflowEditor({
                         메시지나 업무를 실제로 만들지 않습니다. 대기 이후 조건은
                         실제 처리 시점에 다시 평가합니다.
                     </p>
-                    <select
+                    <OptionSelect
                         aria-label="모의 실행 이벤트"
                         className={field}
                         value={eventId}
@@ -424,7 +425,7 @@ export function WorkflowEditor({
                                 · {workflowEventLabel(event)}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                     {events.data && !events.error && !eventRows.length && (
                         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
                             아직 이 사업에 모의 실행할 이벤트가 없습니다. 게시하려면

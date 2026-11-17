@@ -17,8 +17,7 @@ export default function AssetCard({ asset, selected, onClick, footer }: AssetCar
     return (
         <Root
             {...(onClick ? { type: "button" as const, "aria-pressed": !!selected, "aria-label": asset.name } : {})}
-            className={`group relative block w-full aspect-square overflow-hidden bg-muted border transition-shadow ${
-                onClick ? "cursor-pointer hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""
+            className={`group relative block w-full aspect-square overflow-hidden bg-muted border border-border/40 transition-shadow ${ onClick ?"cursor-pointer hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""
             } ${selected ? "border-primary shadow-[0_0_0_1px_var(--primary)]" : "border-border"}`}
             style={{ borderRadius: 10 }}
             onClick={onClick}

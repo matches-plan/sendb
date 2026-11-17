@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailTemplateLinks, partitions, workspaces } from "@/lib/db";
-import { eq, and } from "drizzle-orm";
+import { db, emailTemplateLinks, emailTemplates, partitions, workspaces } from "@/lib/db";
+import { eq, and, type SQL } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { resolveRuleSenderPool } from "@/lib/email-sender-resolver";
 import { checkLinkTemplatesOwned } from "@/lib/email-template-ownership";
@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
     try {
         const partitionIdParam = req.nextUrl.searchParams.get("partitionId");
         const partitionId = partitionIdParam ? Number(partitionIdParam) : null;
+        // 규칙은 본 템플릿의 용도(콜드메일/CRM 이메일)를 따른다
+        const purposeParam = req.nextUrl.searchParams.get("purpose");
+        const purposeCondition: SQL | undefined = purposeParam === "cold" || purposeParam === "crm"
+            ? eq(emailTemplates.purpose, purposeParam) : undefined;
 
         if (partitionId) {
             // 특정 파티션
@@ -28,12 +32,13 @@ export async function GET(req: NextRequest) {
                 return NextResponse.json({ success: false, error: "파티션을 찾을 수 없습니다." }, { status: 404 });
             }
 
-            const links = await db
-                .select()
+            const rows = await db
+                .select({ link: emailTemplateLinks })
                 .from(emailTemplateLinks)
-                .where(eq(emailTemplateLinks.partitionId, partitionId));
+                .innerJoin(emailTemplates, eq(emailTemplates.id, emailTemplateLinks.emailTemplateId))
+                .where(and(eq(emailTemplateLinks.partitionId, partitionId), purposeCondition));
 
-            return NextResponse.json({ success: true, data: links });
+            return NextResponse.json({ success: true, data: rows.map((r) => r.link) });
         }
 
         // 전체 조회
@@ -45,7 +50,8 @@ export async function GET(req: NextRequest) {
             .from(emailTemplateLinks)
             .innerJoin(partitions, eq(partitions.id, emailTemplateLinks.partitionId))
             .innerJoin(workspaces, eq(workspaces.id, partitions.workspaceId))
-            .where(eq(workspaces.orgId, user.orgId));
+            .innerJoin(emailTemplates, eq(emailTemplates.id, emailTemplateLinks.emailTemplateId))
+            .where(and(eq(workspaces.orgId, user.orgId), purposeCondition));
 
         const links = rows.map((r) => ({ ...r.link, partitionName: r.partitionName }));
 

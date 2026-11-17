@@ -12,6 +12,8 @@ export interface WebFormEditorValues {
     coverColor: string;
     defaultValues: { field: string; value: string }[];
     fields: FormFieldItem[];
+    /** 리드가 쌓일 파티션 — 바꾸면 미저장 변경 */
+    partitionId?: number | null;
 }
 
 /**
