@@ -22,7 +22,13 @@ import { issueVisitorAccess } from "@/lib/inbox/visitor-access";
 
 type NoticeSettingsPart = Pick<
     MessengerSettings,
-    "emailSubject" | "emailBody" | "customerNameFallback" | "alimtalkSenderKey" | "alimtalkTemplateCode" | "alimtalkVariables"
+    | "emailSubject"
+    | "emailBody"
+    | "customerNameFallback"
+    | "alimtalkSenderKey"
+    | "alimtalkTemplateCode"
+    | "alimtalkVariables"
+    | "alimtalkFallbacks"
 >;
 import { sendNotificationMail, sendNotificationAlimtalk } from "./transport";
 import { noticeMailBody } from "./notice-text";
@@ -191,16 +197,25 @@ export function deliver(
     },
 ) {
     const name = input.contact.name.trim();
-    const customerName = name && name !== "방문 고객" ? name : input.settings.customerNameFallback || "고객";
-    const values: NoticeValues = { customerName, channelName: input.channelName, replyTime: input.replyTime, link: input.link };
+    const known: NoticeValues = {
+        customerName: name && name !== "방문 고객" ? name : "",
+        channelName: input.channelName,
+        replyTime: input.replyTime,
+        link: input.link,
+    };
+    const values: NoticeValues = { ...known, customerName: known.customerName || input.settings.customerNameFallback || "고객" };
     if (input.medium === "alimtalk")
         return senders.alimtalk({
             orgId: input.orgId,
             senderKey: input.settings.alimtalkSenderKey || undefined,
             templateCode: input.settings.alimtalkTemplateCode,
             phone: input.contact.phone,
+            // 값이 비면 그 변수에 적어 둔 말을 넣는다
             parameters: Object.fromEntries(
-                Object.entries(input.settings.alimtalkVariables).map(([name, value]) => [name, values[value]]),
+                Object.entries(input.settings.alimtalkVariables).map(([variable, value]) => [
+                    variable,
+                    known[value] || input.settings.alimtalkFallbacks[variable] || values[value],
+                ]),
             ),
         });
     return senders.mail({

@@ -373,6 +373,8 @@ async function completeGoogleConnection(
                 .for("update"),
             version = (old?.version ?? 0) + 1;
         await invalidateMailbox(tx, locked);
+        // 연결이 끝나면 바로 수신·발송을 켠다 (따로 켜는 스위치는 두지 않음)
+        await tx.update(boxes).set({ enabled: true }).where(eq(boxes.id, box.id));
         const saved = {
             version,
             status: "connected",
@@ -436,7 +438,7 @@ async function completeGoogleConnection(
                         status: "connected",
                         version,
                         since: state.since,
-                        enabled: false,
+                        enabled: true,
                     },
                 },
             },

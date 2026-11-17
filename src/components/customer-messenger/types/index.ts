@@ -5,7 +5,7 @@ export type MessengerBrand = {
 };
 export type PublicMessengerSettings = Omit<
     MessengerSettings,
-    "emailSubject" | "emailBody" | "customerNameFallback" | "alimtalkSenderKey" | "alimtalkTemplateCode" | "alimtalkTemplateName" | "alimtalkVariables"
+    "emailSubject" | "emailBody" | "customerNameFallback" | "alimtalkSenderKey" | "alimtalkTemplateCode" | "alimtalkTemplateName" | "alimtalkVariables" | "alimtalkFallbacks"
 > & {
     aiAvailable: boolean;
     weekly: { day: number; start: string; end: string }[];
@@ -22,6 +22,7 @@ export type NoticeSettings = Pick<
     | "alimtalkTemplateCode"
     | "alimtalkTemplateName"
     | "alimtalkVariables"
+    | "alimtalkFallbacks"
 >;
 export type NoticeLog = {
     id: string;

@@ -30,6 +30,7 @@ export const noticeSettingsInput = messengerSettingsSchema
         alimtalkTemplateCode: true,
         alimtalkTemplateName: true,
         alimtalkVariables: true,
+        alimtalkFallbacks: true,
     })
     .strict()
     .refine((v) => !v.alimtalkNotifications || !!v.alimtalkTemplateCode, "알림톡 템플릿을 골라주세요.");
@@ -73,6 +74,7 @@ export async function noticeSettings(actor: CustomerActor, channelId: number, ex
             alimtalkTemplateCode: settings.alimtalkTemplateCode,
             alimtalkTemplateName: settings.alimtalkTemplateName,
             alimtalkVariables: settings.alimtalkVariables,
+            alimtalkFallbacks: settings.alimtalkFallbacks,
         }),
         status: {
             worker: notificationWorkerEnabled(),

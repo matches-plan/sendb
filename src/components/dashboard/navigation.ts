@@ -32,10 +32,10 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
     {
         group: "고객관리",
         items: [
-            { href: "/inbox", label: "고객 상담", icon: MessageSquare },
+            { href: "/inbox", label: "상담톡", icon: MessageSquare },
             { href: "/inbox/stats", label: "상담통계", icon: TrendingUp },
             { href: "/inbox/settings", label: "상담 설정", icon: Settings2 },
-            { href: "/customer-contacts", label: "고객 연락처", icon: Contact },
+            { href: "/customer-contacts", label: "상담 연락처", icon: Contact },
             { href: "/alimtalk", label: "알림톡", icon: MessageCircle },
         ],
     },

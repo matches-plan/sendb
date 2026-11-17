@@ -27,26 +27,11 @@ export const createEmailMailbox = (
         name,
         ...(googleAccount ? { googleAccount } : {}),
     });
-export const changeGoogleAccount = (
-    id: string,
-    version: number,
-    googleAccount: string,
-) =>
-    inboxWrite(`/api/email-mailboxes/${id}`, {
-        version,
-        enabled: false,
-        googleAccount,
-    });
 export const renameEmailMailbox = (
     id: string,
     version: number,
     enabled: boolean,
     name: string,
 ) => inboxWrite(`/api/email-mailboxes/${id}`, { version, enabled, name });
-export const toggleEmailMailbox = (
-    id: string,
-    version: number,
-    enabled: boolean,
-) => inboxWrite(`/api/email-mailboxes/${id}`, { version, enabled });
 export const changeDelivery = (id: string, action: "retry" | "cancel") =>
     inboxWrite(`/api/email-deliveries/${id}`, { action });

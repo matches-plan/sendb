@@ -64,7 +64,7 @@ export const crmContacts = pgTable(
             .notNull()
             .default("lead"),
         isInternal: boolean("is_internal").notNull().default(false),
-        /** 광고 수신 동의 — 이메일과 문자·알림톡을 따로. 상담 답변 알림용으로 받은 연락처는 false (drizzle/0151) */
+        /** 광고 수신 동의 — 이메일과 문자·알림톡을 따로. 상담 답변 알림용으로 받은 연락처는 false (drizzle/0153) */
         emailMarketingConsent: boolean("email_marketing_consent").notNull().default(false),
         smsMarketingConsent: boolean("sms_marketing_consent").notNull().default(false),
         attributes: jsonb("attributes")

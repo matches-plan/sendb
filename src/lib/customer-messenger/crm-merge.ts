@@ -1,11 +1,46 @@
 import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { crmContacts } from "@/lib/db";
+import { crmContacts, inboxConversations, trackerSessions } from "@/lib/db";
 import type { DbExec } from "@/lib/db/tx";
 import { appendCustomerAudit } from "@/lib/customer-records/audit";
 import { enqueuePlatformEvent } from "@/lib/customer-platform/outbox";
 
 const ANONYMOUS = new Set(["", "방문 고객"]);
 export const phoneDigits = (phone: string) => phone.replace(/\D/g, "");
+
+const UTM_KEYS = ["utmSource", "utmMedium", "utmCampaign", "utmTerm", "utmContent"] as const;
+const UTM_PARAMS: Record<(typeof UTM_KEYS)[number], string> = {
+    utmSource: "utm_source",
+    utmMedium: "utm_medium",
+    utmCampaign: "utm_campaign",
+    utmTerm: "utm_term",
+    utmContent: "utm_content",
+};
+
+/** 상담의 유입경로 — 트래커 방문(세션)의 utm·referrer, 없으면 상담을 연 페이지 주소의 utm */
+export async function conversationSource(tx: DbExec, conversationId: string): Promise<Record<string, string>> {
+    const [chat] = await tx
+        .select({ pageUrl: inboxConversations.pageUrl, journey: inboxConversations.journeyContext })
+        .from(inboxConversations)
+        .where(eq(inboxConversations.id, conversationId));
+    const out: Record<string, string> = {};
+    if (chat?.journey?.sessionId) {
+        const [session] = await tx.select().from(trackerSessions).where(eq(trackerSessions.id, chat.journey.sessionId));
+        if (session) {
+            for (const key of UTM_KEYS) if (session[key]) out[key] = session[key]!;
+            if (session.referrer) out.referrer = session.referrer;
+        }
+    }
+    if (!out.utmSource && chat?.pageUrl) {
+        try {
+            const url = new URL(chat.pageUrl);
+            for (const key of UTM_KEYS) {
+                const v = url.searchParams.get(UTM_PARAMS[key]);
+                if (v) out[key] = v.slice(0, 200);
+            }
+        } catch {}
+    }
+    return out;
+}
 
 /**
  * 상담창에서 고객이 남긴 연락처를 같은 사업의 고객 연락처에 합친다.
@@ -40,13 +75,17 @@ export async function mergeReplyContact(
         .orderBy(crmContacts.createdAt)
         .limit(1)
         .for("update");
+    const source = await conversationSource(tx, conversationId);
     if (found) {
+        // 유입경로는 처음 기록만 남긴다 (이미 있으면 그대로)
+        const attributes = found.attributes.utmSource || found.attributes.referrer ? found.attributes : { ...found.attributes, ...source };
         const patch = {
             name: ANONYMOUS.has(found.name.trim()) && input.name.trim() ? input.name.trim() : found.name,
             email: found.email || email || null,
             phone: found.phone || input.phone.trim() || null,
+            attributes,
         };
-        if (patch.name === found.name && patch.email === found.email && patch.phone === found.phone) return found.id;
+        if (patch.name === found.name && patch.email === found.email && patch.phone === found.phone && attributes === found.attributes) return found.id;
         const [updated] = await tx
             .update(crmContacts)
             .set({ ...patch, version: found.version + 1, updatedAt: now })
@@ -66,7 +105,7 @@ export async function mergeReplyContact(
             phone: input.phone.trim() || null,
             emailMarketingConsent: false,
             smsMarketingConsent: false,
-            attributes: { source: "messenger", channelId: channel.id },
+            attributes: { source: "messenger", channelId: channel.id, ...source },
         })
         .onConflictDoUpdate({
             target: [crmContacts.workspaceId, crmContacts.externalId],

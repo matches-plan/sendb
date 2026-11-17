@@ -32,7 +32,7 @@ export const customerReplyContacts = pgTable(
             .default(0),
         verificationSends: integer("verification_sends").notNull().default(0),
         readMessageId: integer("read_message_id").notNull().default(0),
-        /** 남긴 연락처를 합친 고객 연락처 (drizzle/0151) */
+        /** 남긴 연락처를 합친 고객 연락처 (drizzle/0153) */
         crmContactId: uuid("crm_contact_id").references(() => crmContacts.id, { onDelete: "set null" }),
         version: integer("version").notNull().default(1),
         updatedAt: time("updated_at").notNull().defaultNow(),
@@ -52,7 +52,7 @@ export const customerReplyNotifications = pgTable(
             .notNull()
             .references(() => inboxMessages.id, { onDelete: "cascade" }),
         contactVersion: integer("contact_version").notNull(),
-        /** email | alimtalk (drizzle/0151) */
+        /** email | alimtalk (drizzle/0153) */
         medium: varchar("medium", { length: 10 }).notNull().default("email"),
         recipient: varchar("recipient", { length: 254 }).notNull().default(""),
         state: varchar("state", { length: 20 }).notNull().default("pending"),
@@ -69,7 +69,7 @@ export const customerReplyNotifications = pgTable(
     ],
 );
 
-/** 답변 알림 링크로 다른 기기에서 지난 상담을 여는 접속 열쇠 (원래 브라우저의 열쇠는 그대로 둔다, drizzle/0151) */
+/** 답변 알림 링크로 다른 기기에서 지난 상담을 여는 접속 열쇠 (원래 브라우저의 열쇠는 그대로 둔다, drizzle/0153) */
 export const inboxVisitorAccess = pgTable(
     "inbox_visitor_access",
     {

@@ -76,6 +76,8 @@ export const messengerSettingsSchema = z.object({
     alimtalkTemplateCode: z.string().max(100).default(""),
     alimtalkTemplateName: z.string().max(200).default(""),
     alimtalkVariables: z.record(z.string().max(50), noticeValue).default({}),
+    /** 알림톡 변수 값이 비었을 때 대신 넣을 말 (변수 이름별) */
+    alimtalkFallbacks: z.record(z.string().max(50), z.string().trim().max(30)).default({}),
 });
 export type MessengerSettings = z.infer<typeof messengerSettingsSchema>;
 export const defaultMessengerSettings = messengerSettingsSchema.parse({});

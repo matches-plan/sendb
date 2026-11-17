@@ -44,9 +44,10 @@ export async function publicMessengerSettings(
         alimtalkTemplateCode: _templateCode,
         alimtalkTemplateName: _templateName,
         alimtalkVariables: _variables,
+        alimtalkFallbacks: _fallbacks,
         ...visible
     } = settings;
-    void [_fallback, _subject, _body, _senderKey, _templateCode, _templateName, _variables];
+    void [_fallback, _subject, _body, _senderKey, _templateCode, _templateName, _variables, _fallbacks];
     return {
         ...visible,
         links: messengerLinks(settings),
