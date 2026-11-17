@@ -22,7 +22,9 @@ export function useLeadTabs() {
         await lead.mutate();
         return true;
     };
+    const items: TabItem[] | undefined = lead.isLoading ? undefined : lead.workspaces.map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo ?? null }));
     return {
+        items,
         contents,
         onCreate: async (id: number) => result(await createLeadBox(id), "사업부를 추가하지 못했습니다."),
         onRemove: async (id: number) => result(await removeLeadBox(id), "탭을 삭제하지 못했습니다."),

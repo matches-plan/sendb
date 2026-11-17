@@ -50,6 +50,7 @@ import { useFields } from "@/hooks/useFields";
 import { useResolvedFields } from "@/hooks/useResolvedFields";
 import { LeadBoard } from "@/components/leads/ui/LeadBoard";
 import { useLeadTabs, useLeadgenTabs } from "@/components/leads/hooks/useTabGroups";
+import { useOrderedTabs } from "@/components/leads/hooks/useFirstTab";
 import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
 import { useRecords } from "@/hooks/useRecords";
 import { useSSE } from "@/hooks/useSSE";
@@ -149,6 +150,10 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
     } = usePartitions(workspaceId, category);
     const leadTabs = useLeadTabs();
     const leadgenTabs = useLeadgenTabs();
+    // 탭 줄에 보이는 순서 — 처음엔 맨 앞 탭을 연다
+    const leadOrder = useOrderedTabs("leads", category === "lead" ? leadTabs.items : undefined, undefined, false);
+    const leadgenOrder = useOrderedTabs("leadgen", category === "cold" ? leadgenTabs.items : undefined);
+    const tabOrder = category === "lead" ? leadOrder : category === "cold" ? leadgenOrder : workspaces.map((w) => w.id);
     const { fields: workspaceFields } = useFields(workspaceId);
     const { fields: resolvedFields } = useResolvedFields(partitionId);
     const fields = resolvedFields.length > 0 ? resolvedFields : workspaceFields;
@@ -197,26 +202,24 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
         onAnyChange: handleSSEChange,
     });
 
-    // 조직이 정해지면 그 조직에서 마지막으로 본 워크스페이스·파티션을 복원한다(UX-082)
+    // 조직이 정해지면(바뀌면) 처음부터 — 들어올 때는 늘 탭 줄 맨 앞 사업부를 연다
     useEffect(() => {
         if (!orgId || restoredOrgId === orgId) return;
-        const savedWorkspace = localStorage.getItem(storageKey("workspace", orgId));
-        const savedPartition = localStorage.getItem(storageKey("partition", orgId));
-        setWorkspaceId(savedWorkspace ? Number(savedWorkspace) : null);
-        setPartitionId(savedPartition ? Number(savedPartition) : null);
+        setWorkspaceId(null);
+        setPartitionId(null);
         resetListQuery();
         setRestoredOrgId(orgId);
-    }, [orgId, restoredOrgId, resetListQuery, storageKey]);
+    }, [orgId, restoredOrgId, resetListQuery]);
 
-    // 워크스페이스 자동 선택 (저장된 값 검증 또는 첫 번째). 저장값이 없을 뿐이면 마지막 파티션은 유지한다
+    // 워크스페이스 자동 선택 (고른 사업부가 탭에 없으면 맨 앞 탭)
     useEffect(() => {
-        if (!restoredOrgId) return;
-        const next = resolveWorkspaceSelection(workspaces.map((w) => w.id), workspaceId);
+        if (!restoredOrgId || !tabOrder) return;
+        const next = resolveWorkspaceSelection(tabOrder, workspaceId);
         if (!next) return;
         setWorkspaceId(next.workspaceId);
         localStorage.setItem(storageKey("workspace", restoredOrgId), String(next.workspaceId));
         if (!next.keepPartition) setPartitionId(null);
-    }, [workspaces, workspaceId, restoredOrgId, storageKey]);
+    }, [tabOrder, workspaceId, restoredOrgId, storageKey]);
 
     // 워크스페이스 변경 시 파티션 초기화
     const handleWorkspaceChange = useCallback((id: number) => {

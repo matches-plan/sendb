@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import WorkspaceLayout from "@/components/layouts/WorkspaceLayout";
 import { LeadBoard } from "@/components/leads/ui/LeadBoard";
 import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { defaultFetcher } from "@/lib/swr-fetcher";
-
-const STORAGE_KEY = "sales_last_workspace";
 
 /**
  * 영업고객 — 윗줄 [전체][사업부…] 탭 + 표.
@@ -19,26 +17,8 @@ export function SalesWorkspace() {
     const { workspaces, isLoading } = useWorkspaces();
     const { data: counts } = useSWR<{ success: boolean; data: Array<{ workspaceId: number; leads: number }> }>("/api/sales/workspaces", defaultFetcher);
 
-    // 마지막으로 본 탭 기억 (브라우저 저장소를 못 쓰면 전체)
-    useEffect(() => {
-        try {
-            const saved = Number(localStorage.getItem(STORAGE_KEY));
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장소 동기화
-            if (saved > 0) setWorkspaceId(saved);
-        } catch {
-            /* 무시 */
-        }
-    }, []);
-
-    const select = (id: number | null) => {
-        setWorkspaceId(id);
-        try {
-            if (id) localStorage.setItem(STORAGE_KEY, String(id));
-            else localStorage.removeItem(STORAGE_KEY);
-        } catch {
-            /* 무시 */
-        }
-    };
+    // 들어올 때는 늘 맨 앞 탭(전체)
+    const select = (id: number | null) => setWorkspaceId(id);
 
     const withLeads = useMemo(() => new Set((counts?.data ?? []).filter((c) => c.leads > 0).map((c) => c.workspaceId)), [counts]);
     const contents = Object.fromEntries((counts?.data ?? []).filter((c) => c.leads > 0).map((c) => [c.workspaceId, `리드가 ${c.leads.toLocaleString()}건`]));
