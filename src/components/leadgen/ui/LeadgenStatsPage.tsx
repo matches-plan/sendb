@@ -12,7 +12,7 @@ import { CompareTable } from "@/components/email/dashboard/ui/CompareTable";
 import { StatsFreshness } from "@/components/email/dashboard/ui/StatsFreshness";
 import { LEADGEN_RANGES, useLeadgenFilters } from "../hooks/useLeadgenFilters";
 import { useCampaignOptions } from "../hooks/useCampaignOptions";
-import { useLeadgenWorkspaces } from "../hooks/useLeadgenWorkspaces";
+import { useLeadgenTabs } from "@/components/leads/hooks/useTabGroups";
 import { CampaignPicker } from "./CampaignPicker";
 import { CompareKpiGrid } from "./CompareKpiGrid";
 import { CompareTrend } from "./CompareTrend";
@@ -24,16 +24,16 @@ import { periodName } from "@/components/leads/hooks/usePeriodCompare";
 export function LeadgenStatsPage() {
     const f = useLeadgenFilters();
     const campaigns = useCampaignOptions(f.base);
-    const tabs = useLeadgenWorkspaces();
+    const tabs = useLeadgenTabs();
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <LeadWorkspaceTabs
                 value={f.workspaceId}
                 onChange={f.setWorkspaceId}
-                items={tabs.items}
+                {...tabs}
                 loading={tabs.isLoading}
                 allTab={{ onSelect: () => f.setWorkspaceId(null) }}
-                prefKey="leadgen-stats"
+                prefKey="leadgen"
             />
             <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className="space-y-3 px-8 py-4">

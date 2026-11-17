@@ -41,6 +41,7 @@ export function SalesWorkspace() {
     };
 
     const withLeads = useMemo(() => new Set((counts?.data ?? []).filter((c) => c.leads > 0).map((c) => c.workspaceId)), [counts]);
+    const contents = Object.fromEntries((counts?.data ?? []).filter((c) => c.leads > 0).map((c) => [c.workspaceId, `리드가 ${c.leads.toLocaleString()}건`]));
     const tabs = workspaces.filter((w) => withLeads.has(w.id)).map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo ?? null }));
 
     return (
@@ -52,6 +53,7 @@ export function SalesWorkspace() {
                     allTab={{ onSelect: () => select(null) }}
                     prefKey="sales"
                     items={tabs}
+                    contents={contents}
                     loading={isLoading || !counts}
                 />
                 <div className="flex min-h-0 flex-1 flex-col">

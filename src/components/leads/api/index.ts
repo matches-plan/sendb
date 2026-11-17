@@ -53,3 +53,8 @@ export async function createLeadBox(workspaceId: number) {
 export async function removeLeadBox(workspaceId: number) {
     return json(await fetch(`/api/leads/workspaces/${workspaceId}`, { method: "DELETE" }).catch(() => new Response("{}")));
 }
+
+/** 레코드가 없는 사업부의 빈 레코드 파티션·폴더를 지워 리드젠 탭에서 뺀다 (레코드가 있으면 서버가 막는다) */
+export async function removeRecordBox(workspaceId: number) {
+    return json(await fetch(`/api/workspaces/${workspaceId}/records`, { method: "DELETE" }).catch(() => new Response("{}")));
+}

@@ -221,7 +221,7 @@ export function CustomerCrmPage({
                         // 기본 탭은 연락처가 있는 사업부만, 나머지는 "사업부 추가"로 꺼낸다
                         items={contactWorkspaces.data ? workspaceItems.filter((w) => contactWorkspaces.data!.includes(w.id)) : undefined}
                         pool={workspaceItems}
-                        prefKey="customer-contacts"
+                        prefKey="customer"
                         loading={!bootstrap.data || !contactWorkspaces.data}
                         onChange={(id) => {
                             setWorkspace(id);

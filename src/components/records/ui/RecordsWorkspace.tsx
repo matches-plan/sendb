@@ -49,9 +49,7 @@ import { usePartitions } from "@/hooks/usePartitions";
 import { useFields } from "@/hooks/useFields";
 import { useResolvedFields } from "@/hooks/useResolvedFields";
 import { LeadBoard } from "@/components/leads/ui/LeadBoard";
-import { LeadTabRemoveDialog } from "@/components/leads/ui/LeadTabRemoveDialog";
-import { createLeadBox } from "@/components/leads/api";
-import { useLeadWorkspaces } from "@/components/leads/hooks/useLeadWorkspaces";
+import { useLeadTabs, useLeadgenTabs } from "@/components/leads/hooks/useTabGroups";
 import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
 import { useRecords } from "@/hooks/useRecords";
 import { useSSE } from "@/hooks/useSSE";
@@ -130,8 +128,6 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
     const [distributionSettingsPartitionId, setDistributionSettingsPartitionId] = useState<number | null>(null);
     // 리드관리 사업부 탭 오른쪽 클릭 메뉴
     // 리드관리 탭 오른쪽 클릭 "리드함 삭제" 확인창
-    const [removingTab, setRemovingTab] = useState<number | null>(null);
-    const leadWorkspaces = useLeadWorkspaces();
 
     const sessionIdRef = useRef(
         typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36).slice(2)
@@ -151,6 +147,8 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
         loadError: partitionsError,
         mutate: mutatePartitions,
     } = usePartitions(workspaceId, category);
+    const leadTabs = useLeadTabs();
+    const leadgenTabs = useLeadgenTabs();
     const { fields: workspaceFields } = useFields(workspaceId);
     const { fields: resolvedFields } = useResolvedFields(partitionId);
     const fields = resolvedFields.length > 0 ? resolvedFields : workspaceFields;
@@ -577,30 +575,13 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
                 value={workspaceId}
                 onChange={handleWorkspaceChange}
                 source={category === "lead" ? "lead" : "all"}
-                prefKey={category === "lead" ? "leads" : category === "cold" ? "records" : undefined}
-                // 리드관리: 리드함이 없는 사업부를 고르면 리드함을 만든다 (모두의 탭에 생긴다)
-                onCreate={
-                    category === "lead"
-                        ? async (id) => {
-                              const result = await createLeadBox(id);
-                              if (!result.success) {
-                                  toast.error(result.error || "사업부를 추가하지 못했습니다.");
-                                  return false;
-                              }
-                              await leadWorkspaces.mutate();
-                              return true;
-                          }
-                        : undefined
-                }
-                menuItems={
-                    category === "lead" && user?.role !== "member"
-                        ? (id) => [{ label: "리드함 삭제", destructive: true, onSelect: () => setRemovingTab(id) }]
-                        : undefined
-                }
+                prefKey={category === "lead" ? "leads" : category === "cold" ? "leadgen" : undefined}
+                // 리드관리: "사업부 추가"는 리드함을 만들고, "탭 삭제"는 빈 리드함을 지운다
+                {...(category === "lead" ? leadTabs : {})}
+                // 레코드: 리드젠통계·웹 폼과 같은 탭
+                {...(category === "cold" ? leadgenTabs : {})}
+                loading={category === "cold" ? leadgenTabs.isLoading : undefined}
             />
-            {category === "lead" && (
-                <LeadTabRemoveDialog workspaceId={removingTab} onClose={() => setRemovingTab(null)} onRemoved={() => mutatePartitions()} />
-            )}
             <div className="flex h-[calc(100vh-3.5rem-3rem)] overflow-hidden">
                 {/* 좌측: 파티션 네비게이션 (데스크톱 전용) */}
                 <div className="hidden md:flex">

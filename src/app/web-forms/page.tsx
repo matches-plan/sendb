@@ -1,5 +1,6 @@
 "use client";
 
+import { useLeadgenTabs } from "@/components/leads/hooks/useTabGroups";
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,11 +28,12 @@ export default function WebFormsPage() {
     const { confirm, confirmationDialog } = useAsyncConfirm();
     const router = useRouter();
     const [workspaceId, setWorkspaceId] = useState<number | null>(null);
-    const { workspaces, isLoading: workspacesLoading, loadError: workspacesError, mutate: mutateWorkspaces } = useWorkspaces();
+    const leadgenTabs = useLeadgenTabs();
+    const { isLoading: workspacesLoading, loadError: workspacesError, mutate: mutateWorkspaces } = useWorkspaces();
     const { partitionTree } = usePartitions(workspaceId);
     const { forms, isLoading: formsLoading, updateForm, deleteForm, loadError: formsError, mutate: mutateForms } = useWebForms(workspaceId);
     // 목록을 받기 전에는 빈 상태 대신 자리표시를 보인다 (UX-047)
-    const listLoading = formsLoading || (!workspaceId && (workspacesLoading || workspaces.length > 0));
+    const listLoading = formsLoading || (!workspaceId && (workspacesLoading || leadgenTabs.isLoading || (leadgenTabs.items?.length ?? 0) > 0));
 
     // 임베드 다이얼로그
     const [embedSlug, setEmbedSlug] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export default function WebFormsPage() {
         <WorkspaceLayout>
             {confirmationDialog}
             {/* 사업부 탭 — 첫 탭이 자동으로 골라진다 */}
-            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} source="all" prefKey="web-forms" />
+            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} {...leadgenTabs} loading={leadgenTabs.isLoading} prefKey="leadgen" />
             <div className="p-6 space-y-6">
                 <div className="flex items-center justify-between">
                     <h1 className="text-2xl font-bold">웹 폼</h1>

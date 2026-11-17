@@ -13,6 +13,7 @@ import { workspaceAbilities } from "@/components/customer-access/utils/abilities
 import { crmRequest, crmWrite } from "@/components/customer-crm/api";
 import type { InboxBootstrap } from "@/components/inbox/types";
 import { useFirstTab } from "@/components/leads/hooks/useFirstTab";
+import { useCustomerTabs } from "@/components/inbox/hooks/useCustomerTabs";
 import { cn } from "@/lib/utils";
 import { groupContacts, type Sort, type SortKey } from "../utils/contact-columns";
 import type { ContactListRow } from "../types";
@@ -34,14 +35,12 @@ const COLUMNS: { key: SortKey; label: string; width?: string }[] = [
 export function ContactList() {
     const params = useSearchParams();
     const bootstrap = useSWR<InboxBootstrap>("/api/inbox", crmRequest);
-    const contactWorkspaces = useSWR<number[]>("/api/customer-crm/contact-workspaces", crmRequest);
     const [chosen, setChosen] = useState<number | null>(Number(params.get("workspaceId")) || null);
     const [query, setQuery] = useState("");
     const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: "desc" });
-    const workspaceItems = (bootstrap.data?.workspaces ?? []).map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo }));
-    const tabItems = bootstrap.data && contactWorkspaces.data ? workspaceItems.filter((w) => contactWorkspaces.data!.includes(w.id)) : undefined;
-    // 처음엔 탭 줄 맨 앞 사업부
-    const first = useFirstTab("customer-contacts", tabItems, workspaceItems);
+    // 상담톡과 같은 탭. 처음엔 탭 줄 맨 앞 사업부
+    const tabs = useCustomerTabs(bootstrap.data);
+    const first = useFirstTab("customer", tabs.items, tabs.pool);
     const workspaceId = chosen ?? first ?? null;
     const { manage } = workspaceAbilities(bootstrap.data, workspaceId);
     const list = useSWR<ContactListRow[]>(workspaceId ? `/api/customer-crm/contact-list?workspaceId=${workspaceId}` : null, crmRequest);
@@ -66,10 +65,11 @@ export function ContactList() {
             {confirmationDialog}
             <LeadWorkspaceTabs
                 value={workspaceId}
-                items={tabItems}
-                pool={workspaceItems}
-                prefKey="customer-contacts"
-                loading={!bootstrap.data || !contactWorkspaces.data}
+                items={tabs.items}
+                pool={tabs.pool}
+                contents={tabs.contents}
+                prefKey="customer"
+                loading={tabs.isLoading}
                 onChange={(id) => {
                     setChosen(id);
                     setQuery("");

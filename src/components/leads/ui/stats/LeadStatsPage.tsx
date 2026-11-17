@@ -1,5 +1,6 @@
 "use client";
 
+import { useLeadTabs } from "../../hooks/useTabGroups";
 import { useState } from "react";
 import { format } from "date-fns";
 import { CalendarRange, RotateCcw } from "lucide-react";
@@ -65,6 +66,7 @@ export function LeadStatsPage() {
                   }
                 : periodRange(range === "all" || range === "custom" ? 90 : Number(range), new Date()),
         );
+    const leadTabs = useLeadTabs();
     const compared = useLeadStatsCompare(pc.periods ? workspaceId : null, pc.periods ?? []);
     const t = stats?.totals;
     const c = stats?.conversion;
@@ -73,7 +75,7 @@ export function LeadStatsPage() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} prefKey="lead-stats" />
+            <LeadWorkspaceTabs value={workspaceId} onChange={setWorkspaceId} prefKey="leads" {...leadTabs} />
             <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className="space-y-3 px-8 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

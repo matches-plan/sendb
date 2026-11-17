@@ -9,10 +9,20 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    useAsyncConfirm,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { TabPrefs } from "@/lib/db/schema";
 import { useLeadWorkspaces } from "../hooks/useLeadWorkspaces";
-import { applyOrder, useTabPrefs } from "../hooks/useTabPrefs";
+import { applyOrder, mergeOrder, useTabPrefs, type TabGroup } from "../hooks/useTabPrefs";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { workspaceLabel } from "@/lib/workspace-label";
 
@@ -32,12 +42,19 @@ interface LeadWorkspaceTabsProps {
     source?: "lead" | "all";
     right?: React.ReactNode;
     /**
-     * 있으면 사람마다 탭을 끌어 순서를 바꾸고, 오른쪽 클릭으로 숨기고, "사업부 추가"로 다시 꺼낸다 (화면마다 다른 key).
-     * 내 설정은 나에게만 보인다.
+     * 메뉴 대분류 — 있으면 사람마다 탭을 끌어 순서를 바꾸고, 오른쪽 클릭으로 숨기고, "사업부 추가"로 꺼낸다.
+     * 같은 대분류 화면은 이 설정을 같이 쓴다. 내 설정은 나에게만 보인다.
      */
-    prefKey?: string;
-    /** "사업부 추가"에서 기본 목록에 없는 사업부를 고를 때 (리드관리: 리드함을 만든다). 없으면 내 탭에만 꺼낸다 */
+    prefKey?: TabGroup;
+    /**
+     * "사업부 추가"에서 기본 목록에 없는 사업부를 고를 때 (리드관리: 리드함, 상담톡: 상담창을 만든다).
+     * 없으면 내 탭에만 꺼내고, 비어 있는 그 탭은 "탭 삭제"로 뺄 수 있다
+     */
     onCreate?: (workspaceId: number) => Promise<boolean>;
+    /** 사업부별 들어 있는 내용 ("리드가 3건") — 있으면 "탭 삭제"를 막고 알려준다 */
+    contents?: Record<number, string>;
+    /** 빈 기본 탭 삭제 (빈 리드함·파티션을 지워 모두의 탭에서 뺀다). 성공하면 true */
+    onRemove?: (workspaceId: number) => Promise<boolean>;
     /** 오른쪽 클릭 메뉴에 더할 항목 */
     menuItems?: (workspaceId: number) => TabMenuItem[];
     /** "사업부 추가"에서 고를 수 있는 사업부 (없으면 조직의 모든 사업부) */
@@ -51,11 +68,14 @@ const tabClass = (active: boolean) =>
     );
 
 const byName = (a: TabItem, b: TabItem) => workspaceLabel(a).localeCompare(workspaceLabel(b), "ko", { numeric: true });
-/** 숨긴 탭은 빼고 꺼낸 탭은 더한 이름순 목록 (저장한 순서는 applyOrder로 따로 입힌다) */
-export function visibleTabs(base: TabItem[], pool: TabItem[], prefs: TabPrefs): TabItem[] {
+/**
+ * 숨긴 탭은 빼고 꺼낸 탭은 더한 이름순 목록 (저장한 순서는 applyOrder로 따로 입힌다).
+ * withAdded=false: "사업부 추가"가 바로 만드는 화면(리드관리·상담톡)은 꺼낸 탭을 쓰지 않는다
+ */
+export function visibleTabs(base: TabItem[], pool: TabItem[], prefs: TabPrefs, withAdded = true): TabItem[] {
     const hidden = new Set(prefs.hidden ?? []);
     const defaultIds = new Set(base.map((w) => w.id));
-    const extra = (prefs.added ?? []).filter((id) => !defaultIds.has(id) && !hidden.has(id)).flatMap((id) => pool.find((w) => w.id === id) ?? []);
+    const extra = (withAdded ? (prefs.added ?? []) : []).filter((id) => !defaultIds.has(id) && !hidden.has(id)).flatMap((id) => pool.find((w) => w.id === id) ?? []);
     return [...base.filter((w) => !hidden.has(w.id)), ...extra].sort(byName);
 }
 /** 사업부 번호가 없으면 워크스페이스 설정의 번호를 붙인다 (모든 화면이 같은 "1-디하" 표시) */
@@ -93,7 +113,7 @@ function SortableTab({ ws, active, onClick, onContextMenu }: { ws: TabItem; acti
 }
 
 /** 화면 맨 윗줄 사업(워크스페이스) 탭 — 리드관리·리드통계·리드젠통계·영업고객·레코드·웹 폼 */
-export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", allTab, items, loading, prefKey, onCreate, menuItems, pool: poolProp }: LeadWorkspaceTabsProps) {
+export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", allTab, items, loading, prefKey, onCreate, menuItems, contents, onRemove, pool: poolProp }: LeadWorkspaceTabsProps) {
     const lead = useLeadWorkspaces();
     const all = useWorkspaces();
     const orgPool: TabItem[] = all.workspaces.map((w) => ({ id: w.id, name: w.name, displayNo: w.displayNo ?? null }));
@@ -107,11 +127,12 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
     const [saving, setSaving] = useState(false);
     const hidden = new Set(prefKey ? (prefs.hidden ?? []) : []);
     const added = prefKey ? (prefs.added ?? []) : [];
+    const withAdded = !onCreate;
     const defaultIds = new Set(base.map((w) => w.id));
     const find = (id: number) => base.find((w) => w.id === id) ?? pool.find((w) => w.id === id);
-    const shown = visibleTabs(base, pool, prefKey ? prefs : {});
+    const shown = visibleTabs(base, pool, prefKey ? prefs : {}, withAdded);
     // 숨긴 사업부로 바로 들어온 경우(링크 등) 그 탭만 잠깐 보인다
-    if (value !== null && !shown.some((w) => w.id === value) && (defaultIds.has(value) || added.includes(value))) {
+    if (value !== null && !shown.some((w) => w.id === value) && (defaultIds.has(value) || (withAdded && added.includes(value)))) {
         const current = find(value);
         if (current) shown.push(current);
     }
@@ -138,7 +159,7 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
     const saveOrder = async () => {
         if (!draft) return;
         setSaving(true);
-        const result = await save({ order: draft });
+        const result = await save({ order: mergeOrder(prefs.order ?? [], shown.map((w) => w.id), draft) });
         setSaving(false);
         if (!result.success) {
             toast.error(result.error || "순서를 저장하지 못했습니다.");
@@ -158,7 +179,40 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
             else if (rest[0]) onChange(rest[0].id);
         }
         setDraft(null);
-        report(await save(defaultIds.has(id) ? { hidden: [...hidden, id] } : { added: added.filter((x) => x !== id) }));
+        report(await save({ hidden: [...hidden, id] }));
+    };
+    // 비어 있는 탭을 뺀다 — "사업부 추가"로 꺼낸 탭은 내 탭에서, 기본 탭은 빈 리드함·파티션을 지워 모두의 탭에서
+    const { confirm, confirmationDialog } = useAsyncConfirm();
+    const leave = (id: number) => {
+        if (id !== value) return;
+        const rest = workspaces.filter((w) => w.id !== id);
+        if (allTab) allTab.onSelect();
+        else if (rest[0]) onChange(rest[0].id);
+    };
+    const [blocked, setBlocked] = useState<string | null>(null);
+    const remove = async (id: number) => {
+        setDraft(null);
+        const target = find(id);
+        const name = target ? workspaceLabel(target) : "이 사업부";
+        if (contents?.[id]) {
+            setBlocked(`${name}에 ${contents[id]} 있어요. 나에게만 안 보이게 하려면 "탭 숨기기"를 쓰세요.`);
+            return;
+        }
+        if (!defaultIds.has(id) || !onRemove) {
+            leave(id);
+            report(await save(defaultIds.has(id) ? { hidden: [...hidden, id] } : { added: added.filter((x) => x !== id) }));
+            return;
+        }
+        confirm({
+            title: `${name} 탭을 삭제할까요?`,
+            description: "모든 사람의 탭에서 빠져요.",
+            confirmLabel: "삭제",
+            onConfirm: async () => {
+                if (!(await onRemove(id))) return;
+                leave(id);
+                if (added.includes(id)) report(await save({ added: added.filter((x) => x !== id) }));
+            },
+        });
     };
     const add = async (id: number) => {
         const patch: TabPrefs = {};
@@ -166,7 +220,7 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
         if (!defaultIds.has(id)) {
             if (onCreate) {
                 if (!(await onCreate(id))) return;
-            } else {
+            } else if (!added.includes(id)) {
                 patch.added = [...added, id];
             }
         }
@@ -187,11 +241,12 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
     const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
     // 아래 contextMenu보다 먼저 계산해야 한다 (뒤에 두면 처음 그릴 때 값이 남아 오른쪽 클릭 메뉴가 안 뜬다)
     const canHide = !!prefKey && (!!allTab || workspaces.length > 1);
+    const removable = (id: number) => !!prefKey && (defaultIds.has(id) || (withAdded && added.includes(id)));
     const contextMenu = (id: number) =>
         prefKey || menuItems
             ? (e: React.MouseEvent) => {
                   // 숨길 수도 없고 더한 항목도 없으면(마지막 탭) 빈 메뉴를 띄우지 않는다
-                  if (!canHide && !(menuItems?.(id).length ?? 0)) return;
+                  if (!canHide && !removable(id) && !(menuItems?.(id).length ?? 0)) return;
                   e.preventDefault();
                   setMenu({ id, x: e.clientX, y: e.clientY });
               }
@@ -267,12 +322,29 @@ export function LeadWorkspaceTabs({ value, onChange, right, source = "lead", all
                     )}
                 </div>
             )}
+            {confirmationDialog}
+            <AlertDialog open={!!blocked} onOpenChange={(v) => !v && setBlocked(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>삭제할 수 없어요</AlertDialogTitle>
+                        <AlertDialogDescription>{blocked}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>확인</AlertDialogCancel>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
             <DropdownMenu open={!!menu} onOpenChange={(v) => !v && setMenu(null)}>
                 <DropdownMenuTrigger asChild>
                     <span className="pointer-events-none fixed size-0" style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-32">
                     {canHide && <DropdownMenuItem onClick={() => menu && hide(menu.id)}>탭 숨기기</DropdownMenuItem>}
+                    {menu && removable(menu.id) && (
+                        <DropdownMenuItem variant="destructive" onClick={() => remove(menu.id)}>
+                            탭 삭제
+                        </DropdownMenuItem>
+                    )}
                     {extraItems.map((item) => (
                         <DropdownMenuItem key={item.label} variant={item.destructive ? "destructive" : "default"} onClick={item.onSelect}>
                             {item.label}
