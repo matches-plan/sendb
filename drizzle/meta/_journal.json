@@ -866,50 +866,50 @@
     {
       "idx": 123,
       "version": "7",
-      "when": 1794390074000,
-      "tag": "0121_partition_category",
-      "breakpoints": true
-    },
-    {
-      "idx": 124,
-      "version": "7",
       "when": 1792778400000,
       "tag": "0122_record_chat_alerts",
       "breakpoints": true
     },
     {
-      "idx": 125,
+      "idx": 124,
       "version": "7",
       "when": 1792864800000,
       "tag": "0123_organization_email_unsubscribe",
       "breakpoints": true
     },
     {
-      "idx": 126,
+      "idx": 125,
       "version": "7",
       "when": 1792951200000,
       "tag": "0124_inbox_google_account",
       "breakpoints": true
     },
     {
-      "idx": 127,
+      "idx": 126,
       "version": "7",
       "when": 1793037600000,
       "tag": "0125_scheduled_registrations_backfill",
       "breakpoints": true
     },
     {
-      "idx": 128,
+      "idx": 127,
       "version": "7",
       "when": 1793124000000,
       "tag": "0126_crm_recent_indexes",
       "breakpoints": true
     },
     {
-      "idx": 129,
+      "idx": 128,
       "version": "7",
       "when": 1793210400000,
       "tag": "0127_crm_relationship_care",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1794390074000,
+      "tag": "0121_partition_category",
       "breakpoints": true
     },
     {
