@@ -9,7 +9,7 @@ import type { DbExec } from "@/lib/db/tx";
 import { supportWorkerEnabled } from "@/lib/customer-ai/worker-policy";
 import { getAiClient } from "@/lib/ai/client";
 import { chatKnowledge } from "@/lib/customer-ai/catalog";
-import { messengerSettingsSchema, notificationWorkerEnabled } from "./rules";
+import { messengerLinks, messengerSettingsSchema, notificationWorkerEnabled } from "./rules";
 import { notificationSender } from "./transport";
 export async function publicMessengerSettings(
     channel: typeof inboxChannels.$inferSelect,
@@ -18,13 +18,7 @@ export async function publicMessengerSettings(
     const settings = messengerSettingsSchema.parse(
         channel.messengerSettings ?? {},
     );
-    if (!settings.enabled)
-        return {
-            ...settings,
-            aiAvailable: false,
-            emailNotifications: false,
-            weekly: [],
-        };
+    settings.phoneEnabled = settings.phoneEnabled && !!settings.phone;
     const [ai] = await exec
         .select()
         .from(customerAiSettings)
@@ -41,14 +35,22 @@ export async function publicMessengerSettings(
               exec,
           )
         : null;
-    const consultation = settings.consultationUrl;
+    // 알림 문구·알림톡 발신 키는 직원용 설정이라 고객 화면에 내보내지 않는다
+    const {
+        emailSubject: _subject,
+        emailBody: _body,
+        customerNameFallback: _fallback,
+        alimtalkSenderKey: _senderKey,
+        alimtalkTemplateCode: _templateCode,
+        alimtalkTemplateName: _templateName,
+        alimtalkVariables: _variables,
+        ...visible
+    } = settings;
+    void [_fallback, _subject, _body, _senderKey, _templateCode, _templateName, _variables];
     return {
-        ...settings,
-        consultationUrl:
-            consultation &&
-            channel.allowedOrigins.includes(new URL(consultation).origin)
-                ? consultation
-                : "",
+        ...visible,
+        links: messengerLinks(settings),
+        consultationUrl: "",
         aiAvailable:
             ai?.mode === "reply" &&
             !!facts?.sources.length &&

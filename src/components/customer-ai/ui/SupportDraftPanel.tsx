@@ -142,7 +142,7 @@ export function SupportDraftPanel({
                             className="py-2 text-[#635BFF]"
                             target="_blank"
                             rel="noreferrer"
-                            href={`/customer-ai?workspaceId=${workspaceId ?? ""}`}
+                            href={`/inbox/settings?open=knowledge&workspaceId=${workspaceId ?? ""}`}
                         >
                             지식·자동 응대 설정 ↗
                         </a>

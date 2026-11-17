@@ -20,6 +20,7 @@ import { appendInboxAudit } from "@/lib/inbox/audit";
 import { enqueuePlatformEvent } from "@/lib/customer-platform/outbox";
 import { InboxError } from "@/lib/inbox/errors";
 import { getSupportSettings, chatKnowledge } from "./catalog";
+import { ruleInstructions } from "./library";
 import {
     retrieveSources,
     humanIntent,
@@ -196,7 +197,8 @@ export async function queueSupportJob(
                 lastPublicId: context.lastPublicId,
                 mode: actor ? "manual" : config.mode,
                 settingsVersion: config.version,
-                settingsSnapshot: config,
+                // 켜 둔 AI 규칙이 있으면 그것을 지침으로 쓴다
+                settingsSnapshot: { ...config, instructions: (await ruleInstructions(chat.orgId, workspaceId, tx)) ?? config.instructions },
                 knowledgeVersionId: config.knowledgeVersionId,
                 knowledgeFingerprint: facts.version?.fingerprint ?? null,
                 sources,

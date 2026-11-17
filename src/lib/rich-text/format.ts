@@ -8,7 +8,10 @@ export type Inline =
     | { t: "b" | "i"; c: Inline[] }
     | { t: "code"; v: string }
     | { t: "link"; href: string; c: Inline[] };
-export type Block = { t: "p"; c: Inline[] } | { t: "ul"; items: Inline[][] };
+export type Block = { t: "p"; c: Inline[] } | { t: "ul"; items: Inline[][] } | { t: "h"; level: 1 | 2 | 3; c: Inline[] };
+/** 제목(# ~ ###)은 상담 지식 문서처럼 켠 곳에서만 읽는다 — 채팅 글의 "# "는 그냥 글자 */
+type BlockOptions = { headings?: boolean };
+const HEADING = /^(#{1,3})\s+(.*)$/;
 
 const INLINE =
     /\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)|\*\*(?=\S)(.+?)(?<=\S)\*\*(?!\*)|\*(?=[^\s*])(.+?)(?<=[^\s*])\*|`([^`\n]+)`|(https?:\/\/[^\s<>()]*[^\s<>().,!?'"\]])/g;
@@ -30,10 +33,12 @@ export function parseInline(s: string): Inline[] {
 }
 
 const BULLET = /^[-•]\s/;
-export function parseBlocks(md: string): Block[] {
+export function parseBlocks(md: string, options: BlockOptions = {}): Block[] {
     const blocks: Block[] = [];
     for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
-        if (BULLET.test(line)) {
+        const heading = options.headings ? HEADING.exec(line) : null;
+        if (heading) blocks.push({ t: "h", level: heading[1].length as 1 | 2 | 3, c: parseInline(heading[2]) });
+        else if (BULLET.test(line)) {
             const item = parseInline(line.slice(2));
             const prev = blocks.at(-1);
             if (prev?.t === "ul") prev.items.push(item);
@@ -55,7 +60,7 @@ const plainInline = (nodes: Inline[]): string =>
 /** 서식 표시를 걷어낸 글자 (메일 본문·알림 미리보기용). 링크는 "글자 (주소)" */
 export const toPlainText = (md: string) =>
     parseBlocks(md)
-        .flatMap((b) => (b.t === "p" ? [plainInline(b.c)] : b.items.map((i) => `- ${plainInline(i)}`)))
+        .flatMap((b) => (b.t === "ul" ? b.items.map((i) => `- ${plainInline(i)}`) : [plainInline(b.c)]))
         .join("\n");
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -73,11 +78,13 @@ const htmlInline = (nodes: Inline[]): string =>
         .join("");
 
 /** 입력창(서식 편집기)에 넣을 HTML */
-export const toEditorHtml = (md: string) =>
-    parseBlocks(md)
+export const toEditorHtml = (md: string, options: BlockOptions = {}) =>
+    parseBlocks(md, options)
         .map((b) =>
             b.t === "p"
                 ? `<p>${htmlInline(b.c)}</p>`
-                : `<ul>${b.items.map((i) => `<li><p>${htmlInline(i)}</p></li>`).join("")}</ul>`,
+                : b.t === "h"
+                  ? `<h${b.level}>${htmlInline(b.c)}</h${b.level}>`
+                  : `<ul>${b.items.map((i) => `<li><p>${htmlInline(i)}</p></li>`).join("")}</ul>`,
         )
         .join("");

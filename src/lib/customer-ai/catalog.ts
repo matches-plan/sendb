@@ -1,3 +1,4 @@
+import { docSources, publishedDocs } from "./library";
 import { isUsableSupportClaim } from "./knowledge-validity";
 import {
     requireCustomerAccess,
@@ -30,7 +31,6 @@ import {
     aiSettingsInput,
     defaultAiSettings,
     type AiSettingsSnapshot,
-    type AiSource,
 } from "./rules";
 import { supportWorkerEnabled } from "./worker-policy";
 export const aiWorkerEnabled = (workspaceId?: number) =>
@@ -64,43 +64,22 @@ export async function getSupportSettings(
           })
         : { ...defaultAiSettings };
 }
+/**
+ * 상담 AI가 답변 근거로 쓰는 지식 — 상담 설정 › AI 응대 › 상담 지식에서 공개한 문서·FAQ.
+ * (예전 승인 지식 버전 id는 받기만 하고 쓰지 않는다. 0148에서 문서로 옮겼다)
+ */
 export async function chatKnowledge(
     orgId: string,
     workspaceId: number,
-    id: number | null,
+    _legacyVersionId: number | null,
     exec: DbExec = db,
-    now = new Date(),
+    _now = new Date(),
     lock = false,
 ) {
-    if (!id) return { version: null, sources: [] as AiSource[] };
-    const query = exec
-        .select()
-        .from(knowledge)
-        .where(
-            and(
-                eq(knowledge.id, id),
-                eq(knowledge.orgId, orgId),
-                eq(knowledge.workspaceId, workspaceId),
-            ),
-        );
-    const [version] = lock ? await query.for("share") : await query;
-    if (!version || version.state !== "approved")
-        return { version: null, sources: [] as AiSource[] };
-    const sources = version.snapshot.claims.flatMap((c, index) =>
-        isUsableSupportClaim(c, now.getTime())
-            ? [
-                  {
-                      id: `knowledge:${version.id}:claim:${index}`,
-                      text: c.text,
-                      sourceUrl: c.sourceUrl,
-                      checkedAt: c.checkedAt,
-                      knowledgeVersionId: version.id,
-                      fingerprint: version.fingerprint,
-                  },
-              ]
-            : [],
-    );
-    return { version, sources };
+    void _legacyVersionId;
+    void _now;
+    const sources = docSources(await publishedDocs(orgId, workspaceId, exec, lock));
+    return { version: sources.length ? { fingerprint: sources[0].fingerprint } : null, sources };
 }
 export async function supportCatalog(
     actor: SalesActor,
@@ -189,25 +168,12 @@ export async function saveSupportSettings(
                 "AI 설정이 변경되었습니다. 최신 설정을 불러온 뒤 저장해주세요.",
                 409,
             );
-        if (input.knowledgeVersionId) {
-            const facts = await chatKnowledge(
-                actor.orgId,
-                workspaceId,
-                input.knowledgeVersionId,
-                tx,
-            );
-            if (!facts.version || !facts.sources.length)
-                throw new InboxError(
-                    "같은 사업의 승인된 고객 상담 지식이 필요합니다. 확인일은 최근 90일 이내여야 합니다.",
-                );
+        if (input.mode !== "manual") {
+            const facts = await chatKnowledge(actor.orgId, workspaceId, null, tx);
+            if (!facts.sources.length)
+                throw new InboxError("AI 자동 답변을 켜려면 상담 지식에 공개한 문서나 FAQ가 하나 이상 있어야 합니다.");
+            if (!getAiClient(input.model)) throw new InboxError("선택한 AI 모델이 아직 연결되지 않았습니다.");
         }
-        if (
-            input.mode !== "manual" &&
-            (!input.knowledgeVersionId || !getAiClient(input.model))
-        )
-            throw new InboxError(
-                "자동 생성 전 승인 지식과 AI 모델 연결을 준비해주세요.",
-            );
         if (input.handoffAssigneeId) {
             const [member] = await tx
                 .select({ id: users.id })

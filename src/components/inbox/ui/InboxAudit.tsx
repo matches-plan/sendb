@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { Fragment, useState } from "react";
 import useSWRInfinite from "swr/infinite";
 import { inboxRequest } from "../api";
@@ -83,7 +84,7 @@ export function InboxAudit({ url }: { url: string }) {
     return (
         <details
             onToggle={(e) => setOpened(e.currentTarget.open)}
-            className="space-y-3 border-t pt-4"
+            className="space-y-3 border-t border-border/40 pt-4"
         >
             <summary className="cursor-pointer font-semibold">
                 변경 이력
@@ -91,7 +92,7 @@ export function InboxAudit({ url }: { url: string }) {
             {data.error ? (
                 <div role="alert" className="text-xs text-red-600">
                     {data.error.message}
-                    <button onClick={() => void data.mutate()}>
+                    <button className="ml-2 underline" onClick={() => void data.mutate()}>
                         다시 불러오기
                     </button>
                 </div>
@@ -148,13 +149,9 @@ export function InboxAudit({ url }: { url: string }) {
                 ))
             )}
             {data.data?.at(-1)?.hasMore && (
-                <button
-                    className="text-xs text-[#635BFF]"
-                    disabled={data.isValidating}
-                    onClick={() => void data.setSize(data.size + 1)}
-                >
+                <Button variant="outline" size="sm" className="border-border/70" disabled={data.isValidating} onClick={() => void data.setSize(data.size + 1)}>
                     이전 변경 더 보기
-                </button>
+                </Button>
             )}
         </details>
     );

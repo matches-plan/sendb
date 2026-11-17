@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, inboxChannels, inboxConversations as chats } from "@/lib/db";
+import { visitorTokenMatch } from "./visitor-access";
 import type { DbExec } from "@/lib/db/tx";
 import { publicChannel } from "./repository";
 import { InboxError } from "./errors";
@@ -43,10 +43,7 @@ export async function updateVisitorProfile(
             .where(
                 and(
                     eq(chats.channelId, channel.id),
-                    eq(
-                        chats.tokenHash,
-                        createHash("sha256").update(token).digest("hex"),
-                    ),
+                    visitorTokenMatch(token),
                     isNull(chats.contactId),
                     isNull(chats.mergedIntoId),
                     isNull(chats.identifiedAt),

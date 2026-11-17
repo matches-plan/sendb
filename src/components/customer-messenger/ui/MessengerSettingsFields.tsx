@@ -1,5 +1,11 @@
 "use client";
-import type { MessengerSettings } from "@/lib/customer-messenger/rules";
+import { Plus, X } from "lucide-react";
+import { CONTACT_FIELD_LABELS, contactField, type MessengerLink, type MessengerSettings } from "@/lib/customer-messenger/rules";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+/** 사이트 상담창의 전화 문의·연락처 받기·링크 카드 */
 export function MessengerSettingsFields({
     value,
     onChange,
@@ -7,67 +13,91 @@ export function MessengerSettingsFields({
     value: MessengerSettings;
     onChange: (settings: MessengerSettings) => void;
 }) {
-    const update = (patch: Partial<MessengerSettings>) =>
-        onChange({ ...value, ...patch });
+    const update = (patch: Partial<MessengerSettings>) => onChange({ ...value, ...patch });
     return (
-        <fieldset className="space-y-4 rounded-xl border p-4 text-sm">
-            <legend className="px-1 font-semibold">
-                첫 상담 안내와 연락처
-            </legend>
-            <label className="flex items-center justify-between gap-3">
-                첫 상담 프로세스 사용
-                <input
-                    aria-label="첫 상담 프로세스 사용"
-                    type="checkbox"
-                    checked={value.enabled}
-                    onChange={(e) => update({ enabled: e.target.checked })}
-                />
-            </label>
-            <label className="block space-y-2">
-                브랜드 한 줄 소개
-                <input
-                    aria-label="브랜드 한 줄 소개"
-                    className="w-full rounded-lg border px-3 py-2"
-                    value={value.tagline}
-                    onChange={(e) => update({ tagline: e.target.value })}
-                    maxLength={120}
-                    placeholder="고객에게 전할 서비스 소개를 입력해주세요"
-                />
-            </label>
-            <label className="block space-y-2">
-                1:1 도입 상담 링크
-                <input
-                    aria-label="도입 상담 링크"
-                    type="url"
-                    className="w-full rounded-lg border px-3 py-2"
-                    value={value.consultationUrl}
-                    onChange={(e) =>
-                        update({ consultationUrl: e.target.value })
-                    }
-                    placeholder="https://example.com/consulting/"
-                />
-            </label>
-            <p className="text-xs leading-5 text-muted-foreground">
-                설치 도메인과 같은 사이트의 HTTPS 주소만 고객에게 보여줍니다.
-                고객센터 운영시간은 ‘상담 설정’의 업무시간·응대 목표를 사용합니다.
-            </p>
-            <label className="flex items-start gap-3 leading-5">
-                <input
-                    aria-label="고객 이메일 답변 알림 사용"
-                    type="checkbox"
-                    className="mt-1"
-                    checked={value.emailNotifications}
-                    onChange={(e) =>
-                        update({ emailNotifications: e.target.checked })
-                    }
-                />
-                고객 이메일 답변 알림 사용
-            </label>
-            <p className="text-xs leading-5 text-muted-foreground">
-                이메일 발신 설정과 알림 워커가 연결된 경우에만 고객에게
-                노출합니다. 고객이 동의하고 주소를 인증한 뒤, 2분 동안 읽지 않은
-                새 답변을 알립니다. 카카오톡·문자 알림은 포함하지 않습니다.
-            </p>
-        </fieldset>
+        <div className="space-y-5">
+            <div className="space-y-1.5">
+                <label className="flex items-center justify-between gap-4 text-sm font-medium">
+                    전화 문의
+                    <Switch aria-label="전화 문의 사용" checked={value.phoneEnabled} onCheckedChange={(phoneEnabled) => update({ phoneEnabled })} />
+                </label>
+                {value.phoneEnabled && (
+                    <Input
+                        aria-label="전화번호"
+                        type="tel"
+                        className="border-border/70"
+                        value={value.phone}
+                        onChange={(e) => update({ phone: e.target.value })}
+                        placeholder="02-1234-5678"
+                        maxLength={30}
+                        required
+                        pattern="\+?[\d \-]{7,30}"
+                    />
+                )}
+            </div>
+            <div className="space-y-2">
+                <label className="flex items-center justify-between gap-4 text-sm font-medium">
+                    연락처 받기
+                    <Switch aria-label="연락처 받기 사용" checked={value.contactEnabled} onCheckedChange={(contactEnabled) => update({ contactEnabled })} />
+                </label>
+                {value.contactEnabled && (
+                    <>
+                        <Textarea
+                            aria-label="연락처 받기 안내 문구"
+                            className="border-border/70"
+                            rows={4}
+                            maxLength={500}
+                            value={value.contactPrompt}
+                            onChange={(e) => update({ contactPrompt: e.target.value })}
+                        />
+                        <div className="divide-y divide-border/40 rounded-lg border border-border/40">
+                            {contactField.options.map((f) => {
+                                const on = value.contactFields.includes(f);
+                                const last = on && value.contactFields.length === 1;
+                                return (
+                                    <label key={f} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                                        {CONTACT_FIELD_LABELS[f]}
+                                        <Switch
+                                            aria-label={`연락처 ${CONTACT_FIELD_LABELS[f]} 받기`}
+                                            checked={on}
+                                            // 한 칸은 남아 있어야 한다
+                                            disabled={last}
+                                            onCheckedChange={(checked) =>
+                                                update({
+                                                    contactFields: contactField.options.filter((x) => (x === f ? checked : value.contactFields.includes(x))),
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+            </div>
+            <div className="space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm font-medium">링크 카드</span>
+                    {value.links.length < 5 && (
+                        <Button type="button" variant="outline" className="border-border/70" onClick={() => update({ links: [...value.links, { label: "", url: "" }] })}>
+                            <Plus className="h-4 w-4" />
+                            추가
+                        </Button>
+                    )}
+                </div>
+                {value.links.map((link, i) => {
+                    const set = (patch: Partial<MessengerLink>) => update({ links: value.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+                    return (
+                        <div key={i} className="flex gap-2">
+                            <Input aria-label={`링크 ${i + 1} 문구`} className="w-48 shrink-0 border-border/70" maxLength={40} required placeholder="1:1 도입 상담 신청하기" value={link.label} onChange={(e) => set({ label: e.target.value })} />
+                            <Input aria-label={`링크 ${i + 1} 주소`} type="url" className="border-border/70" required pattern="https://.+" placeholder="https://" value={link.url} onChange={(e) => set({ url: e.target.value })} />
+                            <Button type="button" variant="ghost" size="icon" aria-label={`링크 ${i + 1} 삭제`} onClick={() => update({ links: value.links.filter((_, j) => j !== i) })}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
     );
 }

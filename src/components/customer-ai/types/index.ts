@@ -85,3 +85,26 @@ export type SupportJobSummary = Pick<
     | "reason"
     | "sentMessageId"
 >;
+/** 상담 AI 규칙 (상담 설정 › AI 응대 › AI 규칙) */
+export interface AiRule {
+    id: number;
+    title: string;
+    body: string;
+    enabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+/** 상담 지식 문서·FAQ (상담 설정 › AI 응대 › 상담 지식) */
+export interface AiDoc {
+    id: number;
+    kind: "article" | "faq";
+    title: string;
+    body: string;
+    published: boolean;
+    /** FAQ 추가 질문 (최대 10개) */
+    questions: string[];
+    source: "website" | "file" | "manual";
+    sourceRef: string | null;
+    createdAt: string;
+    updatedAt: string;
+}

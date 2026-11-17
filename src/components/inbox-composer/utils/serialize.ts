@@ -4,6 +4,7 @@ export type DocNode = {
     text?: string;
     content?: DocNode[];
     marks?: { type: string; attrs?: Record<string, unknown> }[];
+    attrs?: Record<string, unknown>;
 };
 type Mark = { key: string; open: string; close: string };
 const ORDER = ["link", "bold", "italic", "code"];
@@ -66,6 +67,7 @@ export function docToMarkdown(doc: DocNode): string {
         if (block.type === "bulletList" || block.type === "orderedList")
             for (const item of block.content ?? [])
                 lines.push(`- ${(item.content ?? []).map((p) => inline(p.content)).join(" ")}`);
+        else if (block.type === "heading") lines.push(`${"#".repeat(Number(block.attrs?.level ?? 2))} ${inline(block.content)}`);
         else lines.push(inline(block.content));
     }
     // 편집기가 끝에 두는 빈 줄은 뺀다

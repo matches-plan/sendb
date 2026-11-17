@@ -13,6 +13,8 @@ import {
     index,
     check,
     type AnyPgColumn,
+    serial,
+    boolean,
 } from "drizzle-orm/pg-core";
 import { organizations, workspaces, users, aiUsageLogs } from "./schema";
 import { aiCopyKnowledgeVersions } from "./ai-copy-schema";
@@ -168,4 +170,42 @@ export const customerAiDailyUsage = pgTable(
         jobs: integer("jobs").notNull().default(0),
     },
     (t) => [primaryKey({ columns: [t.workspaceId, t.day] })],
+);
+/** 상담 AI 규칙 — 켜진 규칙의 제목·내용을 AI 지침으로 쓴다 (상담 설정 › AI 응대 › AI 규칙) */
+export const customerAiRules = pgTable(
+    "customer_ai_rules",
+    {
+        id: serial("id").primaryKey(),
+        ...scope(),
+        title: varchar("title", { length: 100 }).notNull(),
+        body: text("body").notNull(),
+        enabled: boolean("enabled").notNull().default(true),
+        createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+        updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("customer_ai_rules_workspace").on(t.workspaceId)],
+);
+/** 상담 지식 — 마크다운 문서(article)·FAQ. 공개한 것만 AI 답변 근거로 쓴다 (상담 설정 › AI 응대 › 상담 지식) */
+export const customerAiDocs = pgTable(
+    "customer_ai_docs",
+    {
+        id: serial("id").primaryKey(),
+        ...scope(),
+        kind: varchar("kind", { length: 16 }).$type<"article" | "faq">().notNull(),
+        title: varchar("title", { length: 200 }).notNull(),
+        body: text("body").notNull(),
+        published: boolean("published").notNull().default(true),
+        /** FAQ 추가 질문 — 같은 뜻의 다른 표현(최대 10개) */
+        questions: jsonb("questions").$type<string[]>().notNull().default([]),
+        /** 출처: 웹사이트·파일·직접 입력. sourceRef는 웹사이트 주소나 파일 이름 */
+        source: varchar("source", { length: 16 }).$type<"website" | "file" | "manual">().notNull().default("manual"),
+        sourceRef: text("source_ref"),
+        createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+        updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("customer_ai_docs_workspace").on(t.workspaceId, t.kind)],
 );

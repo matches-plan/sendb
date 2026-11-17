@@ -1,4 +1,6 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SettingsSection } from "@/components/inbox/ui/SettingsSection";
@@ -41,47 +43,44 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
     return (
         <SettingsSection
             title="이메일 연결"
-            description="등록한 메일함의 문의를 같은 상담톡에서 받고 답장합니다."
         >
                 {connectionResult && (
                     <p role="status" className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/40 p-3 text-sm">
                         {connectionResultMessage(connectionResult)}
-                        <button type="button" className="shrink-0 text-xs text-muted-foreground underline" onClick={dismissResult}>
+                        <Button variant="ghost" size="xs" className="shrink-0" onClick={dismissResult}>
                             닫기
-                        </button>
+                        </Button>
                     </p>
                 )}
-                <p className="text-sm text-muted-foreground">
-                    등록한 메일함의 문의를 같은 상담함에서 받고 답장합니다.
-                    Google 계정을 연결하거나 개발자가 API 연결 서버를 설치한 뒤
-                    수신·발송을 켜주세요. 주소 등록만으로 Gmail에 연결되지는
-                    않습니다.
-                </p>
                 {error && (
-                    <p role="alert">
+                    <p role="alert" className="text-sm text-red-700">
                         {error.message}{" "}
-                        <button onClick={() => void mutate()}>
+                        <button className="underline" onClick={() => void mutate()}>
                             다시 불러오기
                         </button>
                     </p>
                 )}
-                {!data && !error && <p>메일함을 불러오는 중…</p>}
+                {!data && !error && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
                 {data?.map((box) => (
                     <article
                         key={box.id}
-                        className="space-y-3 rounded-xl border p-4"
+                        className="space-y-4 rounded-lg border border-border/40 p-5"
                     >
-                        <h3 className="font-semibold">{box.name}</h3>
-                        <p>{box.address}</p>
+                        <div className="flex items-start gap-4">
+                            <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold">{box.name}</h3>
+                                <p className="text-sm text-muted-foreground">{box.address}</p>
+                            </div>
+                            <label className="flex items-center gap-2 text-sm">
+                                수신·발송
+                                <MailboxToggle box={box} busy={busy} onChange={mutate} />
+                            </label>
+                        </div>
                         {!!box.aliasMailboxCount &&
                             (!box.googleAccount ||
                                 box.googleAccount === box.address) && (
                                 <p className="text-xs text-amber-800">
-                                    이 계정을 로그인 계정으로 쓰는 다른 사업
-                                    메일함이 {box.aliasMailboxCount}개 있어,
-                                    그 주소로만 온 메일은 이 기본 메일함에
-                                    가져오지 않습니다. 받는 사람·참조에 이
-                                    주소도 있으면 양쪽 메일함에서 받습니다.
+                                    이 계정을 같이 쓰는 다른 사업 메일함이 {box.aliasMailboxCount}개 있어요.
                                 </p>
                             )}
                         <MailboxName
@@ -94,22 +93,11 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
                             box={box}
                             onChange={mutate}
                         />
-                        <p className="text-xs text-muted-foreground">
-                            연결 ID <code className="break-all">{box.id}</code>
-                        </p>
-                        <p className="text-sm">
-                            {box.enabled ? "수신·발송 허용" : "수신·발송 중지"}
-                        </p>
-                        <MailboxToggle
-                            box={box}
-                            busy={busy}
-                            onChange={mutate}
-                        />
                         <GoogleConnectionPanel box={box} onChange={mutate} />
                     </article>
                 ))}
                 <form
-                    className="space-y-3 border-t pt-5"
+                    className="space-y-4 border-t border-border/40 pt-5"
                     onSubmit={(e) => {
                         e.preventDefault();
                         void run(async () => {
@@ -126,10 +114,10 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
                     }}
                 >
                     <h3 className="font-semibold">메일함 등록</h3>
-                    <label className="block text-sm">
-                        보내는 이름 (고객에게 표시)
-                        <input
-                            className="mt-1 w-full rounded-lg border p-2"
+                    <label className="block space-y-1.5">
+                        <span className="block text-sm font-medium">보내는 이름</span>
+                        <Input
+                            className="border-border/70"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             required
@@ -137,11 +125,11 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
                             disabled={busy}
                         />
                     </label>
-                    <label className="block text-sm">
-                        사업 문의 주소 (수신·답장)
-                        <input
+                    <label className="block space-y-1.5">
+                        <span className="block text-sm font-medium">문의 받을 주소</span>
+                        <Input
                             type="email"
-                            className="mt-1 w-full rounded-lg border p-2"
+                            className="border-border/70"
                             value={address}
                             onChange={(e) => setAddress(e.target.value)}
                             required
@@ -149,11 +137,11 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
                             disabled={busy}
                         />
                     </label>
-                    <label className="block text-sm">
-                        Google 로그인 계정 (다른 경우)
-                        <input
+                    <label className="block space-y-1.5">
+                        <span className="block text-sm font-medium">Google 로그인 계정 (다를 때만)</span>
+                        <Input
                             type="email"
-                            className="mt-1 w-full rounded-lg border p-2"
+                            className="border-border/70"
                             value={googleAccount}
                             onChange={(e) => setGoogleAccount(e.target.value)}
                             maxLength={254}
@@ -161,22 +149,11 @@ export function EmailMailboxSettings({ workspaceId }: { workspaceId: number }) {
                             placeholder="예: support@100office.kr"
                         />
                     </label>
-                    <p className="text-xs text-muted-foreground">
-                        같은 통합 계정을 여러 사업에서 연결할 수 있습니다. 문의
-                        주소는 Gmail에서 인증된 발신 주소여야 하며, 해당 주소로
-                        받은 문의만 이 사업에 가져옵니다.
-                    </p>
-                    <button
-                        disabled={busy || !data}
-                        className="rounded-lg bg-[#635BFF] px-4 py-2 text-sm text-white disabled:opacity-50"
-                    >
-                        중지 상태로 등록
-                    </button>
-                    <p className="text-xs text-muted-foreground">
-                        연결을 중지하면 아직 발송을 시작하지 않은 답장은
-                        취소됩니다. 이미 메일 서비스에 전달한 요청은 결과 확인이
-                        필요합니다.
-                    </p>
+                    <div className="flex justify-end">
+                        <Button type="submit" disabled={busy || !data}>
+                            등록
+                        </Button>
+                    </div>
                 </form>
         </SettingsSection>
     );

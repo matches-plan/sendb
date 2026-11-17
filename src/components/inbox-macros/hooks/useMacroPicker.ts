@@ -2,18 +2,7 @@ import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { toEditorHtml } from "@/lib/rich-text/format";
 import { useMacros } from "./useMacros";
-import { macroTrigger } from "../utils/trigger";
-
-type Trigger = { query: string; from: number; to: number };
-/** 커서 앞 같은 줄이 "#검색어"로 끝나면 그 범위 */
-function readTrigger(editor: Editor): Trigger | null {
-    const { selection } = editor.state;
-    if (!selection.empty) return null;
-    const { $from } = selection;
-    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "￼");
-    const hit = macroTrigger(before, before.length);
-    return hit ? { query: hit.query, from: selection.from - (before.length - hit.start), to: selection.from } : null;
-}
+import { readEditorTrigger, type EditorTrigger as Trigger } from "@/components/inbox-composer/utils/trigger";
 
 /**
  * 입력창에서 #을 치면 사업부 매크로를 골라 넣는다.
@@ -26,7 +15,7 @@ export function useMacroPicker({ workspaceId, editor }: { workspaceId: number | 
     const [closedAt, setClosedAt] = useState<number | null>(null);
     useEffect(() => {
         if (!editor) return;
-        const update = () => setTrigger(editor.isFocused || editor.view.hasFocus() ? readTrigger(editor) : null);
+        const update = () => setTrigger(editor.isFocused || editor.view.hasFocus() ? readEditorTrigger(editor, "#") : null);
         editor.on("transaction", update);
         editor.on("blur", update);
         return () => {

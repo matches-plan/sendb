@@ -333,7 +333,7 @@
             "position:fixed;right:20px;bottom:96px;width:min(390px,calc(100vw - 32px));height:min(680px,calc(100dvh - 120px));border:1px solid #e5e7eb;border-radius:24px;box-shadow:0 16px 64px #0003;z-index:2147482999;background:white;display:none";
         state.frame.setAttribute(
             "sandbox",
-            "allow-scripts allow-same-origin allow-forms allow-downloads",
+            "allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-top-navigation-to-custom-protocols",
         );
         state.frame.setAttribute("referrerpolicy", "no-referrer");
         if (messengerHtml) state.frame.srcdoc = messengerHtml;
@@ -396,6 +396,11 @@
                 state.resolve();
                 scheduleRefresh(state);
                 emit("ready");
+                // 답변 알림 메일·알림톡의 링크(?sendb_chat=open)로 들어오면 상담창을 바로 연다
+                if (!state.autoOpened && current === state && /[?&]sendb_chat=open(&|$)/.test(location.search)) {
+                    state.autoOpened = true;
+                    visibility(true);
+                }
             }
             // 상담창에서 "나가기"를 하면 빈 토큰이 온다 — 저장한 방문 세션을 지워 다음엔 새 상담으로 시작한다
             if (data.type === "sendb:session" && !state.identityToken && data.token === "") {

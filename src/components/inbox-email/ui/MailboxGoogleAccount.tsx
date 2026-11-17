@@ -1,4 +1,6 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { toast } from "sonner";
 import { changeGoogleAccount } from "../api";
@@ -15,16 +17,14 @@ export function MailboxGoogleAccount({
         [busy, setBusy] = useState(false);
     return (
         <form
-            className="space-y-2"
+            className="space-y-1.5"
             onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
                     await changeGoogleAccount(box.id, box.version, account);
                     await onChange();
-                    toast.success(
-                        "로그인 계정을 저장했습니다. Google 계정을 연결해주세요.",
-                    );
+                    toast.success("저장했어요. 수신·발송이 중지됐으니 Google 계정을 연결해주세요.");
                 } catch (e) {
                     toast.error((e as Error).message);
                 } finally {
@@ -32,29 +32,13 @@ export function MailboxGoogleAccount({
                 }
             }}
         >
-            <label className="block text-sm">
-                Google 로그인 계정
-                <input
-                    aria-label={`${box.address} Google 로그인 계정`}
-                    className="mt-1 w-full rounded border p-2"
-                    type="email"
-                    required
-                    maxLength={254}
-                    value={account}
-                    onChange={(e) => setAccount(e.target.value)}
-                    disabled={busy}
-                />
-            </label>
-            <button
-                className="rounded border px-3 py-2 text-sm"
-                disabled={busy || account.trim().toLowerCase() === current}
-            >
-                로그인 계정 저장
-            </button>
-            <p className="text-xs text-muted-foreground">
-                통합 메일함을 쓰면 실제 로그인 주소를 입력하세요. 계정 변경 전
-                Google 연결을 해제해주세요. 저장하면 수신·발송이 중지됩니다.
-            </p>
+            <span className="block text-sm font-medium">Google 로그인 계정</span>
+            <div className="flex gap-2">
+                <Input aria-label={`${box.address} Google 로그인 계정`} className="border-border/70" type="email" required maxLength={254} value={account} onChange={(e) => setAccount(e.target.value)} disabled={busy} />
+                <Button type="submit" variant="outline" className="border-border/70" disabled={busy || account.trim().toLowerCase() === current}>
+                    저장
+                </Button>
+            </div>
         </form>
     );
 }

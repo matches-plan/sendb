@@ -27,18 +27,7 @@ export async function notificationSender(orgId: string, exec: DbExec = db) {
     const address = config.fromEmail || sender?.fromEmail;
     return address ? { config, address } : null;
 }
-export const escapeEmailHtml = (s: string) =>
-    s.replace(
-        /[&<>"']/g,
-        (c) =>
-            ({
-                "&": "&amp;",
-                "<": "&lt;",
-                ">": "&gt;",
-                '"': "&quot;",
-                "'": "&#39;",
-            })[c]!,
-    );
+export { escapeEmailHtml } from "./notice-text";
 export async function sendNotificationMail(
     input: {
         orgId: string;
@@ -68,5 +57,26 @@ export async function sendNotificationMail(
         result.data.results?.some((r) => r.resultCode !== 0)
     )
         throw new Error("notification_delivery_unconfirmed");
+    return result.data.requestId;
+}
+/** 답변 알림톡 — 기존 알림톡 발송(발송 기록 alimtalk_send_logs 포함)을 그대로 쓴다 */
+export async function sendNotificationAlimtalk(input: {
+    orgId: string;
+    senderKey?: string;
+    templateCode: string;
+    phone: string;
+    parameters: Record<string, string>;
+}) {
+    const { sendAlimtalkForOrg } = await import("@/lib/alimtalk/send-service");
+    const result = await sendAlimtalkForOrg({
+        orgId: input.orgId,
+        senderKey: input.senderKey,
+        templateCode: input.templateCode,
+        triggerType: "customer_reply",
+        recipients: [{ phoneNumber: input.phone, templateParameter: input.parameters }],
+    });
+    if (!result.ok) throw new Error(result.error);
+    const failed = result.data.results.find((r) => r.status === "failed");
+    if (failed || result.data.failCount) throw new Error(failed?.resultMessage || "알림톡 발송 실패");
     return result.data.requestId;
 }

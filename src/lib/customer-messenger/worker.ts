@@ -9,14 +9,30 @@ import {
 } from "@/lib/db";
 import type { DbExec } from "@/lib/db/tx";
 import {
+    fillNoticeText,
+    noticeLink,
+    noticeReplyTime,
     notificationDecision,
     notificationWorkerEnabled,
     messengerSettingsSchema,
+    type MessengerSettings,
+    type NoticeValues,
 } from "./rules";
-import { escapeEmailHtml as html, sendNotificationMail } from "./transport";
+import { issueVisitorAccess } from "@/lib/inbox/visitor-access";
+
+type NoticeSettingsPart = Pick<
+    MessengerSettings,
+    "emailSubject" | "emailBody" | "customerNameFallback" | "alimtalkSenderKey" | "alimtalkTemplateCode" | "alimtalkVariables"
+>;
+import { sendNotificationMail, sendNotificationAlimtalk } from "./transport";
+import { noticeMailBody } from "./notice-text";
+
+export type Senders = { mail: typeof sendNotificationMail; alimtalk: typeof sendNotificationAlimtalk };
+const defaultSenders: Senders = { mail: sendNotificationMail, alimtalk: sendNotificationAlimtalk };
+
 export async function processCustomerReplyNotifications(
     exec: DbExec = db,
-    send = sendNotificationMail,
+    senders: Senders = defaultSenders,
     now = new Date(),
 ) {
     // A crashed/inconclusive transport is never automatically sent again.
@@ -68,23 +84,20 @@ export async function processCustomerReplyNotifications(
                 )
                 .orderBy(desc(messages.id))
                 .limit(1);
+            const settings = messengerSettingsSchema.parse(channel?.messengerSettings ?? {});
+            const recipient = n.medium === "alimtalk" ? contact?.phone : contact?.email;
             const reason =
                 chat && channel && contact
                     ? notificationDecision({
                           enabled:
                               channel.enabled &&
-                              messengerSettingsSchema.parse(
-                                  channel.messengerSettings ?? {},
-                              ).enabled &&
-                              messengerSettingsSchema.parse(
-                                  channel.messengerSettings ?? {},
-                              ).emailNotifications,
+                              (n.medium === "alimtalk"
+                                  ? settings.alimtalkNotifications && !!settings.alimtalkTemplateCode
+                                  : settings.emailNotifications),
                           consent:
-                              contact.notifyEmail &&
                               !!contact.consentAt &&
                               contact.version === n.contactVersion &&
-                              !!contact.email,
-                          verified: !!contact.verifiedAt,
+                              !!recipient,
                           read: contact.readMessageId >= n.messageId,
                           superseded: latest?.id !== n.messageId,
                           historyOnly: chat.historyOnly || !!chat.mergedIntoId,
@@ -115,50 +128,28 @@ export async function processCustomerReplyNotifications(
                 chat: chat!,
                 channel: channel!,
                 contact: contact!,
+                settings,
             };
         });
         if (!claimed) break;
         processed++;
         if (claimed.skipped) continue;
-        const { channel, contact, notice } = claimed;
-        const origin = channel.allowedOrigins.find((o) =>
-            o.startsWith("https://"),
-        );
-        if (!origin) {
-            await exec
-                .update(notices)
-                .set({ state: "skipped", reason: "site_unavailable" })
-                .where(eq(notices.id, notice.id));
-            continue;
-        }
-        // Recheck consent immediately before network I/O; no bodies/files/tokens in email.
-        const [current] = await exec
-            .select()
-            .from(contacts)
-            .where(eq(contacts.conversationId, notice.conversationId));
-        if (
-            !current?.notifyEmail ||
-            !current.verifiedAt ||
-            current.version !== notice.contactVersion ||
-            current.readMessageId >= notice.messageId
-        ) {
-            await exec
-                .update(notices)
-                .set({ state: "skipped", reason: "preference_changed_or_read" })
-                .where(eq(notices.id, notice.id));
-            continue;
-        }
+        const { channel, chat, contact, notice, settings } = claimed;
         try {
-            const providerId = await send(
-                {
-                    orgId: channel.orgId,
-                    name: channel.name,
-                    email: contact.email,
-                    subject: `[${channel.name}] 상담에 새 답변이 도착했습니다`,
-                    body: `<p>${html(channel.name)} 상담에 새 답변이 도착했습니다.</p><p><a href="${html(origin)}">사이트에서 답변 확인하기</a></p><p>문의를 남긴 브라우저에서 오른쪽 아래 상담창의 이전 대화를 열어주세요. 회원은 로그인 후 확인하실 수 있습니다.</p><p>답변 알림은 상담창의 연락처 설정에서 해제할 수 있습니다.</p>`,
-                },
-                exec,
-            );
+            const providerId = await deliver(senders, {
+                medium: notice.medium,
+                orgId: channel.orgId,
+                channelName: channel.name,
+                color: channel.color,
+                contact,
+                link: noticeLink(
+                    process.env.NEXT_PUBLIC_APP_URL || "https://sendb.kr",
+                    channel.publicKey,
+                    await issueVisitorAccess(exec, chat.id),
+                ),
+                replyTime: noticeReplyTime(new Date(notice.dueAt.getTime() - 120000)),
+                settings,
+            });
             await exec
                 .update(notices)
                 .set({
@@ -173,18 +164,54 @@ export async function processCustomerReplyNotifications(
                         eq(notices.state, "processing"),
                     ),
                 );
-        } catch {
+        } catch (e) {
             await exec
                 .update(notices)
                 .set({
                     state: "uncertain",
-                    reason: "이메일 발송 결과 확인 필요",
+                    reason: ((e as Error).message || "발송 결과 확인 필요").slice(0, 200),
                 })
                 .where(eq(notices.id, notice.id));
         }
     }
     return { processed };
 }
+
+export function deliver(
+    senders: Senders,
+    input: {
+        medium: string;
+        orgId: string;
+        channelName: string;
+        color: string;
+        contact: { name: string; email: string; phone: string };
+        link: string;
+        replyTime: string;
+        settings: NoticeSettingsPart;
+    },
+) {
+    const name = input.contact.name.trim();
+    const customerName = name && name !== "방문 고객" ? name : input.settings.customerNameFallback || "고객";
+    const values: NoticeValues = { customerName, channelName: input.channelName, replyTime: input.replyTime, link: input.link };
+    if (input.medium === "alimtalk")
+        return senders.alimtalk({
+            orgId: input.orgId,
+            senderKey: input.settings.alimtalkSenderKey || undefined,
+            templateCode: input.settings.alimtalkTemplateCode,
+            phone: input.contact.phone,
+            parameters: Object.fromEntries(
+                Object.entries(input.settings.alimtalkVariables).map(([name, value]) => [name, values[value]]),
+            ),
+        });
+    return senders.mail({
+        orgId: input.orgId,
+        name: input.channelName,
+        email: input.contact.email,
+        subject: fillNoticeText(input.settings.emailSubject, values),
+        body: noticeMailBody(fillNoticeText(input.settings.emailBody, values), input.link, input.color),
+    });
+}
+
 let running = false;
 export function startCustomerReplyNotificationScheduler() {
     if (!notificationWorkerEnabled()) return;

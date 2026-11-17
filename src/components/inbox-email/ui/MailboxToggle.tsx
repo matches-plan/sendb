@@ -1,10 +1,11 @@
 "use client";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { toggleEmailMailbox } from "../api";
 import { useGoogleConnection } from "../hooks/useGoogleConnection";
 import type { EmailMailbox } from "../types";
-/** 수신·발송 켜기/중지. 중지는 발송 대기 답장을 취소하므로 건수를 보여주고 확인받는다. */
+/** 수신·발송 토글. 중지는 발송 대기 답장을 취소하므로 건수를 보여주고 확인받는다. */
 export function MailboxToggle({
     box,
     busy,
@@ -19,10 +20,11 @@ export function MailboxToggle({
     const pending = data?.pendingReplies ?? 0;
     return (
         <>
-            <button
+            <Switch
+                aria-label={`${box.address} 수신·발송`}
+                checked={box.enabled}
                 disabled={busy}
-                className="rounded-lg border px-3 py-2 text-sm"
-                onClick={() => {
+                onCheckedChange={() => {
                     if (!box.enabled) {
                         void toggleEmailMailbox(box.id, box.version, true)
                             .then(onChange)
@@ -43,9 +45,7 @@ export function MailboxToggle({
                         },
                     });
                 }}
-            >
-                {box.enabled ? "수신·발송 중지" : "수신·발송 켜기"}
-            </button>
+            />
             {confirmationDialog}
         </>
     );

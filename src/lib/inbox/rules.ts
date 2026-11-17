@@ -87,12 +87,14 @@ export const conversationFiltersInput = z.object({
     teamId: z
         .union([z.string().uuid(), z.literal("none"), z.literal("")])
         .default(""),
+    /** "1"이면 안 읽은 상담(새 고객 메시지·확인 안 한 멘션)만 */
+    unreadOnly: z.enum(["1"]).optional(),
 });
 export type ConversationFilters = z.infer<typeof conversationFiltersInput>;
 export function readConversationFilters(params: URLSearchParams) {
     return conversationFiltersInput.parse(
         Object.fromEntries(
-            ["q", "status", "filter", "teamId"].flatMap((key) =>
+            ["q", "status", "filter", "teamId", "unreadOnly"].flatMap((key) =>
                 params.has(key) ? [[key, params.get(key)]] : [],
             ),
         ),

@@ -1,4 +1,6 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { controlGoogleConnection } from "../api";
@@ -81,18 +83,18 @@ ${
         return (
             <p role="alert" className="text-sm">
                 메일 계정 상태를 불러오지 못했습니다.{" "}
-                <button onClick={() => void mutate()}>다시 불러오기</button>
+                <button className="underline" onClick={() => void mutate()}>다시 불러오기</button>
             </p>
         );
-    if (!data) return <p className="text-sm">Google 연결 확인 중…</p>;
+    if (!data) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
     const connected = data.connection.status === "connected";
     return (
         <section
             aria-label={`${box.name} Google 연결`}
-            className="space-y-3 border-t pt-3 text-sm"
+            className="space-y-3 border-t border-border/40 pt-4 text-sm"
         >
             <h4 className="font-medium">
-                Google 계정 ·{" "}
+                Google 연결 ·{" "}
                 {connected
                     ? "연결됨"
                     : data.connection.status === "reconnect"
@@ -100,76 +102,48 @@ ${
                       : "미연결"}
             </h4>
             {!data.configured && (
-                <p>
-                    관리자가 Google 앱 설정을 등록하면 여기서 계정을 연결할 수
-                    있습니다.
-                </p>
+                <p className="text-amber-700">서버에 Google 앱 설정이 없어 연결할 수 없어요.</p>
             )}
             {data.configured && (
                 <>
-                    <label className="block">
-                        연결할 때 가져올 메일
-                        <select
-                            aria-label={`${box.name} 수신 시작 범위`}
-                            className="mt-1 w-full rounded border p-2"
-                            value={days}
+                    <div className="flex flex-wrap items-end gap-2">
+                        <label className="block space-y-1.5">
+                            <span className="block font-medium">연결할 때 가져올 메일</span>
+                            <Select value={String(days)} onValueChange={(v) => setDays(Number(v))} disabled={busy}>
+                                <SelectTrigger className="w-48 border-border/70" aria-label={`${box.name} 수신 시작 범위`}>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="0">연결한 이후</SelectItem>
+                                    <SelectItem value="7">최근 7일부터</SelectItem>
+                                    <SelectItem value="30">최근 30일부터</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </label>
+                        <Button
+                            variant="outline"
+                            className="border-border/70"
                             disabled={busy}
-                            onChange={(e) => setDays(Number(e.target.value))}
+                            onClick={() =>
+                                data.connection.status === "disconnected"
+                                    ? void act("connect")
+                                    : askFirst(
+                                          "Google 계정을 다시 연결할까요?",
+                                          "다시 연결하는 동안 수신·발송이 중지되고, 연결 후 수신·발송을 다시 켜야 합니다.",
+                                          "다시 연결",
+                                          "connect",
+                                      )
+                            }
                         >
-                            <option value={0}>연결을 시작한 이후</option>
-                            <option value={7}>최근 7일부터</option>
-                            <option value={30}>최근 30일부터</option>
-                        </select>
-                    </label>
-                    {data.connection.lastPollAt && (
-                        <p className="text-xs text-muted-foreground">
-                            연결이 끊긴 동안의 메일도 가져오도록 마지막 확인 시점에 맞춰 범위를 선택했습니다.
-                            이미 받은 메일은 중복으로 상담을 만들지 않습니다.
-                            {recovery.beyondWindow && " 마지막 확인 후 30일이 지났습니다. 30일보다 오래된 누락 메일은 별도로 확인해주세요."}
-                        </p>
-                    )}
-                    <button
-                        className="rounded-lg border px-3 py-2"
-                        disabled={busy}
-                        onClick={() =>
-                            data.connection.status === "disconnected"
-                                ? void act("connect")
-                                : askFirst(
-                                      "Google 계정을 다시 연결할까요?",
-                                      "다시 연결하는 동안 수신·발송이 중지되고, 연결 후 수신·발송 켜기를 다시 눌러야 합니다.",
-                                      "다시 연결",
-                                      "connect",
-                                  )
-                        }
-                    >
-                        {connected
-                            ? "Google 계정 다시 연결"
-                            : "Google 계정 연결"}
-                    </button>
-                    <p className="text-xs text-muted-foreground">
-                        {box.googleAccount || box.address} 계정을 선택하고 메일
-                        읽기·발송을 승인해주세요. 연결 후 수신·발송 켜기를
-                        눌러야 자동 처리가 시작됩니다. 다시 연결하면 기존 발송
-                        대기 답장은 취소됩니다.
-                    </p>
-                    {box.googleAccount && box.googleAccount !== box.address && (
-                        <p className="text-xs text-muted-foreground">
-                            {box.address}로 받은 문의만 가져오고 같은 주소로
-                            답장합니다. Google 계정의 인증된 발신 주소에 이
-                            주소가 있어야 연결됩니다.
-                        </p>
-                    )}
+                            {connected ? "다시 연결" : "Google 계정 연결"}
+                        </Button>
+                    </div>
+                    {recovery.beyondWindow && <p className="text-xs text-amber-700">마지막 확인 후 30일이 지나 그 전 메일은 직접 확인해주세요.</p>}
                 </>
             )}
             {connected && (
                 <>
-                    <p>
-                        {data.workerEnabled
-                            ? box.enabled
-                                ? "새 문의·첨부·답장을 자동 처리 중"
-                                : "수신·발송을 켜면 자동 처리를 시작합니다."
-                            : "계정은 연결됐습니다. 관리자가 서버의 자동 메일 처리를 켜야 새 문의와 답장을 처리합니다."}
-                    </p>
+                    {!data.workerEnabled && <p className="text-amber-700">서버에서 자동 메일 처리가 꺼져 있어요.</p>}
                     <dl className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                         <dt>마지막 메일 확인</dt>
                         <dd>{displayTime(data.connection.lastPollAt)}</dd>
@@ -205,20 +179,17 @@ ${
                     {connected &&
                         (data.failedReasons === undefined ||
                             retryableFailures(data.failedReasons) > 0) && (
-                            <button
-                                className="underline"
-                                disabled={busy}
-                                onClick={() => void act("retry")}
-                            >
+                            <Button variant="outline" className="border-border/70" disabled={busy} onClick={() => void act("retry")}>
                                 실패한 메일 다시 가져오기
-                            </button>
+                            </Button>
                         )}
                 </div>
             )}
             {confirmationDialog}
             {data.connection.status !== "disconnected" && (
-                <button
-                    className="rounded border px-3 py-2"
+                <Button
+                    variant="outline"
+                    className="border-border/70 text-red-700 hover:text-red-700"
                     disabled={busy}
                     onClick={() =>
                         askFirst(
@@ -229,8 +200,8 @@ ${
                         )
                     }
                 >
-                    Google 연결 해제·수신 발송 중지
-                </button>
+                    연결 해제
+                </Button>
             )}
         </section>
     );

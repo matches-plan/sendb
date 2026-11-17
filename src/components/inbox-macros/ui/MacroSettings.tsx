@@ -77,7 +77,6 @@ export function MacroSettings({ workspaceId, canManage }: { workspaceId: number;
     return (
         <SettingsSection
             title="매크로"
-            description="답장 입력창에서 #을 치면 여기 등록한 문구를 골라 바로 넣을 수 있어요. 사업마다 따로 관리해요."
         >
             {confirmationDialog}
             {error && <p role="alert" className="text-sm text-red-700">{error.message}</p>}

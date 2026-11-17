@@ -3,8 +3,6 @@ import { toPlainText } from "@/lib/rich-text/format";
 import { workspaceAbilities } from "@/components/customer-access/utils/abilities";
 import { useAgentPresence } from "@/components/inbox-presence/hooks/useAgentPresence";
 import { useState } from "react";
-import { SupportNotifications } from "@/components/inbox-operations/ui/SupportNotifications";
-import type { OpenSupportConversation } from "@/components/inbox-operations/types";
 import {
     Archive,
     ArrowLeft,
@@ -22,6 +20,7 @@ import { useInboxSearch } from "../hooks/useInboxSearch";
 import { useStaffDraftSession, type SubscribeSessionInvalidation } from "../hooks/useStaffDraftSession";
 import { useEmailMailboxes } from "@/components/inbox-email/hooks/useEmailMailboxes";
 import { InboxChannelTabs } from "./InboxChannelTabs";
+import { Switch } from "@/components/ui/switch";
 import { ConversationPane, statusNames } from "./ConversationPane";
 import type { ConversationFilter, ConversationStatus } from "../types";
 import { toast } from "sonner";
@@ -58,21 +57,10 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                   ? "mentioned"
                   : "all",
         ),
-        [query, setQuery] = useState("");
+        [query, setQuery] = useState(""),
+        // 목록에서 안 읽은 상담만 모아 보기
+        [unreadOnly, setUnreadOnly] = useState(false);
     void role;
-    const openSupport: OpenSupportConversation = ({
-        conversationId,
-        channelId,
-        status,
-        messageId,
-    }) => {
-        setChannel(channelId);
-        setSelected(conversationId);
-        setFocusMessageId(messageId ?? null);
-        setFilter("all");
-        setStatus(status);
-        setQuery("");
-    };
     const initial = useInbox(null, null),
         bootstrap = initial.bootstrap.data;
     const channelId = chosenChannel ?? bootstrap?.channels[0]?.id ?? null;
@@ -81,6 +69,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
         q: searchQuery,
         status,
         filter,
+        ...(unreadOnly && filter !== "unread" && filter !== "history" ? { unreadOnly: "1" as const } : {}),
     }, (fromId, toId, toChannelId) => {
         // 보고 있던 비회원 상담이 회원 상담으로 합쳐지면 서버가 돌려준 대상으로 따라간다(초안도 옮김).
         if (toChannelId !== channelId) return;
@@ -136,20 +125,11 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
         { id: "mentioned", label: "나를 멘션한 상담", icon: MessageCircle },
     ];
     const count = (id: ConversationFilter) => list.counts?.[id] ?? "…";
+    const badgeMenus = new Set<ConversationFilter>(["all", "ai", "unread", "mine", "unassigned", "priority", "mentioned"]);
     const error = initial.bootstrap.error || list.error || detail.error;
-    const headerTools = (
-        <>
-            <SupportNotifications
-                onSelect={openSupport}
-                channels={bootstrap?.channels ?? []}
-                initialOpen={params.get("notifications") === "open"}
-            />
-        </>
-    );
     return (
         <div className="flex h-full min-h-[600px] flex-col bg-background">
             {/* 좁은 화면에서 상담을 열면 대화 공간을 위해 페이지 머리를 접는다(목록으로 돌아오면 다시 보임) */}
-            {/* 사업부 탭 줄 오른쪽 끝에 상담 설정·알림. 좁은 화면에서 상담을 열면 대화 공간을 위해 접는다 */}
             <div className={selected ? "hidden lg:block" : undefined}>
                 {bootstrap && channel ? (
                     <InboxChannelTabs
@@ -159,11 +139,8 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                             setChannel(next);
                             setSelected(null);
                         }}
-                        right={headerTools}
                     />
-                ) : (
-                    <div className="flex h-12 items-center justify-end gap-1 border-b px-4">{headerTools}</div>
-                )}
+                ) : null}
             </div>
             {(reconnectCount > 0 || mailWorkerStopped || mailboxes.error) && (
                 <p role="alert" className="border-b bg-amber-50 px-5 py-3 text-sm text-amber-900">
@@ -239,15 +216,18 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                                     setFilter(m.id);
                                     setSelected(null);
                                 }}
-                                className={`mb-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] ${filter === m.id ? "bg-violet-100/70 font-semibold text-violet-800" : "text-muted-foreground hover:bg-muted"}`}
+                                className={`mb-1 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors ${filter === m.id ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"}`}
                             >
                                 <m.icon size={16} />
                                 <span className="flex-1 text-left">
                                     {m.label}
                                 </span>
-                                <span className="text-[11px]">
-                                    {count(m.id) || ""}
-                                </span>
+                                {/* 안 읽은 상담이 있을 때만 숫자를 보인다(상태 탭과 상관없음). 빨간 배지는 안 읽은 메시지만 */}
+                                {badgeMenus.has(m.id) && Number(count(m.id)) > 0 && (
+                                    <span className={m.id === "unread" ? "min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-white" : "min-w-5 text-center text-[11px]"}>
+                                        {Number(count(m.id)) > 99 ? "99+" : count(m.id)}
+                                    </span>
+                                )}
                             </button>
                         ))}
                         <div className="mt-6 border-t pt-4">
@@ -286,9 +266,12 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                                 <h2 className="font-semibold">
                                     {menus.find((m) => m.id === filter)?.label}
                                 </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    {count(filter)}
-                                </span>
+                                {filter !== "unread" && filter !== "history" && (
+                                    <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                                        안 읽은 것만
+                                        <Switch checked={unreadOnly} onCheckedChange={(on) => { setUnreadOnly(on); setSelected(null); }} aria-label="안 읽은 상담만 보기" />
+                                    </label>
+                                )}
                             </div>
                             <label className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2">
                                 <Search
@@ -298,7 +281,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                                 <input
                                     aria-label="상담 검색"
                                     className="min-w-0 w-full bg-transparent text-xs outline-none"
-                                    placeholder={filter === "history" ? "이전 상담 기록에서 고객·태그·대화 검색" : `${statusNames[status]} 상담에서 고객·태그·대화 검색`}
+                                    placeholder={filter === "history" ? "이전 상담 기록에서 고객·태그·대화 검색" : filter === "unread" ? "안 읽은 상담에서 고객·태그·대화 검색" : `${statusNames[status]} 상담에서 고객·태그·대화 검색`}
                                     maxLength={200}
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
@@ -308,7 +291,7 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                             {list.countsError && <button className="text-xs text-muted-foreground" onClick={() => void list.refreshCounts()}>상담 건수 다시 확인</button>}
                             <div
                                 className={
-                                    filter === "history"
+                                    filter === "history" || filter === "unread"
                                         ? "hidden"
                                         : "flex gap-1"
                                 }

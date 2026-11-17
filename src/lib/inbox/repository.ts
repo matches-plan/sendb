@@ -1,4 +1,5 @@
 import { queueCustomerReplyNotice } from "@/lib/customer-messenger/queue";
+import { visitorTokenMatch } from "./visitor-access";
 import { aiWorkerEnabled } from "@/lib/customer-ai/catalog";
 import { isResponder } from "@/lib/inbox-responders/repository";
 import {
@@ -51,6 +52,7 @@ import {
     customerAiJobs,
     customerWorkspaceAccess,
     inboxResponders,
+    inboxNotifications,
 } from "@/lib/db";
 import type { DbExec } from "@/lib/db/tx";
 import type { JWTPayload } from "@/types";
@@ -311,7 +313,8 @@ export async function listConversations(
     return exec
         .select({
             ...conversationColumns,
-            unread: sql<boolean>`NOT ${inboxConversations.historyOnly} AND ${inboxConversations.customerSeq} > coalesce(${inboxReads.customerSeq},0)`,
+            // 보라색 표시: 새 고객 메시지(담당자 없음·내 담당) 또는 아직 열어 보지 않은 나에 대한 멘션
+            unread: sql<boolean>`NOT ${inboxConversations.historyOnly} AND (${unreadForMe(actor.userId)} OR ${unseenMention(actor.userId)})`,
         })
         .from(inboxConversations)
         .leftJoin(
@@ -334,7 +337,8 @@ export async function listConversations(
                 input.filter === "myTeams"
                     ? myTeamPredicate(actor.userId)
                     : undefined,
-                input.status && input.filter !== "history"
+                // 안 읽은 메시지는 상태와 상관없이 모두 보인다(배지 숫자와 목록이 같게)
+                input.status && input.filter !== "history" && input.filter !== "unread"
                     ? eq(inboxConversations.status, input.status)
                     : undefined,
                 input.filter === "mine"
@@ -350,7 +354,10 @@ export async function listConversations(
                     ? mentionedConversation(actor.userId)
                     : undefined,
                 input.filter === "unread"
-                    ? sql`${inboxConversations.customerSeq} > coalesce(${inboxReads.customerSeq},0)`
+                    ? unreadForMe(actor.userId)
+                    : undefined,
+                input.unreadOnly
+                    ? sql`(${unreadForMe(actor.userId)} OR ${unseenMention(actor.userId)})`
                     : undefined,
                 before
                     ? or(
@@ -392,6 +399,14 @@ function teamFilter(teamId: string) {
           ? eq(inboxConversations.teamId, teamId)
           : undefined;
 }
+/** 내가 멘션됐는데 그 상담을 아직 열어 보지 않음 */
+function unseenMention(userId: string) {
+    return sql`EXISTS (SELECT 1 FROM ${inboxNotifications} n WHERE n.conversation_id = "inbox_conversations"."id" AND n.user_id = ${userId}::uuid AND n.type = 'mentioned' AND n.read_at IS NULL)`;
+}
+/** 안 읽은 메시지: 담당자가 없거나 내가 담당자인 상담만. 다른 사람에게 배정되면 그 사람 것으로만 센다. */
+function unreadForMe(userId: string) {
+    return sql`${inboxConversations.customerSeq} > coalesce(${inboxReads.customerSeq},0) AND (${inboxConversations.assigneeId} IS NULL OR ${inboxConversations.assigneeId} = ${userId}::uuid)`;
+}
 function myTeamPredicate(userId: string) {
     return sql`EXISTS (SELECT 1 FROM inbox_team_members itm WHERE itm.team_id=${inboxConversations.teamId} AND itm.user_id=${userId}::uuid)`;
 }
@@ -416,33 +431,38 @@ export async function conversationCounts(
 ) {
     await requireCustomerChannel(actor, channelId, "read", exec);
     const input = conversationFiltersInput.parse(filters);
-    // 검색어가 있으면 상태 조건을 WHERE에서 빼고 집계 안에만 둔다 — 한 번의 집계로
-    // 현재 상태 결과와 상태별 검색 결과 건수(빈 결과 안내용)를 함께 얻는다(본문 검색 반복 없음).
+    // 검색 중이면 한 번의 집계로 상태별 검색 결과 건수(빈 결과 안내용)도 함께 얻는다(본문 검색 반복 없음).
     const searching = !!input.q;
     const statusCondition =
         input.status && input.filter !== "history"
             ? eq(inboxConversations.status, input.status)
             : undefined;
-    const live = (condition?: SQL) =>
-        sql`NOT ${inboxConversations.historyOnly}${searching && statusCondition ? sql` AND ${statusCondition}` : sql``}${condition ? sql` AND ${condition}` : sql``}`;
+    // 상태 조건은 집계 안에만 둔다 — 안 읽은 메시지 건수는 고른 상태 탭과 상관없이 같게 보이도록.
+    const live = (condition?: SQL, anyStatus = false) =>
+        sql`NOT ${inboxConversations.historyOnly}${statusCondition && !anyStatus ? sql` AND ${statusCondition}` : sql``}${condition ? sql` AND ${condition}` : sql``}`;
     const counted = (condition?: SQL) =>
         sql<number>`count(*) FILTER (WHERE ${live(condition)} AND NOT ${aiAnswering})`.mapWith(Number);
+    const unreadCount = (condition?: SQL) =>
+        sql<number>`count(*) FILTER (WHERE ${live(condition ? sql`${unreadForMe(actor.userId)} AND ${condition}` : unreadForMe(actor.userId), true)} AND NOT ${aiAnswering})`.mapWith(Number);
     const byStatus = (value: "open" | "snoozed" | "closed") =>
         sql<number>`count(*) FILTER (WHERE NOT ${inboxConversations.historyOnly} AND ${inboxConversations.status} = ${value})`.mapWith(Number);
     const counts = await exec
             .select({
-                all: counted(),
-                ai: sql<number>`count(*) FILTER (WHERE ${live()} AND ${aiAnswering})`.mapWith(Number),
+                // 전체·AI 상담 숫자는 고른 탭과 상관없이 진행 중인 상담 수
+                all: sql<number>`count(*) FILTER (WHERE ${live(eq(inboxConversations.status, "open"), true)} AND NOT ${aiAnswering})`.mapWith(Number),
+                ai: sql<number>`count(*) FILTER (WHERE ${live(eq(inboxConversations.status, "open"), true)} AND ${aiAnswering})`.mapWith(Number),
                 myTeams: counted(myTeamPredicate(actor.userId)),
                 history:
                     sql<number>`count(*) FILTER (WHERE ${inboxConversations.historyOnly})`.mapWith(
                         Number,
                     ),
-                mine: counted(sql`${inboxConversations.assigneeId} = ${actor.userId}`),
-                unassigned: counted(sql`${inboxConversations.assigneeId} IS NULL`),
-                unread: counted(sql`${inboxConversations.customerSeq} > coalesce(${inboxReads.customerSeq},0)`),
-                priority: counted(sql`${inboxConversations.priority}`),
-                mentioned: counted(mentionedConversation(actor.userId)),
+                // 메뉴 숫자는 안 읽은 상담 기준이고, 상태 탭과 상관없이 같다
+                mine: unreadCount(sql`${inboxConversations.assigneeId} = ${actor.userId}`),
+                unassigned: unreadCount(sql`${inboxConversations.assigneeId} IS NULL`),
+                unread: unreadCount(),
+                priority: unreadCount(sql`${inboxConversations.priority}`),
+                // 나를 멘션한 상담: 아직 열어 보지 않은 멘션이 있는 상담 수(상태 탭과 상관없음)
+                mentioned: sql<number>`count(*) FILTER (WHERE ${live(unseenMention(actor.userId), true)})`.mapWith(Number),
                 ...(searching
                     ? {
                           searchOpen: byStatus("open"),
@@ -466,12 +486,6 @@ export async function conversationCounts(
                     isNull(inboxConversations.mergedIntoId),
                     conversationSearch(input.q),
                     teamFilter(input.teamId),
-                    statusCondition && !searching
-                        ? or(
-                              eq(inboxConversations.historyOnly, true),
-                              statusCondition,
-                          )
-                        : undefined,
                 ),
             );
     return counts[0];
@@ -982,6 +996,16 @@ export async function markRead(
                 customerSeq: sql`greatest(${inboxReads.customerSeq},${seen})`,
             },
         });
+    // 상담을 열면 이 상담에서 나를 멘션한 알림도 확인한 것으로 본다
+    await exec
+        .update(inboxNotifications)
+        .set({ readAt: new Date() })
+        .where(and(
+            eq(inboxNotifications.conversationId, id),
+            eq(inboxNotifications.userId, actor.userId),
+            eq(inboxNotifications.type, "mentioned"),
+            isNull(inboxNotifications.readAt),
+        ));
 }
 export async function appendMessage(
     exec: DbExec,
@@ -1464,7 +1488,7 @@ async function startVisitorSessionInTx(
             .where(
                 and(
                     eq(inboxConversations.channelId, channel.id),
-                    eq(inboxConversations.tokenHash, hash(token)),
+                    visitorTokenMatch(token),
                     isNull(inboxConversations.contactId),
                     isNull(inboxConversations.mergedIntoId),
                     isNull(inboxConversations.identifiedAt),
@@ -1664,7 +1688,7 @@ export async function visitorConversation(
         .where(
             and(
                 eq(inboxConversations.channelId, channel.id),
-                eq(inboxConversations.tokenHash, hash(token)),
+                visitorTokenMatch(token),
                 isNull(inboxConversations.contactId),
                 isNull(inboxConversations.mergedIntoId),
                 isNull(inboxConversations.identifiedAt),

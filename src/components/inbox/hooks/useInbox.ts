@@ -20,6 +20,8 @@ export function useInbox(
         status: ConversationStatus;
         filter: ConversationFilter;
         teamId?: string;
+        /** "1"이면 안 읽은 상담만 */
+        unreadOnly?: "1";
     } = { q: "", status: "open", filter: "all" },
     /** 요청한 상담이 다른 상담으로 합쳐져 서버가 대상 상담을 돌려줬을 때 */
     onMerged?: (fromId: string, toId: string, channelId: number) => void,
@@ -47,7 +49,8 @@ export function useInbox(
         { refreshInterval: 4000, refreshWhenHidden: false },
     );
     const counts = useSWR<InboxCounts>(
-        channelId ? `/api/inbox?${new URLSearchParams({ view: "counts", channelId: String(channelId), ...filters })}` : null,
+        // 숫자는 "안 읽은 것만" 토글과 상관없다
+        channelId ? `/api/inbox?${new URLSearchParams({ view: "counts", channelId: String(channelId), ...withoutUnreadOnly(filters) })}` : null,
         inboxRequest,
         { refreshInterval: 15000, refreshWhenHidden: false },
     );
@@ -104,4 +107,8 @@ export function useInbox(
         }, { revalidate: false });
     }
     return { bootstrap, list, detail, patch, receiveMessage };
+}
+function withoutUnreadOnly<T extends { unreadOnly?: string }>({ unreadOnly, ...rest }: T) {
+    void unreadOnly;
+    return rest;
 }

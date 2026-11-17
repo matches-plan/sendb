@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -16,6 +15,7 @@ import type { DbExec } from "@/lib/db/tx";
 import { authenticatedCustomer } from "./repository";
 import { InboxError } from "./errors";
 import { appendInboxAudit } from "./audit";
+import { visitorTokenMatch } from "./visitor-access";
 import { appendActivity } from "@/lib/customer-platform/activities";
 import { enqueuePlatformEvent } from "@/lib/customer-platform/outbox";
 import { lockWorkflowWorkspace } from "@/lib/customer-workflows/repository";
@@ -64,9 +64,6 @@ export async function linkVisitorIdentity(
             .for("update");
         if (!member)
             throw new InboxError("회원 상담 고객을 찾을 수 없습니다.", 401);
-        const tokenHash = createHash("sha256")
-            .update(input.anonymousToken)
-            .digest("hex");
         const [hint] = await tx
             .select()
             .from(chats)
@@ -74,7 +71,7 @@ export async function linkVisitorIdentity(
                 and(
                     eq(chats.channelId, channel.id),
                     eq(chats.orgId, channel.orgId),
-                    eq(chats.tokenHash, tokenHash),
+                    visitorTokenMatch(input.anonymousToken),
                 ),
             );
         if (!hint)

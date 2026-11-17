@@ -17,10 +17,11 @@ import { inboxRequest } from "../api";
 import type { InboxBootstrap } from "../types";
 import { ChannelSettings } from "./ChannelSettings";
 import { InboxChannelTabs } from "./InboxChannelTabs";
-import { SettingsSection } from "./SettingsSection";
+import { AiSettingsPanel } from "@/components/customer-ai/ui/AiSettingsPanel";
 import { MacroSettings } from "@/components/inbox-macros/ui/MacroSettings";
+import { ReplyNoticeSettings } from "@/components/customer-messenger/ui/ReplyNoticeSettings";
 
-type Menu = "site" | "hours" | "goals" | "macros" | "email" | "responders";
+type Menu = "site" | "hours" | "goals" | "macros" | "email" | "notices" | "responders" | "ai" | "rules" | "knowledge";
 type Panel = Menu | "new";
 
 /**
@@ -34,13 +35,16 @@ export function InboxSettingsPage() {
     const bootstrap = useSWR<InboxBootstrap>("/api/inbox", inboxRequest);
     const data = bootstrap.data;
     const [chosen, setChosen] = useState<number | null>(Number(params.get("channelId")) || null);
-    const channelId = chosen ?? data?.channels[0]?.id ?? null;
+    // ?open=ai&workspaceId=로 들어오면(예전 AI 응대 주소) 그 사업의 상담창을 연다
+    const openAi = ["ai", "rules", "knowledge"].includes(params.get("open") ?? "");
+    const aiWorkspace = openAi ? Number(params.get("workspaceId")) || null : null;
+    const channelId = chosen ?? data?.channels.find((c) => c.workspaceId === aiWorkspace)?.id ?? data?.channels[0]?.id ?? null;
     const channel = data?.channels.find((c) => c.id === channelId);
     const abilities = workspaceAbilities(data, channel?.workspaceId);
     const canCreate = !!data?.workspaces.some((w) => w.abilities.manage);
-    const [newWorkspaceId, setNewWorkspaceId] = useState<number | null>(Number(params.get("workspaceId")) || null);
+    const [newWorkspaceId, setNewWorkspaceId] = useState<number | null>(openAi ? null : Number(params.get("workspaceId")) || null);
     const [panel, setPanel] = useState<Panel>(() =>
-        params.get("new") ? "new" : params.get("open") === "email" || (params.has("emailConnection") && params.has("channelId")) ? "email" : "site",
+        params.get("new") ? "new" : openAi ? (params.get("open") as Panel) : params.get("open") === "notices" ? "notices" : params.get("open") === "email" || (params.has("emailConnection") && params.has("channelId")) ? "email" : "site",
     );
     useEffect(() => {
         const result = params.get("emailConnection");
@@ -56,11 +60,15 @@ export function InboxSettingsPage() {
 
     const menus: { id: Menu; group: string; label: string; show: boolean; badge?: string }[] = [
         { id: "site", group: "상담창", label: "사이트 상담창", show: abilities.manage },
-        { id: "hours", group: "상담창", label: "업무시간", show: !!channel },
+        { id: "hours", group: "상담창", label: "업무 시간", show: !!channel },
         { id: "goals", group: "상담창", label: "응대 목표", show: !!channel },
         { id: "macros", group: "상담창", label: "매크로", show: !!channel },
+        { id: "notices", group: "상담창", label: "답변 알림", show: !!channel },
         { id: "email", group: "상담창", label: "이메일 연결", show: abilities.manage, badge: reconnectCount > 0 ? "재연결" : undefined },
         { id: "responders", group: "담당", label: "상담 담당자", show: abilities.manage },
+        { id: "ai", group: "AI 응대", label: "AI 자동 답변 설정", show: !!channel },
+        { id: "rules", group: "AI 응대", label: "톤앤매너 규칙", show: !!channel },
+        { id: "knowledge", group: "AI 응대", label: "상담 지식", show: !!channel },
     ];
     const shown = menus.filter((m) => m.show);
     // 고른 메뉴를 이 사업에서 볼 수 없으면 첫 메뉴로
@@ -93,23 +101,20 @@ export function InboxSettingsPage() {
             case "site":
                 return <ChannelSettings key={`site:${channel.id}`} bootstrap={data!} channel={channel} onSaved={() => void refresh()} />;
             case "hours":
-                return (
-                    <SettingsSection title="업무시간" description="업무시간·휴무일과 업무시간 밖 고객 안내를 정합니다.">
-                        <OperationsSettingsEditor key={channel.id} channelId={channel.id} canManage={abilities.manage} section="hours" />
-                    </SettingsSection>
-                );
             case "goals":
-                return (
-                    <SettingsSection title="응대 목표" description="첫 답변·추가 답변·해결까지의 목표 시간을 정합니다. 상담통계에서 지켰는지 볼 수 있어요.">
-                        <OperationsSettingsEditor key={channel.id} channelId={channel.id} canManage={abilities.manage} section="goals" />
-                    </SettingsSection>
-                );
+                return <OperationsSettingsEditor key={`${current}:${channel.id}`} channelId={channel.id} canManage={abilities.manage} section={current} />;
             case "macros":
                 return <MacroSettings key={channel.workspaceId} workspaceId={channel.workspaceId} canManage={abilities.manage} />;
+            case "notices":
+                return <ReplyNoticeSettings key={`notices:${channel.id}`} channelId={channel.id} canManage={abilities.manage} />;
             case "email":
                 return <EmailMailboxSettings key={channel.workspaceId} workspaceId={channel.workspaceId} />;
             case "responders":
                 return <ResponderToggles key={channel.workspaceId} workspaceId={channel.workspaceId} canManage={abilities.manage} onSaved={refresh} />;
+            case "ai":
+            case "rules":
+            case "knowledge":
+                return <AiSettingsPanel key={`${current}:${channel.workspaceId}`} bootstrap={data!} workspaceId={channel.workspaceId} section={current === "ai" ? "mode" : current} />;
             default:
                 return null;
         }

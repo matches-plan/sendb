@@ -14,7 +14,7 @@ test("UX-115 검색어가 있으면 현재 상태 결과와 함께 상태별 검
     const pg = await openPglite([
         schema.workspaces, schema.users, schema.organizationMembers, schema.inboxChannels, schema.inboxConversations,
         schema.inboxReads, schema.inboxMessages, schema.inboxTeamMembers, schema.inboxMessageMentions,
-        schema.customerAiSettings, schema.inboxAuditEvents,
+        schema.customerAiSettings, schema.inboxAuditEvents, schema.inboxNotifications,
     ]);
     try {
         await insertRow(pg, "workspaces", { id: 1, org_id: ORG, name: "사업" });
@@ -40,7 +40,7 @@ test("UX-115 검색어가 있으면 현재 상태 결과와 함께 상태별 검
         assert.equal(found.history, 1);
         assert.deepEqual([found.searchOpen, found.searchSnoozed, found.searchClosed], [1, 1, 1]);
         const closed = await conversationCounts(actor, 1, { status: "closed", q: "김철수" }, db as never);
-        assert.equal(closed.all, 0);
+        assert.equal(closed.all, 1, "전체 상담 숫자는 고른 탭과 상관없이 진행 중 상담 수");
         assert.equal(closed.searchOpen, 1, "종료 탭에서 찾는 고객이 진행중에 있음을 알린다");
         const rows = await listConversations(actor, 1, db as never, undefined, undefined, { status: "open", q: "홍길동" });
         assert.deepEqual(rows.map((r) => r.name), ["홍길동 진행"], "목록은 기존처럼 현재 상태만");

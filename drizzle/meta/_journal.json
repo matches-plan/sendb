@@ -1051,6 +1051,27 @@
       "when": 1794418419000,
       "tag": "0147_inbox_snoozed_until",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1794504819000,
+      "tag": "0148_customer_ai_rules_docs",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1794591219000,
+      "tag": "0149_customer_ai_doc_sources",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1794764019000,
+      "tag": "0151_customer_reply_alimtalk",
+      "breakpoints": true
     }
   ]
 }

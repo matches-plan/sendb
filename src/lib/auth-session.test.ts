@@ -227,15 +227,16 @@ test("UX-014 알 수 없는 DB 역할은 일반 API 인증에서도 거부한다
     assert.equal(await resolveActiveUser({ userId: USER, orgId: ORG_A, email: "a@example.test", name: "가상", role: "member", membershipId: 71, tokenVersion: 0 }), null);
 });
 
-test("UX-014 빈 역할 저장과 관리자의 관리자 승격 우회는 쓰기 전에 차단한다", async (t) => {
+test("UX-014 빈 역할 저장은 쓰기 전에 차단하고, 관리자도 일반 멤버를 관리자로 바꿀 수 있다", async (t) => {
     const { generateToken, db } = await load(t);
     const users = await import("../app/api/users/[id]/route");
     const members = await import("../app/api/org/members/[id]/route");
     const token = generateToken({ userId: USER, orgId: ORG_A, email: "a@example.test", name: "가상", role: "admin", membershipId: 71, tokenVersion: 0 });
     const { calls } = installFakeDb(t, db, withMember({ role: "admin", membershipId: 71, tokenVersion: 0, isSuperAdmin: 0 }, () => [{ id: OTHER_USER, role: "member", isActive: 1 }]));
     assert.equal((await users.PATCH(bearer(token, "http://localhost/api/users/other", { method: "PATCH", body: { role: "" } }), { params: Promise.resolve({ id: OTHER_USER }) })).status, 400);
-    assert.equal((await members.PATCH(bearer(token, "http://localhost/api/org/members/other", { method: "PATCH", body: { role: "admin" } }), { params: Promise.resolve({ id: OTHER_USER }) })).status, 403);
     assert.equal(calls.filter((c) => c.op !== "select").length, 0);
+    // 관리자 초대·관리자로 변경은 관리자도 할 수 있다 (82bc1994)
+    assert.equal((await members.PATCH(bearer(token, "http://localhost/api/org/members/other", { method: "PATCH", body: { role: "admin" } }), { params: Promise.resolve({ id: OTHER_USER }) })).status, 200);
 });
 
 test("UX-015 직접 생성 이메일은 정규화하고 계정·멤버십을 같은 트랜잭션에서 만든다", async (t) => {

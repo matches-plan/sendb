@@ -1,4 +1,5 @@
 "use client";
+import { mentionedPeople } from "@/components/inbox-collaboration/utils/mentions";
 import { FormattedText } from "./FormattedText";
 import { Fragment, memo } from "react";
 import { LockKeyhole } from "lucide-react";
@@ -65,20 +66,17 @@ export const MessageHistory = memo(function MessageHistory({ messages, historyOn
                         <div
                             className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-relaxed ${m.kind === "customer" ? "rounded-tl-md bg-muted" : m.kind === "note" ? "border border-amber-200 bg-amber-50 text-amber-950" : "rounded-tr-md bg-[#635BFF] text-white"}`}
                         >
-                            <FormattedText text={m.body} />
+                            <FormattedText text={m.body} mentions={m.kind === "note" ? m.mentions?.map((p) => p.name) : undefined} />
                         </div>
                     )}
-                    {m.kind === "note" &&
-                        !!m.mentions?.length && (
-                            <p className="text-xs text-amber-800">
-                                {m.mentions
-                                    .map(
-                                        (person) =>
-                                            `@${person.name}`,
-                                    )
-                                    .join(" ")}
-                            </p>
-                        )}
+                    {/* 예전 방식(글에 @이름 없이 고른) 멘션은 아래에 따로 보인다 */}
+                    {m.kind === "note" && !!m.mentions?.some((p) => !mentionedPeople(m.body, [p]).length) && (
+                        <p className="text-xs">
+                            {m.mentions.filter((p) => !mentionedPeople(m.body, [p]).length).map((p) => (
+                                <span key={p.userId} className="mention-chip mr-1">@{p.name}</span>
+                            ))}
+                        </p>
+                    )}
                     {m.email && (
                         <details className="text-xs text-muted-foreground">
                             <summary>

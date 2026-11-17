@@ -4,11 +4,12 @@ import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/r
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
-import { Bold, Code, Italic, Link2, List } from "lucide-react";
+import { Bold, Code, Heading2, Italic, Link2, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toEditorHtml } from "@/lib/rich-text/format";
 import { docToMarkdown, type DocNode } from "../utils/serialize";
 import { LinkForm } from "./LinkForm";
+import { TokenHighlight } from "../utils/highlight";
 
 /**
  * 상담 답장 입력창 — 글자를 드래그하면 굵게·기울임·코드·목록·링크 도구가 뜬다.
@@ -24,6 +25,8 @@ export function RichTextInput({
     onBlur,
     onEditor,
     className,
+    highlight,
+    headings = false,
 }: {
     value: string;
     onChange: (value: string) => void;
@@ -35,17 +38,21 @@ export function RichTextInput({
     onBlur?: () => void;
     onEditor?: (editor: Editor | null) => void;
     className?: string;
+    /** 배지처럼 보일 글자 범위를 찾는 함수 (예: 메모의 @멘션) */
+    highlight?: (text: string) => [number, number][];
+    /** 제목(# ~ ###) 서식 허용 — 상담 지식 문서 */
+    headings?: boolean;
 }) {
     const last = useRef(value);
-    const handlers = useRef({ onChange, onKeyDown, onBlur, placeholder });
+    const handlers = useRef({ onChange, onKeyDown, onBlur, placeholder, highlight });
     useEffect(() => {
-        handlers.current = { onChange, onKeyDown, onBlur, placeholder };
+        handlers.current = { onChange, onKeyDown, onBlur, placeholder, highlight };
     });
     const editor = useEditor({
         immediatelyRender: false,
         extensions: [
             StarterKit.configure({
-                heading: false,
+                heading: headings ? { levels: [1, 2, 3] } : false,
                 codeBlock: false,
                 blockquote: false,
                 horizontalRule: false,
@@ -57,8 +64,10 @@ export function RichTextInput({
             // 플러그인이 그릴 때 부르는 함수라 렌더 중에 읽지 않는다
             // eslint-disable-next-line react-hooks/refs
             Placeholder.configure({ placeholder: () => handlers.current.placeholder, showOnlyWhenEditable: false }),
+            // eslint-disable-next-line react-hooks/refs
+            TokenHighlight.configure({ find: () => handlers.current.highlight ?? (() => []), className: "mention-chip" }),
         ],
-        content: toEditorHtml(value),
+        content: toEditorHtml(value, { headings }),
         editable: !disabled,
         editorProps: {
             attributes: { "aria-label": ariaLabel, role: "textbox", "aria-multiline": "true", class: "rich-input outline-none" },
@@ -81,24 +90,24 @@ export function RichTextInput({
     useEffect(() => {
         if (!editor || value === last.current) return;
         last.current = value;
-        editor.commands.setContent(toEditorHtml(value), { emitUpdate: false });
-    }, [editor, value]);
+        editor.commands.setContent(toEditorHtml(value, { headings }), { emitUpdate: false });
+    }, [editor, value, headings]);
     useEffect(() => {
         editor?.setEditable(!disabled);
     }, [editor, disabled]);
     useEffect(() => {
         if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr);
-    }, [editor, placeholder]);
+    }, [editor, placeholder, highlight]);
 
     return (
         <div className={cn("text-sm", className)}>
-            {editor && <Toolbar editor={editor} />}
+            {editor && <Toolbar editor={editor} headings={headings} />}
             <EditorContent editor={editor} />
         </div>
     );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, headings }: { editor: Editor; headings: boolean }) {
     const [link, setLink] = useState<{ from: number; to: number; text: string; href: string } | null>(null);
     const active = useEditorState({
         editor,
@@ -108,6 +117,7 @@ function Toolbar({ editor }: { editor: Editor }) {
             code: e.isActive("code"),
             list: e.isActive("bulletList"),
             link: e.isActive("link"),
+            heading: e.isActive("heading", { level: 2 }),
         }),
     });
     const tool = (on: boolean) =>
@@ -141,6 +151,11 @@ function Toolbar({ editor }: { editor: Editor }) {
                 />
             ) : (
                 <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-background p-1">
+                    {headings && (
+                        <button type="button" title="제목" aria-label="제목" className={tool(!!active?.heading)} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+                            <Heading2 size={16} />
+                        </button>
+                    )}
                     <button type="button" title="굵게" aria-label="굵게" className={tool(!!active?.bold)} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}>
                         <Bold size={16} />
                     </button>

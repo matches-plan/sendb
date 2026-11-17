@@ -1,8 +1,7 @@
 "use client";
 
-import { ChevronRight, MessageCircle } from "lucide-react";
-import { BrandMark } from "./BrandMark";
-import { WelcomeProcess } from "./WelcomeProcess";
+import { ArrowUpRight, ChevronRight, MessageCircle, Phone, Send } from "lucide-react";
+import { ProfileAvatar } from "./ProfileAvatar";
 import type { MessengerBrand, PublicMessengerSettings } from "../types";
 
 export type MessengerBusinessHours = {
@@ -17,12 +16,10 @@ export function MessengerHome({
     brand,
     greeting,
     settings,
-    customerName,
     color,
     businessHours,
     busy,
     loading,
-    returning,
     unread,
     hasConversations,
     onStart,
@@ -32,149 +29,110 @@ export function MessengerHome({
     brand?: MessengerBrand;
     greeting: string;
     settings?: PublicMessengerSettings;
-    customerName?: string;
     color: string;
     businessHours?: MessengerBusinessHours | null;
     busy: boolean;
     loading: boolean;
-    returning: boolean;
     unread: number;
     hasConversations: boolean;
     onStart: () => void;
     onConversations: () => void;
 }) {
+    const avatar = settings?.profileImageUrl || brand?.iconUrl;
+    const quick = settings?.aiAvailable || businessHours?.open !== false;
     return (
-        <div className="flex min-h-0 flex-1 flex-col">
-            <section
-                aria-label="상담 홈"
-                className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f9] px-5 pb-5 pt-5"
-            >
-                <header className="mb-4 px-1">
-                    {!brand && (
-                    <div
-                        className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl text-white shadow-sm"
-                        style={{ backgroundColor: color }}
-                    >
-                        <MessageCircle size={26} aria-hidden="true" />
-                    </div>
-                    )}
-                    <h1 className="break-words text-2xl font-bold tracking-tight">
-                        <BrandMark brand={brand} name={name} />
-                    </h1>
-                    <p className="mt-2 text-sm text-gray-500">
-                        {settings?.tagline || "궁금한 점을 편하게 물어보세요."}
-                    </p>
-                </header>
+        <section aria-label="상담 홈" className="min-h-0 flex-1 overflow-y-auto bg-[#f6f6f6] px-4 pb-6 pt-6">
+            <header className="mb-5 flex items-center gap-3 px-1">
+                <ProfileAvatar src={avatar} name={name} color={color} size={48} />
+                <div className="min-w-0">
+                    <h1 className="truncate text-lg font-bold tracking-tight">{name}</h1>
+                    {settings?.tagline && <p className="mt-0.5 truncate text-[13px] text-gray-500">{settings.tagline}</p>}
+                </div>
+            </header>
 
-                <article className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-                    <div className="mb-5 flex items-start gap-3">
-                        <div
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold"
-                            style={{ backgroundColor: `${color}12`, color }}
-                        >
-                            <BrandMark brand={brand} name={name} icon />
-                        </div>
-                        <div className="min-w-0">
-                            <h2 className="text-sm font-semibold">{settings?.aiAvailable ? "AI 상담원" : name}</h2>
-                            <WelcomeProcess
-                                settings={settings}
-                                customerName={customerName}
-                                greeting={greeting}
-                            />
-                        </div>
+            <article className="rounded-2xl bg-white p-4">
+                <div className="flex items-start gap-3">
+                    <ProfileAvatar src={avatar} name={name} color={color} size={40} />
+                    <div className="min-w-0">
+                        <h2 className="text-sm font-semibold">{name}</h2>
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-[1.5] text-gray-600">{greeting}</p>
                     </div>
-                    {businessHours && (
-                        <details className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500">
-                            <summary className="cursor-pointer">
-                                상담 운영 안내
-                            </summary>
-                            <p className="mt-2 leading-5">
-                                {businessHours.open
-                                    ? "지금은 담당자 상담 업무시간입니다."
-                                    : businessHours.awayMessage}
-                            </p>
-                            {!businessHours.open &&
-                                businessHours.nextOpenAt && (
-                                    <p className="mt-1 leading-5">
-                                        다음 업무 시작:{" "}
-                                        {new Date(
-                                            businessHours.nextOpenAt,
-                                        ).toLocaleString("ko-KR", {
-                                            timeZone: businessHours.timezone,
-                                        })}
-                                    </p>
-                                )}
-                        </details>
-                    )}
-                </article>
-
-                {hasConversations && (
-                    <button
-                        type="button"
-                        disabled={busy || loading}
-                        onClick={onConversations}
-                        className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm disabled:opacity-50"
-                    >
-                        <MessageCircle
-                            size={20}
-                            style={{ color }}
-                            aria-hidden="true"
-                        />
-                        <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold">
-                                이전 대화 이어보기
-                            </span>
-                            <span className="mt-1 block text-xs text-gray-500">
-                                {unread
-                                    ? `확인하지 않은 답변 ${unread}개`
-                                    : "남긴 문의와 답변을 확인하세요"}
-                            </span>
-                        </span>
-                        {unread > 0 && (
-                            <span
-                                className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-                                style={{ backgroundColor: color }}
-                            >
-                                {unread > 99 ? "99+" : unread}
-                            </span>
-                        )}
-                        <ChevronRight
-                            size={16}
-                            className="text-gray-400"
-                            aria-hidden="true"
-                        />
-                    </button>
-                )}
-            </section>
-            <div className="shrink-0 border-t border-gray-100 bg-white px-5 py-3">
+                </div>
                 <button
                     type="button"
                     disabled={busy || loading}
                     onClick={onStart}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ backgroundColor: color }}
                 >
-                    {loading
-                        ? "상담을 준비하고 있어요…"
-                        : returning || hasConversations
-                          ? "상담 새로 열기"
-                          : "상담 시작하기"}
+                    {loading ? "상담을 준비하고 있어요…" : "문의하기"}
+                    {!loading && <Send size={15} aria-hidden="true" />}
                 </button>
-                <p className="mt-3 text-center text-xs leading-5 text-gray-400">
-                    {settings?.enabled && settings.consultationUrl ? (
-                        <a
-                            href={settings.consultationUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-violet-700"
-                        >
-                            처음이시라면 1:1 도입 상담 신청하기 ↗
-                        </a>
-                    ) : (
-                        "메시지를 남기면 이곳에서 답변을 확인할 수 있어요."
-                    )}
+                <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+                    <span className={`h-2 w-2 rounded-full ${quick ? "bg-emerald-500" : "bg-gray-300"}`} aria-hidden="true" />
+                    {quick ? "몇 분 내 답변 받으실 수 있어요" : nextOpenText(businessHours)}
                 </p>
-            </div>
-        </div>
+            </article>
+
+            {hasConversations && (
+                <button
+                    type="button"
+                    disabled={busy || loading}
+                    onClick={onConversations}
+                    className="mt-3 flex w-full items-center gap-3 rounded-2xl bg-white px-5 py-4 text-left disabled:opacity-50"
+                >
+                    <MessageCircle size={20} style={{ color }} aria-hidden="true" />
+                    <span className="min-w-0 flex-1 text-sm font-semibold">
+                        이전 대화 이어보기
+                        {unread > 0 && <span className="ml-1.5 font-normal text-gray-500">답변 {unread > 99 ? "99+" : unread}개</span>}
+                    </span>
+                    <ChevronRight size={16} className="text-gray-400" aria-hidden="true" />
+                </button>
+            )}
+
+            {settings?.phoneEnabled && settings.phone && (
+                <a
+                    href={`tel:${settings.phone.replace(/[^\d+]/g, "")}`}
+                    title={settings.phone}
+                    className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white py-3 pl-5 pr-3"
+                >
+                    <span className="text-sm font-semibold text-gray-500">다른 방법으로 문의</span>
+                    <span
+                        className="flex h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: `${color}1f`, color }}
+                        aria-label={`전화 문의 ${settings.phone}`}
+                    >
+                        <Phone size={18} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    </span>
+                </a>
+            )}
+
+            {settings?.links?.map((link) => (
+                <a
+                    key={`${link.label}:${link.url}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white py-3 pl-5 pr-3"
+                >
+                    <span className="min-w-0 truncate text-sm font-semibold text-gray-500">{link.label}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}1f`, color }}>
+                        <ArrowUpRight size={19} strokeWidth={2.4} aria-hidden="true" />
+                    </span>
+                </a>
+            ))}
+        </section>
     );
+}
+
+/** 운영시간 밖일 때 — "내일 오전 10:00부터 답변드려요" */
+function nextOpenText(hours?: MessengerBusinessHours | null) {
+    if (!hours?.nextOpenAt) return "지금은 운영시간이 아니에요";
+    const tz = hours.timezone || "Asia/Seoul";
+    const at = new Date(hours.nextOpenAt);
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: tz });
+    const diff = Math.round((Date.parse(day(at)) - Date.parse(day(new Date()))) / 86_400_000);
+    const when =
+        diff <= 0 ? "오늘" : diff === 1 ? "내일" : at.toLocaleDateString("ko-KR", { timeZone: tz, month: "long", day: "numeric", weekday: "short" });
+    return `${when} ${at.toLocaleTimeString("ko-KR", { timeZone: tz, hour: "numeric", minute: "2-digit" })}부터 답변드려요`;
 }

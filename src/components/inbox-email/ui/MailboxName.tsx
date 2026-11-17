@@ -1,4 +1,6 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { toast } from "sonner";
 import { renameEmailMailbox } from "../api";
@@ -15,7 +17,7 @@ export function MailboxName({
         [busy, setBusy] = useState(false);
     return (
         <form
-            className="space-y-2"
+            className="space-y-1.5"
             onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
@@ -27,7 +29,7 @@ export function MailboxName({
                         name.trim(),
                     );
                     await onChange();
-                    toast.success("보내는 이름을 저장했습니다. 다음 답장부터 적용됩니다.");
+                    toast.success("저장했어요.");
                 } catch (e) {
                     toast.error((e as Error).message);
                 } finally {
@@ -35,24 +37,13 @@ export function MailboxName({
                 }
             }}
         >
-            <label className="block text-sm">
-                보내는 이름 (고객에게 표시)
-                <input
-                    aria-label={`${box.address} 보내는 이름`}
-                    className="mt-1 w-full rounded border p-2"
-                    required
-                    maxLength={100}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={busy}
-                />
-            </label>
-            <button
-                className="rounded border px-3 py-2 text-sm"
-                disabled={busy || !name.trim() || name.trim() === box.name}
-            >
-                보내는 이름 저장
-            </button>
+            <span className="block text-sm font-medium">보내는 이름</span>
+            <div className="flex gap-2">
+                <Input aria-label={`${box.address} 보내는 이름`} className="border-border/70" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
+                <Button type="submit" variant="outline" className="border-border/70" disabled={busy || !name.trim() || name.trim() === box.name}>
+                    저장
+                </Button>
+            </div>
         </form>
     );
 }

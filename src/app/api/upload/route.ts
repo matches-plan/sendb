@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
         }
 
         const ext = file.name.split(".").pop() || "png";
-        const key = `alimtalk/${randomBytes(12).toString("hex")}.${ext}`;
+        // 상담창 프로필 이미지는 따로 모아 둔다. 그 밖은 기존처럼 알림톡 폴더
+        const folder = formData.get("folder") === "messenger" ? "messenger" : "alimtalk";
+        const key = `${folder}/${randomBytes(12).toString("hex")}.${ext}`;
         const buffer = Buffer.from(await file.arrayBuffer());
 
         const url = await uploadToR2(buffer, key, file.type);

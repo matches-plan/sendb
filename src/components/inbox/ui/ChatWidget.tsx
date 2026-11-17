@@ -3,18 +3,13 @@ import { FormattedText } from "./FormattedText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import {
-    ArrowLeft,
     ArrowUp,
-    Home,
-    LogOut,
-    MessageCircle,
-    Plus,
     RotateCcw,
 } from "lucide-react";
-import { WelcomeProcess } from "@/components/customer-messenger/ui/WelcomeProcess";
 import { ReplyContactForm } from "@/components/customer-messenger/ui/ReplyContactForm";
 import type { MessengerBrand, PublicMessengerSettings } from "@/components/customer-messenger/types";
-import { BrandMark } from "@/components/customer-messenger/ui/BrandMark";
+import { ChatHeader, HomeNav } from "@/components/customer-messenger/ui/ChatChrome";
+import { CustomerMessage, StaffMessage, customerBubbleClass, messageTime } from "@/components/customer-messenger/ui/ChatMessage";
 import type { ReplyContactDraft } from "@/lib/customer-messenger/rules";
 import { MessengerHome } from "@/components/customer-messenger/ui/MessengerHome";
 import { inboxRequest, InboxRequestError } from "../api";
@@ -277,6 +272,8 @@ export function ChatWidget({
         scroll = useRef<HTMLDivElement>(null),
         follow = useRef(true);
     const storageKey = `sendb-chat:${channelKey}`;
+    // 답변 알림 링크의 열쇠 (처음 한 번만 주소에서 읽고 지운다)
+    const resumeParam = useRef<string | null | undefined>(undefined);
     const threads = useVisitorThreads(storageKey, baseUrl, !history.enabled);
     // 이 브라우저가 연 비회원 대화를 목록에 기억한다
     useEffect(() => {
@@ -388,11 +385,29 @@ export function ChatWidget({
         setManaged(false);
         setIsHome(true);
         setConfiguration(null);
-        try {
-            setToken(localStorage.getItem(storageKey) ?? "");
-        } catch {
-            /* 저장이 제한되어도 현재 창에서는 상담 가능 */
+        // 답변 알림 링크(?resume=열쇠)로 열면 그 상담을 바로 보여준다 — 다른 기기에서도 지난 대화를 볼 수 있다
+        if (resumeParam.current === undefined) {
+            const url = new URL(window.location.href);
+            const value = window.parent === window ? url.searchParams.get("resume") : null;
+            resumeParam.current = value && /^[a-f0-9]{64}$/.test(value) ? value : null;
+            if (value) {
+                url.searchParams.delete("resume");
+                window.history.replaceState(null, "", url.href);
+            }
         }
+        const resume = resumeParam.current;
+        if (resume) {
+            setToken(resume);
+            setIsHome(false);
+            try {
+                localStorage.setItem(storageKey, resume);
+            } catch {}
+        } else
+            try {
+                setToken(localStorage.getItem(storageKey) ?? "");
+            } catch {
+                /* 저장이 제한되어도 현재 창에서는 상담 가능 */
+            }
         setReady(true);
     }, [storageKey, resetAttachments]);
     useEffect(() => {
@@ -633,7 +648,7 @@ export function ChatWidget({
     ]);
     useEffect(() => {
         if (
-            !config.data?.messengerSettings?.enabled ||
+            !config.data?.messengerSettings?.emailNotifications ||
             !opened ||
             isHome ||
             isList ||
@@ -668,7 +683,7 @@ export function ChatWidget({
         document.addEventListener("visibilitychange", seen);
         return () => document.removeEventListener("visibilitychange", seen);
     }, [
-        config.data?.messengerSettings?.enabled,
+        config.data?.messengerSettings?.emailNotifications,
         opened,
         isHome,
         isList,
@@ -818,6 +833,9 @@ export function ChatWidget({
             </div>
         );
     const color = config.data?.color ?? "#635BFF";
+    const channelName = config.data?.name ?? "고객 상담";
+    const avatar = config.data?.messengerSettings?.profileImageUrl || brand?.iconUrl;
+    const contactSettings = config.data?.messengerSettings;
     async function send() {
         if (
             busy ||
@@ -937,6 +955,7 @@ export function ChatWidget({
                   (message) =>
                       message.kind === "customer" || message.kind === "reply",
               );
+    const firstCustomer = messages.findIndex((m) => m.kind === "customer");
     const unreadCount = history.enabled
         ? (history.unreadCount ?? 0)
         : (data.data?.messages.filter(
@@ -1012,18 +1031,10 @@ export function ChatWidget({
                     name={config.data?.name ?? "고객 상담"}
                     greeting={config.data?.greeting ?? ""}
                     settings={config.data?.messengerSettings}
-                    customerName={data.data?.profile.name}
                     color={color}
                     businessHours={config.data?.businessHours}
                     busy={navigationBusy}
                     loading={!config.data}
-                    returning={
-                        !history.enabled &&
-                        !!token &&
-                        detailResolved &&
-                        messages.length > 0 &&
-                        !closedVisitorChat
-                    }
                     unread={unreadCount}
                     hasConversations={
                         history.enabled
@@ -1045,55 +1056,28 @@ export function ChatWidget({
                 />
             ) : (
                 <>
-                    <header className="flex shrink-0 items-center gap-3 border-b border-gray-100 bg-white px-4 py-4">
-                        <button
-                            type="button"
-                            aria-label="상담 홈으로"
-                            onClick={() => {
-                                setThreadList(false);
-                                setIsHome(true);
-                            }}
-                            className="rounded-xl p-2 text-gray-500 hover:bg-gray-50"
-                        >
-                            <ArrowLeft size={20} aria-hidden="true" />
-                        </button>
-                        <div className="min-w-0 flex-1">
-                            <h1 className="truncate text-base font-semibold">
-                                <BrandMark brand={brand} name={config.data?.name ?? "고객 상담"} />
-                            </h1>
-                        </div>
-                        {history.enabled && (
-                            <button
-                                type="button"
-                                aria-label="새 문의"
-                                disabled={navigationBusy}
-                                onClick={() => changeConversation("new")}
-                                className="rounded-xl p-2 disabled:opacity-50"
-                                style={{ color }}
-                            >
-                                <Plus size={20} aria-hidden="true" />
-                            </button>
-                        )}
-                        {/* 대화 화면에서는 항상 보인다. 진행 중인 상담이 있을 때만 확인창을 띄우고, 아니면 바로 홈으로 */}
-                        {!isList && !threadList && (
-                            <button
-                                type="button"
-                                aria-label="채팅 나가기"
-                                title="채팅 나가기"
-                                disabled={navigationBusy}
-                                onClick={() => {
-                                    if (!readOnly && !isNew && !!data.data?.conversationId && data.data.status !== "closed") setLeaveOpen(true);
-                                    else {
-                                        if (closedVisitorChat) resetVisitorSession();
-                                        setIsHome(true);
-                                    }
-                                }}
-                                className="rounded-xl p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <LogOut size={20} aria-hidden="true" />
-                            </button>
-                        )}
-                    </header>
+                    {/* 나가기: 진행 중인 상담이 있을 때만 확인창을 띄우고, 아니면 바로 홈으로 */}
+                    <ChatHeader
+                        name={channelName}
+                        avatar={avatar}
+                        color={color}
+                        onBack={() => {
+                            setThreadList(false);
+                            setIsHome(true);
+                        }}
+                        leaveDisabled={navigationBusy}
+                        onLeave={
+                            isList || threadList
+                                ? undefined
+                                : () => {
+                                      if (!readOnly && !isNew && !!data.data?.conversationId && data.data.status !== "closed") setLeaveOpen(true);
+                                      else {
+                                          if (closedVisitorChat) resetVisitorSession();
+                                          setIsHome(true);
+                                      }
+                                  }
+                        }
+                    />
                     {hasDeferredDraft && (
                         <div
                             role="status"
@@ -1158,64 +1142,11 @@ export function ChatWidget({
                                 role="log"
                                 aria-label="고객 상담 대화"
                             >
-                                {config.data?.messengerSettings?.enabled &&
-                                    !readOnly &&
-                                    (!detailPending || isNew) && (
-                                        <>
-                                            {messages.length === 0 && (
-                                                <WelcomeProcess
-                                                    settings={
-                                                        config.data
-                                                            .messengerSettings
-                                                    }
-                                                    customerName={
-                                                        data.data?.profile.name
-                                                    }
-                                                    greeting={
-                                                        config.data.greeting
-                                                    }
-                                                    compact
-                                                />
-                                            )}
-                                            <ReplyContactForm
-                                                key={`${draftSessionKey(token)}:${draftKey}`}
-                                                channelKey={channelKey}
-                                                token={token}
-                                                conversationId={
-                                                    isNew
-                                                        ? undefined
-                                                        : detailResolved
-                                                          ? data.data
-                                                                ?.conversationId
-                                                          : undefined
-                                                }
-                                                profile={data.data?.profile}
-                                                emailAvailable={
-                                                    config.data
-                                                        .messengerSettings
-                                                        .emailNotifications
-                                                }
-                                                initialDraft={
-                                                    contactSeed &&
-                                                    contactSeed.id ===
-                                                        data.data
-                                                            ?.conversationId
-                                                        ? contactSeed.draft
-                                                        : null
-                                                }
-                                                onDraft={(draft) => {
-                                                    replyContactDraft.current =
-                                                        draft
-                                                            ? {
-                                                                  token,
-                                                                  key: draftKey,
-                                                                  draft,
-                                                              }
-                                                            : null;
-                                                }}
-                                            />
-                                        </>
-                                    )}
+                                {config.data && !readOnly && !messages.length && (isNew || !detailPending) && (
+                                    <StaffMessage name={channelName} avatar={avatar} color={color}>
+                                        <FormattedText text={config.data.greeting} />
+                                    </StaffMessage>
+                                )}
                                 {detailPending && !data.error && (
                                     <p
                                         role="status"
@@ -1335,116 +1266,73 @@ export function ChatWidget({
                                             이전 메시지 보기
                                         </button>
                                     )}
-                                {(isNew || (!token && !messages.length)) && (
-                                    <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                                        <h2 className="font-semibold text-gray-900">
-                                            {config.data?.messengerSettings?.aiAvailable ? "안녕하세요, AI 상담원입니다 🙂" : "무엇이 궁금하신가요?"}
-                                        </h2>
-                                        <p className="mt-1">
-                                            {config.data?.messengerSettings?.aiAvailable
-                                                ? "궁금한 점을 남겨주시면 바로 안내할게요. 담당자 상담이 필요하면 아래에서 연결을 요청해주세요."
-                                                : "편하게 질문을 남겨주세요. 이 대화에서 답변드릴게요."}
-                                        </p>
-                                    </div>
-                                )}
-                                {!token &&
-                                    !config.data?.messengerSettings
-                                        ?.enabled && (
-                                        <details className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
-                                            <summary className="cursor-pointer text-xs font-medium text-gray-500">
-                                                이름·이메일 남기기 (선택)
-                                            </summary>
-                                            <label className="block text-xs text-gray-500">
-                                                이름 (선택)
-                                                <input
-                                                    aria-label="방문자 이름"
-                                                    value={name}
-                                                    maxLength={100}
-                                                    onChange={(e) =>
-                                                        setName(e.target.value)
-                                                    }
-                                                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900"
-                                                    placeholder="이름 또는 닉네임"
-                                                />
-                                            </label>
-                                            <label className="block text-xs text-gray-500">
-                                                이메일 (선택)
-                                                <input
-                                                    aria-label="방문자 이메일"
-                                                    type="email"
-                                                    value={email}
-                                                    maxLength={254}
-                                                    onChange={(e) =>
-                                                        setEmail(e.target.value)
-                                                    }
-                                                    className="mt-1.5 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900"
-                                                    placeholder="이메일 주소 (선택)"
-                                                />
-                                            </label>
-                                            <p className="text-[10px] leading-relaxed text-gray-400">
-                                                이름과 연락처는 이 문의의
-                                                상담·응대를 위해 저장됩니다.
-                                                답변은 이 상담창에서
-                                                확인해주세요.
-                                            </p>
-                                        </details>
-                                    )}
-                                {messages.map((m) => (
-                                    <div
-                                        className={`flex ${m.kind === "customer" ? "justify-end" : "justify-start"}`}
-                                        key={m.id}
-                                    >
-                                        <div className="max-w-[85%]">
-                                            <p
-                                                className={`mb-1.5 text-[10px] text-gray-400 ${m.kind === "customer" ? "text-right" : ""}`}
-                                            >
-                                                {m.authorName} ·{" "}
-                                                <time dateTime={m.createdAt}>
-                                                    {readOnly
-                                                        ? customerConversationTimestamp(
-                                                              m.createdAt,
-                                                          )
-                                                        : new Date(
-                                                              m.createdAt,
-                                                          ).toLocaleTimeString(
-                                                              "ko-KR",
-                                                              {
-                                                                  hour: "2-digit",
-                                                                  minute: "2-digit",
-                                                              },
-                                                          )}
-                                                </time>
-                                            </p>
+                                {messages.map((m, i) => {
+                                    const time = (
+                                        <time dateTime={m.createdAt}>
+                                            {readOnly ? customerConversationTimestamp(m.createdAt) : messageTime(m.createdAt)}
+                                        </time>
+                                    );
+                                    const files = (
+                                        <AttachmentList
+                                            files={m.attachments}
+                                            url={(id) =>
+                                                `${baseUrl}/attachments/${id}${selectedId ? `?conversationId=${encodeURIComponent(selectedId)}` : ""}`
+                                            }
+                                            headers={{
+                                                Authorization: `Bearer ${token}`,
+                                            }}
+                                        />
+                                    );
+                                    return m.kind === "customer" ? (
+                                        <div key={m.id} className="space-y-4">
+                                            <CustomerMessage time={time}>
+                                                {m.body && (
+                                                    <div className={customerBubbleClass}>
+                                                        <FormattedText text={m.body} />
+                                                    </div>
+                                                )}
+                                                {files}
+                                            </CustomerMessage>
+                                            {/* 업무시간 밖이면 고객 첫 메시지 뒤에 부재 안내 (상담 설정 › 업무 시간 › 업무시간 밖 안내) */}
+                                            {i === firstCustomer && !readOnly && !isNew && !config.data?.messengerSettings?.aiAvailable && config.data?.businessHours && !config.data.businessHours.open && config.data.businessHours.awayMessage && (
+                                                <StaffMessage name={channelName} avatar={avatar} color={color} time={time}>
+                                                    <p className="whitespace-pre-wrap">{config.data.businessHours.awayMessage}</p>
+                                                </StaffMessage>
+                                            )}
+                                            {/* 고객이 처음 남긴 메시지 바로 뒤에 연락처 받기 */}
+                                            {i === firstCustomer && contactSettings?.contactEnabled && !readOnly && !isNew && detailResolved && data.data?.conversationId && (
+                                                <StaffMessage name={channelName} avatar={avatar} color={color} time={time}>
+                                                    <p className="whitespace-pre-wrap">{contactSettings.contactPrompt}</p>
+                                                    <ReplyContactForm
+                                                        key={`${draftSessionKey(token)}:${data.data.conversationId}`}
+                                                        channelKey={channelKey}
+                                                        color={color}
+                                                        token={token}
+                                                        conversationId={data.data.conversationId}
+                                                        fields={contactSettings.contactFields}
+                                                        profile={data.data.profile}
+                                                        initialDraft={contactSeed && contactSeed.id === data.data.conversationId ? contactSeed.draft : null}
+                                                        onDraft={(draft) => {
+                                                            replyContactDraft.current = draft ? { token, key: draftKey, draft } : null;
+                                                        }}
+                                                    />
+                                                </StaffMessage>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <StaffMessage key={m.id} name={channelName} avatar={avatar} color={color} time={time}>
                                             {m.body && (
-                                                <div
-                                                    className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-[15px] leading-[1.6] ${m.kind === "customer" ? "rounded-tr-md text-white" : "rounded-tl-md bg-gray-100"}`}
-                                                    style={
-                                                        m.kind === "customer"
-                                                            ? {
-                                                                  backgroundColor:
-                                                                      color,
-                                                              }
-                                                            : {}
-                                                    }
-                                                >
+                                                <div className="whitespace-pre-wrap">
                                                     <FormattedText text={m.body} />
                                                 </div>
                                             )}
-                                            <AttachmentList
-                                                files={m.attachments}
-                                                url={(id) =>
-                                                    `${baseUrl}/attachments/${id}${selectedId ? `?conversationId=${encodeURIComponent(selectedId)}` : ""}`
-                                                }
-                                                headers={{
-                                                    Authorization: `Bearer ${token}`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
+                                            {files}
+                                        </StaffMessage>
+                                    );
+                                })}
                                 {/* AI가 답장을 만드는 동안 점 세 개가 움직인다 */}
                                 {!isNew && data.data?.aiTyping && (
-                                    <div role="status" aria-label="답변을 작성하고 있어요" className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3.5">
+                                    <div role="status" aria-label="답변을 작성하고 있어요" className="flex w-fit items-center gap-1 py-2">
                                         {[0, 150, 300].map((delay) => (
                                             <span
                                                 key={delay}
@@ -1481,22 +1369,20 @@ export function ChatWidget({
                                     회원 상담 이력을 연결하고 있습니다…
                                 </p>
                             )}
-                            {config.data?.messengerSettings?.enabled &&
+                            {config.data &&
                                 data.data?.aiState === "human" &&
                                 !readOnly &&
                                 !isNew && (
                                     <p
                                         role="status"
-                                        className="border-t bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-900"
+                                        className="border-t bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600"
                                     >
                                         {config.data.businessHours?.open
                                             ? "상담원 연결 요청을 접수했습니다 🙂 궁금하신 점을 미리 남겨주시면 더 빠른 상담이 가능해요."
                                             : "현재는 고객센터 운영시간 밖입니다. 문의를 미리 남겨주시면 다음 운영시간에 담당자가 이어서 안내드립니다."}
                                     </p>
                                 )}
-                            {(token ||
-                                config.data?.messengerSettings?.enabled) &&
-                                !readOnly && (
+                            {!readOnly && (
                                     <button
                                         type="button"
                                         disabled={
@@ -1686,42 +1572,7 @@ export function ChatWidget({
                 </>
             )}
             {isHome && (
-            <nav
-                aria-label="상담창 메뉴"
-                className="grid shrink-0 grid-cols-2 border-t border-gray-100 bg-white p-2"
-            >
-                <button
-                    type="button"
-                    aria-pressed={isHome}
-                    onClick={() => setIsHome(true)}
-                    className="flex flex-col items-center gap-1 rounded-xl py-2 text-[11px]"
-                    style={{ color: isHome ? color : "#9ca3af" }}
-                >
-                    <Home size={20} aria-hidden="true" />홈
-                </button>
-                <button
-                    type="button"
-                    aria-pressed={!isHome}
-                    disabled={navigationBusy || !config.data}
-                    onClick={showConversations}
-                    className="relative flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] disabled:opacity-50"
-                    style={{ color: !isHome ? color : "#9ca3af" }}
-                >
-                    <span className="relative">
-                        <MessageCircle size={20} aria-hidden="true" />
-                        {unreadCount > 0 && (
-                            <span
-                                className="absolute -right-3 -top-1 rounded-full px-1 text-[9px] text-white"
-                                style={{ backgroundColor: color }}
-                                aria-label={`안 읽은 답변 ${unreadCount}개`}
-                            >
-                                {unreadCount > 99 ? "99+" : unreadCount}
-                            </span>
-                        )}
-                    </span>
-                    대화
-                </button>
-            </nav>
+                <HomeNav color={color} unread={unreadCount} disabled={navigationBusy || !config.data} onHome={() => setIsHome(true)} onChats={showConversations} />
             )}
         </div>
     );

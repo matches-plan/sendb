@@ -4,6 +4,7 @@ import {
     inboxNotifications as notices,
     inboxChannels,
     inboxConversations,
+    inboxResponders,
     organizationMembers,
     users,
 } from "@/lib/db";
@@ -91,6 +92,8 @@ export async function saveMessageMentions(
                 eq(organizationMembers.organizationId, chat.orgId),
                 inArray(users.id, ids),
                 eq(users.isActive, 1),
+                // 이 사업의 상담 담당자(상담 설정 › 상담 담당자)만 멘션할 수 있다
+                sql`EXISTS (SELECT 1 FROM ${inboxResponders} r WHERE r.user_id = ${users.id} AND r.org_id = ${chat.orgId} AND r.workspace_id = (SELECT workspace_id FROM ${inboxChannels} WHERE id=${chat.channelId} AND org_id=${chat.orgId}))`,
                 customerAccessPredicate(
                     chat.orgId,
                     users.id,
@@ -101,7 +104,7 @@ export async function saveMessageMentions(
         );
     if (people.length !== ids.length)
         throw new InboxError(
-            "멘션할 팀원의 사업 접근 권한이 변경됐습니다. 대상을 다시 확인해주세요.",
+            "멘션할 팀원이 이 사업의 상담 담당자가 아닙니다. 대상을 다시 확인해주세요.",
             409,
         );
     await exec.insert(mentions).values(

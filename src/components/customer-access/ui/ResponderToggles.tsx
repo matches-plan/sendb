@@ -19,7 +19,7 @@ export function ResponderToggles({ workspaceId, canManage, onSaved }: { workspac
     const members = (roster.data?.members ?? []).filter((m) => m.active === 1);
     const error = roster.error ?? responders.error;
     return (
-        <SettingsSection title="상담 담당자" description="이 사업의 상담을 맡을 직원의 상담권한을 켜주세요. 켜진 직원만 담당자로 지정되고 답장할 수 있으며, 담당자 없는 문의 알림을 받아요.">
+        <SettingsSection title="상담 담당자">
             {error && <p role="alert" className="text-sm text-red-700">{error.message}</p>}
             {(!roster.data || !responders.data) && !error && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
             {roster.data && responders.data && (

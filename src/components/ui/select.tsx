@@ -51,8 +51,9 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
-  align = "center",
+  // 드롭다운은 항상 선택칸 바로 아래(공간이 없으면 위)에 왼쪽 맞춰 연다 — 선택칸을 덮지 않게
+  position = "popper",
+  align = "start",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (

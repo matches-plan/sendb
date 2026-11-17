@@ -19,7 +19,7 @@ import { ConversationJourneyPanel } from "@/components/inbox-journey/ui/Conversa
 import { EmailReplyRecipients } from "@/components/inbox-email/ui/EmailReplyRecipients";
 import { useEmailReply } from "@/components/inbox-email/hooks/useEmailReply";
 import { useNoteMentions } from "@/components/inbox-collaboration/hooks/useNoteMentions";
-import { NoteMentions } from "@/components/inbox-collaboration/ui/NoteMentions";
+import { mentionPattern } from "@/components/inbox-collaboration/utils/mentions";
 import { MentionTargetCard } from "@/components/inbox-collaboration/ui/MentionTargetCard";
 import { SupportDraftPanel } from "@/components/customer-ai/ui/SupportDraftPanel";
 import { TeamAssignment } from "@/components/inbox-routing/ui/TeamAssignment";
@@ -30,6 +30,8 @@ import { FollowConversation } from "@/components/inbox-follow/ui/FollowConversat
 import { useFollow } from "@/components/inbox-follow/hooks/useFollow";
 import { MacroPicker } from "@/components/inbox-macros/ui/MacroPicker";
 import { useMacroPicker } from "@/components/inbox-macros/hooks/useMacroPicker";
+import { MentionPicker } from "@/components/inbox-collaboration/ui/MentionPicker";
+import { useMentionPicker } from "@/components/inbox-collaboration/hooks/useMentionPicker";
 import { RichTextInput } from "@/components/inbox-composer/ui/RichTextInput";
 import type { Editor } from "@tiptap/react";
 import { ConversationPresence } from "@/components/inbox-presence/ui/ConversationPresence";
@@ -89,11 +91,6 @@ export function ConversationPane({
         sharedDrafts.active;
     const draftStorageKey = inboxDraftStorageKey(userId, chat.id);
     const emailReply = useEmailReply(chat.emailContext, draftStorageKey);
-    const noteMentions = useNoteMentions(
-        draftStorageKey,
-        bootstrap.mentionMembers ?? bootstrap.members,
-        workspaceId,
-    );
     // 오른쪽 고객 정보 패널 열림 — 사람마다 브라우저에 기억
     const [infoOpen, setInfoOpenState] = useState(() => {
         try {
@@ -150,6 +147,19 @@ export function ConversationPane({
     const draftKey = `${chat.id}:${kind}`,
         text = drafts[draftKey] ?? "";
     const busy = sharedDrafts.pending[draftKey]?.busy ?? false;
+    // 멘션은 메모 글의 "@이름"으로 정한다. 대상은 이 사업의 상담 담당자(나 제외)
+    const noteMentions = useNoteMentions(bootstrap.members, workspaceId ?? undefined, drafts[`${chat.id}:note`] ?? "", userId);
+    const mentionNames = noteMentions.candidates.map((m) => m.name).join("\n");
+    const highlightMentions = useMemo(() => {
+        const names = mentionNames ? mentionNames.split("\n") : [];
+        return (value: string) =>
+            names.flatMap((name) =>
+                [...value.matchAll(mentionPattern(name, "g"))].map((m): [number, number] => {
+                    const start = m.index + m[1].length;
+                    return [start, start + name.length + 1];
+                }),
+            );
+    }, [mentionNames]);
     useEffect(() => {
         onActivity(null);
         return () => onActivity(null);
@@ -165,6 +175,7 @@ export function ConversationPane({
     const unreachable = !!chat.customerLeft && !chat.contactId;
     const [editor, setEditor] = useState<Editor | null>(null);
     const macro = useMacroPicker({ workspaceId, editor });
+    const mention = useMentionPicker({ editor, enabled: kind === "note", candidates: noteMentions.candidates });
     const [dragging, setDragging] = useState(false);
     const composerLocked =
         busy || (kind === "reply" && chat.status === "closed");
@@ -177,7 +188,6 @@ export function ConversationPane({
             setAiDraftId(null);
             emailReply.reset();
         }
-        if (completion.current.note !== noteCompleted) noteMentions.clear();
         completion.current = { reply: replyCompleted, note: noteCompleted };
     }, [replyCompleted, noteCompleted]); // eslint-disable-line react-hooks/exhaustive-deps
     const uploadUrl = `/api/inbox/conversations/${chat.id}/attachments`;
@@ -666,6 +676,9 @@ ${body}` : body, key);
                             {macro.open && (
                                 <MacroPicker items={macro.items} active={macro.active} onHover={macro.setActive} onPick={macro.pick} />
                             )}
+                            {mention.open && (
+                                <MentionPicker items={mention.items} active={mention.active} onHover={mention.setActive} onPick={mention.pick} />
+                            )}
                             <div className="mb-2 flex gap-1 text-xs">
                                 <button
                                     type="button"
@@ -691,15 +704,10 @@ ${body}` : body, key);
                                     disabled={busy}
                                 />
                             )}
-                            {kind === "note" && (
-                                <NoteMentions
-                                    state={noteMentions}
-                                    busy={busy}
-                                />
-                            )}
                             <RichTextInput
                                 key={draftKey}
                                 ariaLabel={kind === "note" ? "내부 메모 입력" : "고객 답변 입력"}
+                                highlight={kind === "note" ? highlightMentions : undefined}
                                 value={text}
                                 onEditor={setEditor}
                                 onChange={(value) => {
@@ -709,6 +717,7 @@ ${body}` : body, key);
                                 onBlur={() => onActivity(null)}
                                 onKeyDown={(e) => {
                                     if (macro.onKeyDown(e)) return true;
+                                    if (mention.onKeyDown(e)) return true;
                                     if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing) {
                                         void send();
                                         return true;
@@ -718,7 +727,7 @@ ${body}` : body, key);
                                 disabled={composerLocked}
                                 placeholder={
                                     kind === "note"
-                                        ? "팀원만 볼 수 있는 메모를 남겨주세요. (Ctrl / ⌘ + Enter로 저장)"
+                                        ? "팀원만 볼 수 있는 메모 (@로 팀원 멘션 · Ctrl / ⌘ + Enter로 저장)"
                                         : chat.status === "closed"
                                           ? "종료된 상담입니다. 다시 열면 답변할 수 있어요."
                                           : "고객에게 보낼 메시지를 입력하세요. (#으로 매크로 · Ctrl / ⌘ + Enter로 전송)"
@@ -770,11 +779,6 @@ ${body}` : body, key);
                                         onSelect={attachments.select}
                                         onError={(message) => toast.error(message)}
                                     />
-                                    {kind === "note" && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                            고객에게 보이지 않습니다
-                                        </span>
-                                    )}
                                 </div>
                                 <button
                                     aria-label={busy ? "전송 중" : kind === "note" ? "메모 저장" : chat.medium === "email" ? "메일 발송 예약" : "답변 전송"}
