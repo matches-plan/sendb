@@ -102,6 +102,49 @@ function NavLinks({
     );
 }
 
+/** 메뉴 스크롤 위치를 기억한다 — 아래쪽 메뉴를 눌러 페이지가 바뀌어도(사이드바를 다시 그려도) 그 자리 그대로 */
+function useKeptScroll(key: string) {
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        let saved = 0;
+        try {
+            saved = Number(sessionStorage.getItem(key)) || 0;
+        } catch {
+            /* 저장소를 못 쓰면 맨 위 */
+        }
+        // 메뉴가 늦게 채워져도(권한·조직을 받은 뒤) 처음 자리로 맞춘다. 사람이 스크롤하면 그때부터는 그대로 둔다
+        let restoring = saved > 0;
+        const restore = () => {
+            if (restoring) el.scrollTop = saved;
+            if (el.scrollTop >= saved) restoring = false;
+        };
+        restore();
+        const observer = new ResizeObserver(restore);
+        if (el.firstElementChild) observer.observe(el.firstElementChild);
+        const save = () => {
+            if (restoring) return;
+            try {
+                sessionStorage.setItem(key, String(el.scrollTop));
+            } catch {
+                /* 무시 */
+            }
+        };
+        const stopRestoring = () => (restoring = false);
+        el.addEventListener("scroll", save, { passive: true });
+        el.addEventListener("wheel", stopRestoring, { passive: true });
+        el.addEventListener("touchstart", stopRestoring, { passive: true });
+        return () => {
+            observer.disconnect();
+            el.removeEventListener("scroll", save);
+            el.removeEventListener("wheel", stopRestoring);
+            el.removeEventListener("touchstart", stopRestoring);
+        };
+    }, [key]);
+    return ref;
+}
+
 export function DesktopSidebar({
     collapsed,
     onToggle,
@@ -109,6 +152,7 @@ export function DesktopSidebar({
     collapsed: boolean;
     onToggle: () => void;
 }) {
+    const scrollRef = useKeptScroll("sidebar-scroll");
     return (
         <aside
             className={cn(
@@ -136,7 +180,7 @@ export function DesktopSidebar({
                 </div>
             )}
 
-            <div className="flex flex-1 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <NavLinks collapsed={collapsed} />
             </div>
 
