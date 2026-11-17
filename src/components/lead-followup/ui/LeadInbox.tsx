@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useKeyLeads } from "../hooks/useKeyLeads";
@@ -21,8 +22,8 @@ export function LeadInbox() {
     return <Card><CardHeader><CardTitle className="text-base">핵심 리드 · 후속 대응</CardTitle>
         <p className="text-xs text-muted-foreground">{criteria || "구글챗과 동일한 고객 여정 기준"} · 최대 50명</p>
         <div className="flex flex-wrap gap-2">
-            <select aria-label="리드 사업 선택" value={business} onChange={(e) => setBusiness(e.target.value)} className="rounded-md border bg-background p-2 text-sm"><option value="all">전체 사업</option>{businesses.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-            <select aria-label="처리 상태 필터" value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border bg-background p-2 text-sm"><option value="all">전체 상태</option>{Object.entries(FOLLOWUP_LABELS).map(([key, value]) => <option key={key} value={key}>{value}</option>)}<option value="overdue">연락 기한 지남</option></select>
+            <Select value={business} onValueChange={setBusiness}><SelectTrigger aria-label="리드 사업 선택" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">전체 사업</SelectItem>{businesses.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}</SelectContent></Select>
+            <Select value={status} onValueChange={setStatus}><SelectTrigger aria-label="처리 상태 필터" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">전체 상태</SelectItem>{Object.entries(FOLLOWUP_LABELS).map(([key, value]) => <SelectItem key={key} value={key}>{value}</SelectItem>)}<SelectItem value="overdue">연락 기한 지남</SelectItem></SelectContent></Select>
         </div></CardHeader><CardContent>
         {isLoading ? <p className="text-sm text-muted-foreground">불러오는 중…</p> : error ? <div role="alert"><p className="text-sm text-destructive">{error}</p><Button variant="outline" size="sm" onClick={() => void reload()}>다시 불러오기</Button></div>
             : !visible.length ? <p className="text-sm text-muted-foreground">{leads.length ? "선택한 조건의 리드가 없습니다." : "유효한 고객 여정 중 관심 높음·핵심 리드로 판정된 고객이 아직 없습니다. 새 방문부터 구글챗과 같은 판정이 쌓입니다."}</p> : <Table><TableHeader><TableRow>

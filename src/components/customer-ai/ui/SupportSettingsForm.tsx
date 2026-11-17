@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { useApprovedKnowledge } from "../hooks/useApprovedKnowledge";
@@ -73,7 +74,7 @@ export function SupportSettingsForm({
             <fieldset disabled={!canManage || busy} className="space-y-4">
                 <label className="block text-xs">
                     응대 방식
-                    <select
+                    <OptionSelect
                         aria-label="AI 응대 방식"
                         className={field}
                         value={draft.mode}
@@ -93,11 +94,11 @@ export function SupportSettingsForm({
                         <option value="reply">
                             AI 자동 답변 · 근거 부족 시 사람에게 인계
                         </option>
-                    </select>
+                    </OptionSelect>
                 </label>
                 <label className="block text-xs">
                     사용할 승인 지식
-                    <select
+                    <OptionSelect
                         aria-label="상담 승인 지식"
                         className={field}
                         value={draft.knowledgeVersionId ?? ""}
@@ -122,7 +123,7 @@ export function SupportSettingsForm({
                                 상담 근거 {k.claims}개
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
                 <div className="space-y-2 text-xs">
                     {!findOlder ? (
@@ -168,7 +169,7 @@ export function SupportSettingsForm({
                 )}
                 <label className="block text-xs">
                     AI 모델
-                    <select
+                    <OptionSelect
                         aria-label="상담 AI 모델"
                         className={field}
                         value={draft.model}
@@ -182,7 +183,7 @@ export function SupportSettingsForm({
                                 {m.configured ? "" : " · 연결 필요"}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
                 <label className="block text-xs">
                     말투·안내 지침
@@ -202,7 +203,7 @@ export function SupportSettingsForm({
                 </label>
                 <label className="block text-xs">
                     사람에게 인계할 담당자
-                    <select
+                    <OptionSelect
                         aria-label="AI 인계 담당자"
                         className={field}
                         value={draft.handoffAssigneeId ?? ""}
@@ -224,7 +225,7 @@ export function SupportSettingsForm({
                                 {m.name}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
                 <label className="block text-xs">
                     인계 시 고객에게 보여줄 안내

@@ -35,3 +35,23 @@ export function releaseSender(
 ): Promise<ApiResult<{ profileId: number; todayCap: number | null; warmupDay: number | null }>> {
     return post(`/api/email/send-health/senders/${profileId}/release`, { note: note.trim() || undefined });
 }
+
+/** 발송 경고 알림 한 줄 → 무엇이 일어났나·할 일·발송 이력 거르기 (사업부를 주면 메일 수는 그 사업부 것만) */
+export function healthAlertKey(alertId: number, workspaceId: number | null = null): string {
+    return `/api/email/send-health/alerts/${alertId}${workspaceId ? `?workspaceId=${workspaceId}` : ""}`;
+}
+
+/** 발송 이력 위 "확인할 문제" 목록 (사업부 없으면 전체) */
+export function healthProblemsKey(workspaceId: number | null): string {
+    return `/api/email/send-health/alerts${workspaceId ? `?workspaceId=${workspaceId}` : ""}`;
+}
+
+/** 확인할 문제 목록·알림 내용 키 전부 (해결·다시 시작 뒤 다시 읽기) */
+export function isHealthAlertsKey(key: unknown): boolean {
+    return typeof key === "string" && key.startsWith("/api/email/send-health/alerts");
+}
+
+/** 확인할 문제 해결 완료 (조직 구성원 누구나 — 보류·멈춤 중이면 서버가 막는다) */
+export function resolveHealthProblem(eventId: number): Promise<ApiResult<{ eventId: number }>> {
+    return post(`/api/email/send-health/events/${eventId}/resolve`, {});
+}

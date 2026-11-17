@@ -16,44 +16,36 @@ import {
 } from "@/components/ui/select";
 import { AsyncAlertDialog, useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Copy, Send, Repeat2 } from "lucide-react";
+import { Loader2, Plus, MoreHorizontal } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import AiAutoTestSendDialog from "./AiAutoTestSendDialog";
 import AiFollowupTestDialog from "./AiFollowupTestDialog";
 import { linkSenderPool } from "@/lib/email-sender-limit-rules";
 import { useSenderProfiles } from "@/components/email/sender-profiles/hooks/useSenderProfiles";
 import { splitKnownSenderIds } from "@/components/email/sender-profiles/utils/senderPool";
 import { followupBadgeLabel } from "@/components/email/sender-profiles/utils/ruleSummary";
-import { useSendQueueStats } from "@/components/email/sender-profiles/hooks/useSendQueueStats";
-import RuleQueueBadges from "@/components/email/sender-profiles/ui/RuleQueueBadges";
-import { RuleReplyBadge } from "@/components/email/replies/ui/RuleReplyBadge";
-import { useSendHealth } from "@/components/email/send-health/hooks/useSendHealth";
-import RuleHealthBadges from "@/components/email/send-health/ui/RuleHealthBadges";
 import { QueryErrorState } from "@/components/layouts/WorkspaceLayout";
 import { workspaceLabel } from "@/lib/workspace-label";
 
-const FORMAT_OPTIONS = [
-    { value: "plain", label: "간결한 텍스트" },
-    { value: "designed", label: "디자인 이메일" },
-];
-
-const TONE_OPTIONS = [
-    { value: "", label: "기본" },
-    { value: "concise", label: "간결한 (AI 티 안 나게)" },
-    { value: "professional", label: "전문적" },
-    { value: "friendly", label: "친근한" },
-    { value: "formal", label: "격식있는" },
-];
-
 interface AutoPersonalizedEmailConfigProps {
     partitions: Array<{ id: number; name: string; workspaceId: number }>;
+    /** 화면 위 사업부 탭이 고른 사업부 (null: 전체). 주면 이 카드의 사업부 선택칸은 숨긴다 */
+    workspaceId?: number | null;
 }
 
 export default function AutoPersonalizedEmailConfig({
     partitions,
+    workspaceId,
 }: AutoPersonalizedEmailConfigProps) {
     const router = useRouter();
-    const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | "all">("all");
-    const [selectedPartitionId, setSelectedPartitionId] = useState<number | "all">("all");
+    const [ownWorkspaceId, setSelectedWorkspaceId] = useState<number | "all">("all");
+    const workspaceControlled = workspaceId !== undefined;
+    const selectedWorkspaceId: number | "all" = workspaceControlled ? workspaceId ?? "all" : ownWorkspaceId;
+    const [pickedPartitionId, setSelectedPartitionId] = useState<number | "all">("all");
+    // 사업부를 바꾸면 그 사업부에 없는 파티션 선택은 '전체'로 본다
+    const selectedPartitionId: number | "all" = pickedPartitionId !== "all" && selectedWorkspaceId !== "all"
+        && !partitions.some((p) => p.id === pickedPartitionId && p.workspaceId === selectedWorkspaceId) ? "all" : pickedPartitionId;
     const [deleteTarget, setDeleteTarget] = useState<AutoPersonalizedLink | null>(null);
     // 활성 전환 요청 중인 규칙 — 같은 행 중복 조작을 막는다 (UX-148)
     const [pendingIds, setPendingIds] = useState<Set<number>>(() => new Set());
@@ -77,16 +69,15 @@ export default function AutoPersonalizedEmailConfig({
 
     // 워크스페이스 필터 적용
     const filteredPartitionIds = new Set(filteredPartitions.map((p) => p.id));
-    const links = selectedWorkspaceId === "all"
+    // 고쳐야 하는 규칙('수정 필요')을 맨 위로 — 켜진 규칙 아래에 묻혀 안 보였다
+    const links = (selectedWorkspaceId === "all"
         ? allLinks
-        : allLinks.filter((l) => l.partitionId && filteredPartitionIds.has(l.partitionId));
+        : allLinks.filter((l) => l.partitionId && filteredPartitionIds.has(l.partitionId)))
+        .slice()
+        .sort((a, b) => (b.needsReview ?? 0) - (a.needsReview ?? 0) || b.isActive - a.isActive || a.id - b.id);
     // 복제할 때 지워진 발신 프로필을 묶음에서 빼려고 지금 프로필 목록을 본다
     const { profiles: senderProfiles, isLoading: senderProfilesLoading, loadFailed: senderProfilesLoadFailed } =
         useSenderProfiles();
-    // 규칙별 대기 통수·다 나가는 날·3일치 경고 (못 읽으면 배지를 붙이지 않는다)
-    const { byLinkId: queueByLinkId } = useSendQueueStats();
-    // 명단 보류·주소 자동 멈춤 배지 (DESIGN-SND 10절) — 못 읽으면 배지만 빠진다
-    const { view: healthView, holdByPartition } = useSendHealth();
 
     const handleCreate = () => {
         const params = selectedPartitionId !== "all" ? `?partitionId=${selectedPartitionId}` : "";
@@ -217,7 +208,7 @@ export default function AutoPersonalizedEmailConfig({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <CardTitle className="whitespace-nowrap">AI 개인화 이메일 자동 발송</CardTitle>
                     <div className="flex flex-wrap items-center gap-2">
-                        {hasMultipleWorkspaces && (
+                        {hasMultipleWorkspaces && !workspaceControlled && (
                             <Select
                                 value={String(selectedWorkspaceId)}
                                 onValueChange={(v) => {
@@ -271,115 +262,69 @@ export default function AutoPersonalizedEmailConfig({
                         등록된 자동 발송 규칙이 없습니다.
                     </p>
                 ) : (
-                    <div className="space-y-3">
-                        {links.map((link) => (
-                            <div
-                                key={link.id}
-                                className="border rounded-lg p-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
-                            >
-                                <div className="flex-1 space-y-1 min-w-0">
-                                    {link.name && (
-                                        <p className="text-sm font-semibold truncate">{link.name}</p>
-                                    )}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        {link.isDraft === 1 && (
-                                            <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50">
-                                                임시저장
-                                            </Badge>
-                                        )}
-                                        <Badge variant={link.isActive === 1 ? "default" : "secondary"}>
-                                            {link.productName || "제품 미지정"}
-                                        </Badge>
-                                        {selectedPartitionId === "all" && (
-                                            <Badge variant="secondary" className="text-xs">
-                                                {(link as unknown as { partitionName?: string }).partitionName || ""}
-                                            </Badge>
-                                        )}
-                                        <Badge variant="outline">
-                                            {link.triggerType === "on_create" ? "생성 시" : "수정 시"}
-                                        </Badge>
-                                        <Badge variant="outline">
-                                            {FORMAT_OPTIONS.find((f) => f.value === link.format)?.label || "간결한 텍스트"}
-                                        </Badge>
-                                        {followupBadgeLabel(link.followupConfig) && (
-                                            <Badge variant="outline">
-                                                {followupBadgeLabel(link.followupConfig)}
-                                            </Badge>
-                                        )}
-                                        <RuleQueueBadges stats={queueByLinkId.get(link.id)} />
-                                        <RuleHealthBadges
-                                            hold={holdByPartition.get(link.partitionId)}
-                                            poolIds={linkSenderPool(link)}
-                                            senders={healthView?.senders ?? []}
-                                            heldCount={queueByLinkId.get(link.id)?.held}
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>제목</TableHead>
+                                <TableHead>파티션</TableHead>
+                                <TableHead className="w-20">사용</TableHead>
+                                <TableHead className="w-12" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {links.map((link) => (
+                                <TableRow
+                                    key={link.id}
+                                    className="cursor-pointer"
+                                    onClick={() => handleEdit(link.id, link.partitionId)}
+                                >
+                                    <TableCell className="max-w-0 w-full">
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <span className="truncate font-medium">{link.name || link.productName || "이름 없음"}</span>
+                                            {link.needsReview === 1 && (
+                                                <Badge variant="outline" className="shrink-0 border-red-300 text-red-700 bg-red-50">수정 필요</Badge>
+                                            )}
+                                            {link.abTestActive && (
+                                                <Badge variant="outline" className="shrink-0 border-violet-300 text-violet-700 bg-violet-50">AB 테스트</Badge>
+                                            )}
+                                            {link.isDraft === 1 && (
+                                                <Badge variant="outline" className="shrink-0 border-amber-400 text-amber-700 bg-amber-50">임시저장</Badge>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                                        {(link as unknown as { partitionName?: string }).partitionName
+                                            || partitions.find((p) => p.id === link.partitionId)?.name || "—"}
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                        <Switch
+                                            checked={link.isActive === 1}
+                                            onCheckedChange={() => handleToggleActive(link)}
+                                            disabled={link.isDraft === 1 || pendingIds.has(link.id)}
+                                            aria-label={link.isActive === 1 ? "자동 발송 중지" : "자동 발송 켜기"}
                                         />
-                                        <RuleReplyBadge kind="ai" ruleId={link.id} />
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        수신: {link.recipientField} | 회사: {link.companyField}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        자동 조사: {link.autoResearch === 1 ? "ON" : "OFF"}
-                                        {link.useSignaturePersona === 1 && " | 페르소나: ON"}
-                                        {link.tone && ` | 톤: ${TONE_OPTIONS.find((t) => t.value === link.tone)?.label || link.tone}`}
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                    <Button variant="outline" size="sm" onClick={() => router.push(`/email?tab=experiments&ruleId=${link.id}`)}>
-                                        문구 실험
-                                    </Button>
-                                    <Switch
-                                        checked={link.isActive === 1}
-                                        onCheckedChange={() => handleToggleActive(link)}
-                                        disabled={link.isDraft === 1 || pendingIds.has(link.id)}
-                                        aria-label={link.isActive === 1 ? "자동 발송 중지" : "자동 발송 켜기"}
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        title="테스트 발송"
-                                        onClick={() => setTestTarget(link)}
-                                    >
-                                        <Send className="h-4 w-4" />
-                                    </Button>
-                                    {followupBadgeLabel(link.followupConfig) && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            title="후속 메일 테스트"
-                                            onClick={() => setFollowupTestTarget(link)}
-                                        >
-                                            <Repeat2 className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        title="복제"
-                                        onClick={() => handleDuplicate(link)}
-                                    >
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        title="수정"
-                                        onClick={() => handleEdit(link.id, link.partitionId)}
-                                    >
-                                        <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        title="삭제"
-                                        onClick={() => setDeleteTarget(link)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                                    </TableCell>
+                                    <TableCell onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" aria-label="더보기">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onSelect={() => setTestTarget(link)}>테스트 발송</DropdownMenuItem>
+                                                {followupBadgeLabel(link.followupConfig) && (
+                                                    <DropdownMenuItem onSelect={() => setFollowupTestTarget(link)}>후속 메일 테스트</DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuItem onSelect={() => handleDuplicate(link)}>복제</DropdownMenuItem>
+                                                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(link)}>삭제</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 )}
             </CardContent>
 

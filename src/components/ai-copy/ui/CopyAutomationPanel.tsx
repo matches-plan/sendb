@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
@@ -189,7 +190,7 @@ export default function CopyAutomationPanel({
         }
     }
     return (
-        <section className="space-y-4 rounded-md border p-5">
+        <section className="space-y-4 rounded-md border border-border/40 p-5">
             {confirmationDialog}
             <div className="flex flex-wrap gap-2 items-center">
                 <h3 className="font-semibold">자동 후보 준비와 실험</h3>
@@ -202,7 +203,7 @@ export default function CopyAutomationPanel({
             <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="자동 준비 사업">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={workspace}
@@ -216,12 +217,12 @@ export default function CopyAutomationPanel({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="첫 메일 실험 진행 방식">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={experimentMode}
@@ -229,7 +230,7 @@ export default function CopyAutomationPanel({
                         >
                             <option value="auto">자동으로 개설·시작</option>
                             <option value="manual">사람이 직접 개설·시작</option>
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
             </div>
@@ -289,7 +290,7 @@ export default function CopyAutomationPanel({
                         {data.cycles
                             .filter((c) => !firstOnly || c.purpose === "initial_email")
                             .map((c) => (
-                                <article className="rounded border p-4 space-y-2" key={c.id}>
+                                <article className="rounded border border-border/40 p-4 space-y-2" key={c.id}>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <strong>
                                             {purposeLabel(c.purpose)}
@@ -513,7 +514,7 @@ function QualityEvidence({ cycle }: { cycle: Cycle }) {
                 {cycle.sample_outputs?.map(
                     (s, i) =>
                         s.output && (
-                            <div className="rounded border p-3" key={i}>
+                            <div className="rounded border border-border/40 p-3" key={i}>
                                 <strong>
                                     {s.arm === "A" ? "A 기존" : "B 후보"} · 가상 문구 예시
                                 </strong>

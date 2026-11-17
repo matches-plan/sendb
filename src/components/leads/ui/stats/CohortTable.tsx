@@ -5,7 +5,7 @@ import type { LeadStats } from "@/lib/leads/stats";
 import { StatCard } from "./Card";
 
 const INFO =
-    "들어온 달마다, 들어온 뒤 며칠 안에 전환됐는지 비율이에요.\n아직 그만큼 지나지 않은 리드는 빼고 셉니다. 일부만 센 칸은 옅게 보여요.\n전환일을 모르는 리드(상태 기록·댓글이 없는 리드)는 분모에만 들어가요.";
+    "들어온 달마다, 들어온 뒤 며칠 안에 전환됐는지 비율이에요. 아직 그만큼 지나지 않은 리드는 빼고 셉니다. 일부만 센 칸은 옅게 보여요. 전환일을 모르는 리드(상태 기록·댓글이 없는 리드)는 분모에만 들어가요.";
 
 /** 코호트 — 행: 들어온 달, 열: 들어온 뒤 N일 안 누적 전환율. 진할수록 높다 (한 색 농도) */
 export function CohortTable({ cohorts }: { cohorts: LeadStats["cohorts"] }) {

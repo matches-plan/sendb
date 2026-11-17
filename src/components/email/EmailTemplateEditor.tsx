@@ -45,15 +45,17 @@ interface EmailTemplateEditorProps {
     template: EmailTemplate | null;
     onSave: (data: SaveData) => Promise<SaveResult>;
     onCancel: () => void;
+    /** 새 템플릿의 수신거부 링크 기본값 — 콜드메일은 켠다 */
+    defaultUseUnsubscribe?: boolean;
 }
 
-export default function EmailTemplateEditor({ template, onSave, onCancel }: EmailTemplateEditorProps) {
+export default function EmailTemplateEditor({ template, onSave, onCancel, defaultUseUnsubscribe = false }: EmailTemplateEditorProps) {
     const [name, setName] = useState("");
     const [subject, setSubject] = useState("");
     const [htmlBody, setHtmlBody] = useState("");
     const [templateType, setTemplateType] = useState("");
     const [categoryId, setCategoryId] = useState<number | null>(null);
-    const [useUnsubscribe, setUseUnsubscribe] = useState(false);
+    const [useUnsubscribe, setUseUnsubscribe] = useState(defaultUseUnsubscribe);
     const [saving, setSaving] = useState(false);
     const [showAiPanel, setShowAiPanel] = useState(false);
     const [editMode, setEditMode] = useState<"visual" | "code">("visual");

@@ -4,7 +4,7 @@ import {
     customerAccessPredicate,
 } from "@/lib/customer-access/access";
 import { checkGoogleGuard } from "./google-guard";
-import { isOrganizationUnsubscribed } from "@/lib/email-unsubscribe";
+import { isWorkspaceUnsubscribed } from "@/lib/email-unsubscribe";
 import {
     checkEmailSubmission,
     EMAIL_SEND_BLOCKED,
@@ -578,7 +578,7 @@ export async function claimEmail(
                 ...(candidate.recipientTo ?? [candidate.recipient]),
                 ...(candidate.recipientCc ?? []),
             ],
-            (orgId, email) => isOrganizationUnsubscribed(orgId, email, tx),
+            (orgId, email) => isWorkspaceUnsubscribed(orgId, box.workspaceId, email, tx),
         );
         if (!decision.allowed) {
             if (decision.rejection.header.resultCode !== EMAIL_SEND_BLOCKED)
@@ -800,7 +800,7 @@ export async function changeEmailDelivery(
                     ...(item.recipientTo ?? [item.recipient]),
                     ...(item.recipientCc ?? []),
                 ],
-                (orgId, email) => isOrganizationUnsubscribed(orgId, email, tx),
+                (orgId, email) => isWorkspaceUnsubscribed(orgId, box.workspaceId, email, tx),
             );
             if (!decision.allowed) {
                 if (decision.rejection.header.resultCode !== EMAIL_SEND_BLOCKED)

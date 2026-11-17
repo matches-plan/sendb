@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { controlGoogleConnection } from "../api";
@@ -109,7 +110,7 @@ ${
                 <>
                     <label className="block">
                         연결할 때 가져올 메일
-                        <select
+                        <OptionSelect
                             aria-label={`${box.name} 수신 시작 범위`}
                             className="mt-1 w-full rounded border p-2"
                             value={days}
@@ -119,7 +120,7 @@ ${
                             <option value={0}>연결을 시작한 이후</option>
                             <option value={7}>최근 7일부터</option>
                             <option value={30}>최근 30일부터</option>
-                        </select>
+                        </OptionSelect>
                     </label>
                     {data.connection.lastPollAt && (
                         <p className="text-xs text-muted-foreground">

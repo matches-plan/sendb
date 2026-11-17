@@ -2,52 +2,34 @@
 
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
-import { addUnsubscribe, getUnsubscribes, lookupUnsubscribes } from "../api/unsubscribes";
-import type { UnsubscribeLookupResult } from "../types";
+import { addUnsubscribe, getUnsubscribes, removeUnsubscribe } from "../api/unsubscribes";
 
-export function useUnsubscribeManagement(orgId: string, sessionEpoch: number) {
+type Result = { ok: true } | { ok: false; error: string };
+
+/** 한 사업부의 수신거부 목록 (그 사업부 + 모든 사업부를 막는 예전 줄) */
+export function useUnsubscribeManagement(orgId: string, sessionEpoch: number, workspaceId: number) {
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
-    const [lookupResults, setLookupResults] = useState<UnsubscribeLookupResult[] | null>(null);
-    const [lookupError, setLookupError] = useState<string | null>(null);
-    const [isLookingUp, setIsLookingUp] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
     const [addedEmail, setAddedEmail] = useState<string | null>(null);
     const alive = useRef(true);
     useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-    const query = new URLSearchParams({ page: String(page), pageSize: "20", q: search });
+    const query = new URLSearchParams({ workspaceId: String(workspaceId), page: String(page), pageSize: "20", q: search });
     const { data, error, isLoading, mutate } = useSWR(
         [`/api/email/unsubscribes?${query}`, orgId, sessionEpoch],
         ([url, organization]) => getUnsubscribes(url, organization),
     );
 
-    async function lookup(text: string) {
-        const targets = text.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean);
-        if (!targets.length || targets.length > 50) { setLookupError("이메일 또는 도메인을 1~50개 입력해주세요."); return; }
-        setIsLookingUp(true);
-        setLookupError(null);
-        setLookupResults(null);
-        try {
-            const results = await lookupUnsubscribes(orgId, targets);
-            if (alive.current) setLookupResults(results);
-        } catch (error) {
-            if (alive.current) setLookupError(error instanceof Error ? error.message : "조회에 실패했습니다.");
-        } finally {
-            if (alive.current) setIsLookingUp(false);
-        }
-    }
-
     /** 등록 결과 — 실패면 화면 확인창이 그 이유를 그대로 보인다 (UX-234) */
-    async function add(email: string, reason: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    async function add(email: string, reason: string): Promise<Result> {
         setIsAdding(true);
         setAddError(null);
         setAddedEmail(null);
         try {
-            const result = await addUnsubscribe(orgId, email, reason);
+            const result = await addUnsubscribe(orgId, workspaceId, email, reason);
             if (!alive.current) return { ok: true };
             setAddedEmail(result.email);
-            setLookupResults(null);
             await mutate();
             return { ok: true };
         } catch (error) {
@@ -59,10 +41,20 @@ export function useUnsubscribeManagement(orgId: string, sessionEpoch: number) {
         }
     }
 
+    async function remove(id: number): Promise<Result> {
+        try {
+            await removeUnsubscribe(orgId, workspaceId, id);
+            if (alive.current) setAddedEmail(null);
+            await mutate();
+            return { ok: true };
+        } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : "해제에 실패했습니다." };
+        }
+    }
+
     return {
         data, error, isLoading, page, setPage, search,
         searchFor: (q: string) => { setSearch(q); setPage(1); },
-        refresh: () => mutate(), lookup, lookupResults, lookupError, isLookingUp,
-        add, isAdding, addError, addedEmail,
+        refresh: () => mutate(), add, isAdding, addError, addedEmail, remove,
     };
 }

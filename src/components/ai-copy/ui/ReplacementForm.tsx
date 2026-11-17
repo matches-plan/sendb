@@ -20,7 +20,7 @@ export default function ReplacementForm({
         [knowledgeId, setKnowledgeId] = useState(0);
     return (
         <form
-            className="space-y-3 rounded-md border p-4"
+            className="space-y-3 rounded-md border border-border/40 p-4"
             onSubmit={async (e) => {
                 e.preventDefault();
                 const result = await act<{ replacementJobId: number }>(

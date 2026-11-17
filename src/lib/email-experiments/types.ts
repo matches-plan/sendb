@@ -15,6 +15,18 @@ export type ReplyIntent = "interested" | "neutral" | "rejected" | "unknown";
 export interface ExperimentConfig {
     /** 없는 기존 실험은 배정 당시의 회사 단위 집계를 유지한다. */
     analysisUnit?: "recipient";
+    /**
+     * prompt: 규칙 수정 화면의 'AB 테스트'로 만든 실험 — A·B 집단이 각자의 AI 지시사항으로 메일을 쓴다.
+     * 작성 지침·지식 버전을 쓰지 않으므로 policyAId·policyBId·knowledgeVersionId는 0이다.
+     * 없으면(policy) 작성 지침 버전을 비교하는 기존 실험(자동 준비가 만든 것 포함)이다.
+     */
+    kind?: "policy" | "prompt";
+    promptA?: string;
+    promptB?: string;
+    /** 이긴 안을 가르는 기준 (prompt 실험) */
+    metric?: "reply" | "click" | "open";
+    /** B 지시사항을 적용할 곳 (prompt 실험). 없으면 all — B가 A를 대신한다 */
+    scope?: "subject" | "opening" | "all";
     subject: string;
     axis: "opening" | "question" | "tone" | "length";
     hypothesis: string;

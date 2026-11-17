@@ -52,6 +52,11 @@ export const SEND_LOG_INDEXES: ReadonlyArray<{ name: string; ddl: string }> = [
         name: "email_send_logs_record_idx",
         ddl: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "email_send_logs_record_idx" ON "email_send_logs" ("record_id") WHERE "record_id" IS NOT NULL`,
     },
+    // 발송 이력 한 줄 아래 후속 메일(parent_log_id로 이어진 줄)을 세고 펼쳐 볼 때 쓴다
+    {
+        name: "email_send_logs_parent_log_idx",
+        ddl: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "email_send_logs_parent_log_idx" ON "email_send_logs" ("parent_log_id") WHERE "parent_log_id" IS NOT NULL`,
+    },
     // 고객 여정·깊이 알림이 받는 메일이 같은 레코드를 찾으려고 워크스페이스 records를 통째로 읽었다 (2026-10-22 운영 20~30초).
     {
         name: "records_workspace_email_norm_idx",

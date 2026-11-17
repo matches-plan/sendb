@@ -78,7 +78,7 @@ function Report({
                     <section className="overflow-x-auto rounded-lg border border-border/40 bg-card p-5">
                         <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
                             응대 목표 결과
-                            <InfoTip text={"업무시간·응대 목표 탭에서 정한 목표 시간을 지켰는지 봐요.\n준수·초과는 목표가 있는 응대 기준이고, 대기·미응답 종료와 소요시간은 전체 응대 기준이에요.\n초과한 응대가 대기에도 포함될 수 있어요."} />
+                            <InfoTip text={"업무시간·응대 목표 탭에서 정한 목표 시간을 지켰는지 봐요. 준수·초과는 목표가 있는 응대 기준이고, 대기·미응답 종료와 소요시간은 전체 응대 기준이에요. 초과한 응대가 대기에도 포함될 수 있어요."} />
                         </h2>
                         <table className="w-full text-left text-sm">
                             <thead className="text-xs text-muted-foreground">
@@ -154,7 +154,7 @@ function Report({
                         <section className="rounded-lg border border-border/40 bg-card p-5">
                             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
                                 일별 응대
-                                <InfoTip text={"날마다 시작한 응대와 그중 종료한 응대, 첫 답변 시간 중앙값이에요.\n응대가 시작된 날 기준으로 묶어요."} />
+                                <InfoTip text={"날마다 시작한 응대와 그중 종료한 응대, 첫 답변 시간 중앙값이에요. 응대가 시작된 날 기준으로 묶어요."} />
                             </h2>
                             {data.daily.length ? (
                                 data.daily.map((d) => (
@@ -176,7 +176,7 @@ function Report({
                         <section className="rounded-lg border border-border/40 bg-card p-5">
                             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
                                 담당자별
-                                <InfoTip text={"종료한 응대는 종료 당시 담당자, 진행 중인 응대는 지금 담당자 기준이에요.\n이관은 응대 중에 담당자가 바뀐 응대 수예요."} />
+                                <InfoTip text={"종료한 응대는 종료 당시 담당자, 진행 중인 응대는 지금 담당자 기준이에요. 이관은 응대 중에 담당자가 바뀐 응대 수예요."} />
                             </h2>
                             {data.teammates.map((t, i) => (
                                 <p
@@ -195,7 +195,7 @@ function Report({
                     <section className="rounded-lg border border-border/40 bg-card p-5">
                         <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
                             응대별 확인
-                            <InfoTip text={"최근에 시작한 응대부터 100건씩 보여줘요.\n누르면 그 상담으로 이동해요."} />
+                            <InfoTip text={"최근에 시작한 응대부터 100건씩 보여줘요. 누르면 그 상담으로 이동해요."} />
                         </h2>
                         <div className="space-y-2">
                             {data.rows.map((row) => (

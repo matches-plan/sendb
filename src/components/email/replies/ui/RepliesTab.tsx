@@ -29,7 +29,8 @@ interface PartitionRow {
  * 위 띠(연결 상태) · 거르개(분류·상태·처리·사업) · 줄(도착·사업·보낸 사람·제목·분류·규칙·단계·처리) · 옆 창.
  * 카드 링크 `/email?tab=replies&reply={id}`로 열면 그 회신의 옆 창을 바로 연다
  */
-export default function RepliesTab() {
+/** workspaceId: 화면 위 사업부 탭이 고른 사업부 (null: 전체). 주면 이 화면의 사업 선택칸은 숨긴다 */
+export default function RepliesTab({ workspaceId: tabWorkspaceId }: { workspaceId?: number | null } = {}) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -39,7 +40,15 @@ export default function RepliesTab() {
     const [kind, setKind] = useState("");
     const [matchStatus, setMatchStatus] = useState("");
     const [handled, setHandled] = useState<"" | "0" | "1">("");
-    const [workspaceId, setWorkspaceId] = useState<number | undefined>(undefined);
+    const [ownWorkspaceId, setWorkspaceId] = useState<number | undefined>(undefined);
+    const workspaceControlled = tabWorkspaceId !== undefined;
+    const workspaceId = workspaceControlled ? tabWorkspaceId ?? undefined : ownWorkspaceId;
+    // 위 탭에서 사업부를 바꾸면 첫 페이지부터
+    const [seenWorkspaceId, setSeenWorkspaceId] = useState(workspaceId);
+    if (seenWorkspaceId !== workspaceId) {
+        setSeenWorkspaceId(workspaceId);
+        setPage(1);
+    }
     // 줄을 눌러 고른 회신이 먼저, 없으면 카드 링크(reply=)로 연 회신
     const [pickedId, setPickedId] = useState<number | undefined>(undefined);
     const selectedId = pickedId ?? deepLinkId;
@@ -124,7 +133,7 @@ export default function RepliesTab() {
                     </SelectContent>
                 </Select>
 
-                {workspaces.length > 1 && (
+                {workspaces.length > 1 && !workspaceControlled && (
                     <Select
                         value={workspaceId ? String(workspaceId) : "all"}
                         onValueChange={(v) => { setWorkspaceId(v === "all" ? undefined : Number(v)); resetPage(); }}
@@ -160,7 +169,7 @@ export default function RepliesTab() {
                 </div>
             ) : (
                 <>
-                    <div className="rounded-md border">
+                    <div className="rounded-md border border-border/40">
                         <Table>
                             <TableHeader>
                                 <TableRow>

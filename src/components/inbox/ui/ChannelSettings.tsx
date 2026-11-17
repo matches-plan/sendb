@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { SettingsSection } from "./SettingsSection";
 import { MessengerPreview } from "@/components/customer-messenger/ui/MessengerPreview";
 import { workspaceLabel } from "@/lib/workspace-label";
@@ -118,7 +119,7 @@ export function ChannelSettings({
                         <span className="text-sm font-medium">
                             사업 · 워크스페이스
                         </span>
-                        <select
+                        <OptionSelect
                             aria-label="상담창 워크스페이스"
                             className={field}
                             value={workspaceId}
@@ -137,7 +138,7 @@ export function ChannelSettings({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     </label>
                     <label className="block space-y-2">
                         <span className="text-sm font-medium">상담창 이름</span>

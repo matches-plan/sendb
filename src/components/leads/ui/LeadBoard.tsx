@@ -37,6 +37,8 @@ interface LeadBoardProps {
     fields: FieldDefinition[];
     /** sales: 영업관리 — 명함 등록·우리 담당자·미팅 기록이 붙는다 */
     mode?: "lead" | "sales";
+    /** 처음부터 열어 둘 리드 (리드관리 전체 탭에서 누른 리드) */
+    initialSelected?: LeadRecord | null;
 }
 
 const ALL = "__all__";
@@ -44,7 +46,7 @@ const IMPORTANT = "__important__";
 const MINE = "__mine__";
 
 /** 리드 관리 오른쪽 영역 — 상태 탭 · 검색 · 표 · 오른쪽 상세 패널. 파티션이 바뀌면 key로 새로 그린다 */
-export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead" }: LeadBoardProps) {
+export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", initialSelected = null }: LeadBoardProps) {
     const sales = mode === "sales";
     const { user } = useSession();
     const [cardPrefill, setCardPrefill] = useState<CardFields | null>(null);
@@ -64,7 +66,7 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead" }: L
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
-    const [selected, setSelected] = useState<LeadRecord | null>(null);
+    const [selected, setSelected] = useState<LeadRecord | null>(initialSelected);
     const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
     const [deleteIds, setDeleteIds] = useState<number[] | null>(null);
     const [createOpen, setCreateOpen] = useState(false);

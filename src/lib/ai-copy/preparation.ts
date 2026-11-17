@@ -32,6 +32,8 @@ export interface CopyPreparationInput {
         knowledge: CopyVersion<KnowledgeSnapshot>;
         assignmentId: number;
     };
+    /** AB 테스트(prompt 실험) 배정 — 고정 버전 없이 그 집단의 지시사항으로 쓰고 배정에 작업을 잇는다 */
+    assignmentId?: number;
 }
 function legacySnapshot(input: CopyPreparationInput): PolicySnapshot {
     const model = resolveModel(input.model);
@@ -93,7 +95,7 @@ export async function prepareCopy(
             key: input.key,
             policyVersionId: policy?.id,
             knowledgeVersionId: knowledge?.id,
-            assignmentId: input.pinned?.assignmentId,
+            assignmentId: input.pinned?.assignmentId ?? input.assignmentId,
             policy: policy?.snapshot ?? legacySnapshot(input),
             knowledge: knowledge?.snapshot ?? null,
             context: policy ? (input.approvedContext ?? input.legacyContext) : input.legacyContext,
@@ -102,10 +104,11 @@ export async function prepareCopy(
         }));
     if (!existing && policy && (policy.state !== "approved" || knowledge?.state !== "approved"))
         await conn`UPDATE ai_copy_generation_jobs SET state='held',reason='승인된 작성 버전 연결 확인 필요' WHERE id=${job.id}`;
-    if (input.pinned)
-        await conn`UPDATE email_copy_assignments SET generation_job_id=COALESCE(generation_job_id,${job.id}) WHERE id=${input.pinned.assignmentId} AND org_id=${input.orgId}`;
+    const assignmentId = input.pinned?.assignmentId ?? input.assignmentId;
+    if (assignmentId)
+        await conn`UPDATE email_copy_assignments SET generation_job_id=COALESCE(generation_job_id,${job.id}) WHERE id=${assignmentId} AND org_id=${input.orgId}`;
     const output = await generateStoredCopy(conn, { id: job.id, orgId: input.orgId }, deps);
-    return { ...output, jobId: job.id, assignmentId: input.pinned?.assignmentId };
+    return { ...output, jobId: job.id, assignmentId };
 }
 /** 전송 요청 전에 한 작업을 한 로그에 연결한다. 다른 파티션의 재시도도 중복 전송을 막는다. */
 export async function attachCopyToSend(

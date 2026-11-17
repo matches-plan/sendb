@@ -118,7 +118,7 @@ export function FollowupConfigForm({ mode, value, onChange, templates }: Followu
             {enabled && (
                 <div className="space-y-4">
                     {steps.map((step, index) => (
-                        <div key={index} className="space-y-3 rounded-md border p-3 relative">
+                        <div key={index} className="space-y-3 rounded-md border border-border/40 p-3 relative">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-medium text-muted-foreground">
                                     {index + 1}단계

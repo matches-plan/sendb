@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
@@ -87,7 +88,7 @@ export function WebhookDeliveries({
         <section className="space-y-4 border-t pt-5">
             <div className="flex justify-between">
                 <h2 className="font-semibold">전달 이력</h2>
-                <select
+                <OptionSelect
                     aria-label="전달 상태"
                     value={state}
                     onChange={(e) => {
@@ -102,7 +103,7 @@ export function WebhookDeliveries({
                             {value}
                         </option>
                     ))}
-                </select>
+                </OptionSelect>
             </div>
             {canManage && bulkState && !!rows.length && (
                 <button

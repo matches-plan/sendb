@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default function ExperimentDetail({
         { label: "수신거부 고객", key: "unsubscribed" },
     ];
     return (
-        <section className="space-y-5 rounded-md border p-5">
+        <section className="space-y-5 rounded-md border border-border/40 p-5">
             <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-lg font-semibold">
                     {experiment.name} · #{id}
@@ -162,7 +163,7 @@ export default function ExperimentDetail({
                     </ul>
                 </div>
             )}
-            <details className="rounded-md border p-4">
+            <details className="rounded-md border border-border/40 p-4">
                 <summary className="cursor-pointer text-sm font-medium">
                     보조 집계 보기
                 </summary>
@@ -301,7 +302,7 @@ export default function ExperimentDetail({
             </div>
             {action && (
                 <form
-                    className="space-y-3 rounded-md border p-4"
+                    className="space-y-3 rounded-md border border-border/40 p-4"
                     onSubmit={async (e) => {
                         e.preventDefault();
                         const saved = await act(
@@ -326,7 +327,7 @@ export default function ExperimentDetail({
                     {["pause", "close"].includes(action) && (
                         <Field label="이미 배정한 미발송 고객">
                             {(fieldId) => (
-                                <select
+                                <OptionSelect
                                     id={fieldId}
                                     className={controlClass}
                                     value={pendingMode}
@@ -336,7 +337,7 @@ export default function ExperimentDetail({
                                         {action === "close" ? "남은 작업 취소" : "준비·전송 보류"}
                                     </option>
                                     <option value="continue">기존 버전으로 계속 준비·전송</option>
-                                </select>
+                                </OptionSelect>
                             )}
                         </Field>
                     )}
@@ -420,7 +421,7 @@ function ExperimentStart({
                 <summary className="cursor-pointer">42일 발신 한도 예상</summary>
                 <div className="mt-2 flex flex-wrap gap-2">
                     {data.capacitySchedule.map((d, i) => (
-                        <span key={i} className="rounded border bg-background p-2">
+                        <span key={i} className="rounded border border-border/40 bg-background p-2">
                             {d.date || `${i + 1}일째`}:{" "}
                             {d.capacity === null ? "한도 없음" : `${d.capacity}건`}
                         </span>
@@ -477,7 +478,7 @@ function Assignments({
         copyRequest,
     );
     return (
-        <details className="rounded-md border p-4">
+        <details className="rounded-md border border-border/40 p-4">
             <summary className="cursor-pointer font-medium">배정 고객과 성과 기록</summary>
             <div className="mt-4 space-y-4">
                 <Field label="고객 이메일 검색">

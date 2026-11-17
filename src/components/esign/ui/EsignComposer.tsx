@@ -6,6 +6,7 @@ import { unusableField, unusableFieldMessage } from "@/lib/esign/rules";
 import { fieldRasterSize } from "@/lib/esign/geometry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, ArrowRight, Check, FileUp, Plus, Save, Send, Trash2 } from "lucide-react";
 import { esignApi, EsignApiError, type EsignStatus } from "../api/client";
 import { clamp, displayDate, fieldLabels, roleColors } from "../utils/presentation";
@@ -13,7 +14,6 @@ import { localDateTimeValue } from "@/lib/utils";
 import { AlimtalkReadiness } from "./AlimtalkReadiness";
 import { PdfViewer } from "./PdfViewer";
 
-const controlClass = "h-9 w-full rounded-md border bg-background px-3 text-sm focus-visible:outline-ring";
 const newRecipient = (): EsignRecipientInput => ({ name: "", email: "", phone: "", channels: ["email"] });
 
 export function EsignComposer({ workspaceId, templates, documentsLoading, templateSearch = "", onTemplateSearch, templatesTotal = templates.length, hasMoreTemplates = false, loadingMoreTemplates = false, onMoreTemplates, status, initialRecipient, onClose, onSent, onDocumentSaved }: { workspaceId: number; templates: EsignDocument[]; documentsLoading?: boolean; templateSearch?: string; onTemplateSearch?: (value: string) => void; templatesTotal?: number; hasMoreTemplates?: boolean; loadingMoreTemplates?: boolean; onMoreTemplates?: () => void; status: EsignStatus; initialRecipient?: EsignRecipientInput; onClose: () => void; onSent: (detail: StaffEsignDetail) => void; onDocumentSaved: () => void }) {
@@ -110,7 +110,7 @@ export function EsignComposer({ workspaceId, templates, documentsLoading, templa
                         setFields(items => [...items, field]); setSelectedId(field.id);
                     }} /></div>
                     <aside className="space-y-5 rounded-xl border p-4">
-                        <label className="block space-y-2 text-sm"><span className="font-medium">입력할 사람</span><select className={controlClass} value={recipientIndex} onChange={event => setRecipientIndex(Number(event.target.value))}>{recipients.map((recipient, index) => <option key={index} value={index}>{index + 1}번 서명자{recipient.name ? ` · ${recipient.name}` : ""}</option>)}</select></label>
+                        <label className="block space-y-2 text-sm"><span className="font-medium">입력할 사람</span><Select value={String(recipientIndex)} onValueChange={value => setRecipientIndex(Number(value))}><SelectTrigger aria-label="입력할 사람" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{recipients.map((recipient, index) => <SelectItem key={index} value={String(index)}>{index + 1}번 서명자{recipient.name ? ` · ${recipient.name}` : ""}</SelectItem>)}</SelectContent></Select></label>
                         <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" disabled={recipients.length >= 5} onClick={() => { setRecipients(items => [...items, newRecipient()]); setRecipientIndex(recipients.length); }}><Plus />서명자 추가</Button>{recipients.length > 1 && <Button type="button" size="sm" variant="ghost" disabled={fields.some(field => field.recipientIndex === recipients.length - 1)} title="마지막 서명자의 입력란을 지운 뒤 제외할 수 있습니다." onClick={() => { setRecipients(items => items.slice(0, -1)); setRecipientIndex(0); }}>마지막 서명자 제외</Button>}</div>
                         <div className="space-y-2"><p className="text-sm font-medium">문서에 넣을 입력란</p><div className="grid grid-cols-2 gap-2">{Object.entries(fieldLabels).map(([key, label]) => <Button key={key} type="button" size="sm" variant={tool === key ? "default" : "outline"} aria-pressed={tool === key} onClick={() => { setTool(key as EsignField["type"]); setSelectedId(""); }}>{label}</Button>)}</div><Button type="button" size="sm" variant="secondary" className="w-full" onClick={() => {
                             const width = tool === "text" ? .28 : tool === "seal" ? .14 : .2, height = tool === "seal" ? .1 : tool === "signature" ? .07 : .04;

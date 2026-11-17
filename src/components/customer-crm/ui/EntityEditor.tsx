@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { dateTimeInputToIso, localDateTimeValue } from "@/lib/utils";
 import { AttributesEditor } from "@/components/customer-records/ui/AttributesEditor";
 import { useState } from "react";
@@ -224,7 +225,7 @@ export function EntityEditor({
                     />
                 </div>
                 <Field label="담당자">
-                    <select
+                    <OptionSelect
                         name="ownerId"
                         className={inputClass}
                         defaultValue={deal?.ownerId ?? task?.ownerId ?? ""}
@@ -246,7 +247,7 @@ export function EntityEditor({
                                 {m.name}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </Field>
             </div>
         );
@@ -391,7 +392,7 @@ export function EntityEditor({
                                                 )
                                             }
                                         />
-                                        <select
+                                        <OptionSelect
                                             aria-label={`단계 ${index + 1} 구분`}
                                             className={inputClass}
                                             value={stage.category}
@@ -413,7 +414,7 @@ export function EntityEditor({
                                             <option value="open">진행</option>
                                             <option value="won">성사</option>
                                             <option value="lost">실패</option>
-                                        </select>
+                                        </OptionSelect>
                                         <button
                                             type="button"
                                             aria-label={`단계 ${index + 1} 삭제`}
@@ -473,7 +474,7 @@ export function EntityEditor({
                             <>
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="파이프라인">
-                                        <select
+                                        <OptionSelect
                                             className={inputClass}
                                             value={pipelineId}
                                             onChange={(e) =>
@@ -487,10 +488,10 @@ export function EntityEditor({
                                                     {p.name}
                                                 </option>
                                             ))}
-                                        </select>
+                                        </OptionSelect>
                                     </Field>
                                     <Field label="단계">
-                                        <select
+                                        <OptionSelect
                                             key={pipelineId}
                                             name="stageId"
                                             className={inputClass}
@@ -513,7 +514,7 @@ export function EntityEditor({
                                                         {s.name}
                                                     </option>
                                                 ))}
-                                        </select>
+                                        </OptionSelect>
                                     </Field>
                                     <Field label="금액">
                                         <input
@@ -526,7 +527,7 @@ export function EntityEditor({
                                         />
                                     </Field>
                                     <Field label="통화">
-                                        <select
+                                        <OptionSelect
                                             name="currency"
                                             className={inputClass}
                                             defaultValue={
@@ -542,7 +543,7 @@ export function EntityEditor({
                                             <option value="JPY">
                                                 JPY · 엔
                                             </option>
-                                        </select>
+                                        </OptionSelect>
                                     </Field>
                                     <Field label="예상 계약일">
                                         <input
@@ -580,7 +581,7 @@ export function EntityEditor({
                                         />
                                     </Field>
                                     <Field label="상태">
-                                        <select
+                                        <OptionSelect
                                             name="status"
                                             className={inputClass}
                                             defaultValue={
@@ -592,7 +593,7 @@ export function EntityEditor({
                                             <option value="cancelled">
                                                 취소
                                             </option>
-                                        </select>
+                                        </OptionSelect>
                                     </Field>
                                 </div>
                                 {relationFields()}
@@ -645,7 +646,7 @@ export function EntityEditor({
                                     />
                                 </fieldset>
                                 <Field label="고객 단계">
-                                    <select
+                                    <OptionSelect
                                         name="lifecycleStage"
                                         className={inputClass}
                                         defaultValue={
@@ -659,7 +660,7 @@ export function EntityEditor({
                                                 {label}
                                             </option>
                                         ))}
-                                    </select>
+                                    </OptionSelect>
                                 </Field>
                                 <label className="flex gap-2 text-sm">
                                     <input

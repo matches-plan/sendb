@@ -35,10 +35,7 @@ export default function CrmEmailPage() {
     return (
         <WorkspaceLayout>
             <PageContainer>
-                <PageHeader
-                    title="이메일"
-                    description="고객사에 가입 축하·신청 안내·소개서 같은 메일을 템플릿으로 보내고, 조건에 맞으면 자동으로 발송합니다."
-                />
+                <PageHeader title="이메일" />
 
                 {!isSetupLoading && !isReady ? (
                     <div className="mt-6 flex flex-col items-center justify-center py-20">

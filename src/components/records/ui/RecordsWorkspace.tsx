@@ -49,6 +49,8 @@ import { usePartitions } from "@/hooks/usePartitions";
 import { useFields } from "@/hooks/useFields";
 import { useResolvedFields } from "@/hooks/useResolvedFields";
 import { LeadBoard } from "@/components/leads/ui/LeadBoard";
+import { LeadAllBoard } from "@/components/leads/ui/LeadAllBoard";
+import type { LeadRecord } from "@/components/leads/types";
 import { LeadTabRemoveDialog } from "@/components/leads/ui/LeadTabRemoveDialog";
 import { createLeadBox } from "@/components/leads/api";
 import { useLeadWorkspaces } from "@/components/leads/hooks/useLeadWorkspaces";
@@ -82,6 +84,11 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
     );
     const [workspaceId, setWorkspaceId] = useState<number | null>(null);
     const [partitionId, setPartitionId] = useState<number | null>(null);
+    // 리드관리 "전체" 탭 — 모든 사업부 리드함을 한꺼번에 (고른 사업부·리드함은 그대로 두고 돌아오면 다시 보인다)
+    const [showAll, setShowAll] = useState(false);
+    // 전체 탭에서 누른 리드 — 그 사업부·리드함으로 옮겨 상세를 연다
+    const [openLead, setOpenLead] = useState<LeadRecord | null>(null);
+    const allMode = category === "lead" && showAll;
     // 조직별로 저장한 마지막 워크스페이스·파티션을 복원한 조직 — 복원 전에는 자동 선택하지 않는다
     const [restoredOrgId, setRestoredOrgId] = useState<string | null>(null);
     const listQuery = useRecordListQuery();
@@ -206,9 +213,10 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
         const savedPartition = localStorage.getItem(storageKey("partition", orgId));
         setWorkspaceId(savedWorkspace ? Number(savedWorkspace) : null);
         setPartitionId(savedPartition ? Number(savedPartition) : null);
+        if (category === "lead") setShowAll(localStorage.getItem(`${storageKey("workspace", orgId)}:all`) === "1");
         resetListQuery();
         setRestoredOrgId(orgId);
-    }, [orgId, restoredOrgId, resetListQuery, storageKey]);
+    }, [orgId, restoredOrgId, resetListQuery, storageKey, category]);
 
     // 워크스페이스 자동 선택 (저장된 값 검증 또는 첫 번째). 저장값이 없을 뿐이면 마지막 파티션은 유지한다
     useEffect(() => {
@@ -222,11 +230,40 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
 
     // 워크스페이스 변경 시 파티션 초기화
     const handleWorkspaceChange = useCallback((id: number) => {
+        setShowAll(false);
+        setOpenLead(null);
         setWorkspaceId(id);
         setPartitionId(null);
         resetListQuery();
         localStorage.setItem(storageKey("workspace", orgId), String(id));
         localStorage.removeItem(storageKey("partition", orgId));
+        localStorage.removeItem(`${storageKey("workspace", orgId)}:all`);
+    }, [resetListQuery, orgId, storageKey]);
+
+    const allTab = useMemo(
+        () =>
+            category === "lead"
+                ? {
+                      onSelect: () => {
+                          setShowAll(true);
+                          setOpenLead(null);
+                          localStorage.setItem(`${storageKey("workspace", orgId)}:all`, "1");
+                      },
+                  }
+                : undefined,
+        [category, orgId, storageKey],
+    );
+
+    // 전체 탭에서 리드를 누르면 그 사업부·리드함으로 옮겨 상세를 연다
+    const openLeadFromAll = useCallback((record: LeadRecord) => {
+        setShowAll(false);
+        setOpenLead(record);
+        setWorkspaceId(record.workspaceId);
+        setPartitionId(record.partitionId);
+        resetListQuery();
+        localStorage.setItem(storageKey("workspace", orgId), String(record.workspaceId));
+        localStorage.setItem(storageKey("partition", orgId), String(record.partitionId));
+        localStorage.removeItem(`${storageKey("workspace", orgId)}:all`);
     }, [resetListQuery, orgId, storageKey]);
 
     // URL ?id= 로 진입 시 해당 레코드 자동 열기 (트래커 → 레코드 점프 등)
@@ -269,6 +306,7 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
 
     // 파티션 변경 시 초기화
     const handlePartitionSelect = useCallback((id: number) => {
+        setOpenLead(null);
         setPartitionId(id);
         resetListQuery();
         localStorage.setItem(storageKey("partition", orgId), String(id));
@@ -574,8 +612,9 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
                 closeOnChange={partitionId}
             />
             <LeadWorkspaceTabs
-                value={workspaceId}
+                value={allMode ? null : workspaceId}
                 onChange={handleWorkspaceChange}
+                allTab={allTab}
                 source={category === "lead" ? "lead" : "all"}
                 prefKey={category === "lead" ? "leads" : category === "cold" ? "records" : undefined}
                 // 리드관리: 리드함이 없는 사업부를 고르면 리드함을 만든다 (모두의 탭에 생긴다)
@@ -603,7 +642,7 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
             )}
             <div className="flex h-[calc(100vh-3.5rem-3rem)] overflow-hidden">
                 {/* 좌측: 파티션 네비게이션 (데스크톱 전용) */}
-                <div className="hidden md:flex">
+                <div className={allMode ? "hidden" : "hidden md:flex"}>
                     <PartitionNav
                         workspaceId={workspaceId}
                         selectedPartitionId={partitionId}
@@ -628,7 +667,9 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
 
                 {/* 우측: 레코드 영역 */}
                 <div className="flex-1 flex flex-col min-w-0 min-h-0">
-                    {partitionId && category !== "cold" ? (
+                    {allMode ? (
+                        <LeadAllBoard onOpen={openLeadFromAll} />
+                    ) : partitionId && category !== "cold" ? (
                         // 리드관리·영업관리: 내보내기·가져오기·예약등록 없는 전용 화면
                         <LeadBoard
                             key={partitionId}
@@ -636,6 +677,7 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
                             partitionId={partitionId}
                             fields={fields}
                             mode={category === "sales" ? "sales" : "lead"}
+                            initialSelected={openLead?.partitionId === partitionId ? openLead : null}
                         />
                     ) : category === "sales" && workspaceId && partitionTree && partitionTree.folders.every((f) => f.partitions.length === 0) && partitionTree.ungrouped.length === 0 ? (
                         // 이 사업에 아직 영업 리드함이 없으면 바로 만들 수 있게

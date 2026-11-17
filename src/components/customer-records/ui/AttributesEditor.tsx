@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { attributeRows, parseAttributeRows } from "../utils/attributes";
 import type { AttributeRow, AttributeType } from "../types";
@@ -45,7 +46,7 @@ export function AttributesEditor({
                         placeholder="속성 이름"
                         onChange={(e) => patch(row.id, { key: e.target.value })}
                     />
-                    <select
+                    <OptionSelect
                         aria-label={`속성 ${i + 1} 값 종류`}
                         className="rounded border bg-background p-2 text-sm"
                         value={row.type}
@@ -68,9 +69,9 @@ export function AttributesEditor({
                         <option value="boolean">예·아니요</option>
                         <option value="json">JSON</option>
                         <option value="null">빈 값</option>
-                    </select>
+                    </OptionSelect>
                     {row.type === "boolean" ? (
-                        <select
+                        <OptionSelect
                             aria-label={`속성 ${i + 1} 값`}
                             className="rounded border bg-background p-2 text-sm"
                             value={row.value}
@@ -80,7 +81,7 @@ export function AttributesEditor({
                         >
                             <option value="true">예</option>
                             <option value="false">아니요</option>
-                        </select>
+                        </OptionSelect>
                     ) : row.type === "null" ? (
                         <p className="p-2 text-sm">빈 값</p>
                     ) : (

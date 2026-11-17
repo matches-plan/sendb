@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,7 @@ export function EvaluationManager({
         setPairs((items) => items.map((p, i) => (i === index ? { ...p, ...values } : p)));
     return (
         <div className="space-y-6">
-            <details className="rounded-md border p-4">
+            <details className="rounded-md border border-border/40 p-4">
                 <summary className="cursor-pointer font-medium">새 비교 평가 만들기</summary>
                 <div className="mt-4 rounded-md bg-muted p-3 text-sm" role="note">
                     새 작성 지침은 비교 평가를 통과해야 승인할 수 있습니다. 평가는 서로 다른 두
@@ -84,7 +85,7 @@ export function EvaluationManager({
                 >
                     <Field label="평가할 메일">
                         {(id) => (
-                            <select
+                            <OptionSelect
                                 id={id}
                                 className={controlClass}
                                 value={purpose}
@@ -95,18 +96,18 @@ export function EvaluationManager({
                                         {purposeLabel(p)}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         )}
                     </Field>
                     {pairs.map((pair, index) => (
                         <fieldset
                             key={index}
-                            className="grid gap-3 rounded-md border p-4 sm:grid-cols-2"
+                            className="grid gap-3 rounded-md border border-border/40 p-4 sm:grid-cols-2"
                         >
                             <legend className="px-1 text-sm">사업 {index + 1}</legend>
                             <Field label="사업">
                                 {(id) => (
-                                    <select
+                                    <OptionSelect
                                         id={id}
                                         required
                                         className={controlClass}
@@ -126,7 +127,7 @@ export function EvaluationManager({
                                                 {workspaceLabel(w)}
                                             </option>
                                         ))}
-                                    </select>
+                                    </OptionSelect>
                                 )}
                             </Field>
                             <Field label="승인된 지식">
@@ -246,7 +247,7 @@ function EvaluationDetail({ id, act, pending }: { id: number; act: Action; pendi
     if (!detail.data) return <p>평가 결과를 불러오는 중입니다.</p>;
     const { report, run } = detail.data;
     return (
-        <section className="space-y-4 rounded-md border p-5">
+        <section className="space-y-4 rounded-md border border-border/40 p-5">
             {confirmationDialog}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-semibold">
@@ -317,7 +318,7 @@ function EvaluationDetail({ id, act, pending }: { id: number; act: Action; pendi
                     설정한 평가 기준을 통과했습니다. 작성 지침 화면에서 승인할 수 있습니다.
                 </p>
             )}
-            <details className="rounded-md border p-4">
+            <details className="rounded-md border border-border/40 p-4">
                 <summary className="cursor-pointer text-sm font-medium">부하 성능 측정</summary>
                 <div className="mt-3 space-y-3">
                     <p className="text-sm text-muted-foreground">
@@ -480,7 +481,7 @@ function HumanReviewItem({
         [notes, setNotes] = useState("");
     const resolve = !!item.reviewed_at && item.disagreement && !item.resolved;
     return (
-        <article className="space-y-3 rounded-md border p-4">
+        <article className="space-y-3 rounded-md border border-border/40 p-4">
             <p className="text-sm font-medium">문구 {item.blind_label.slice(0, 8)}</p>
             <details className="text-sm">
                 <summary className="cursor-pointer">가상 맥락과 지식 근거 보기</summary>
@@ -552,7 +553,7 @@ function HumanReviewItem({
                                 }
                             >
                                 {(id) => (
-                                    <select
+                                    <OptionSelect
                                         id={id}
                                         className={controlClass}
                                         required
@@ -567,7 +568,7 @@ function HumanReviewItem({
                                                 {n}점
                                             </option>
                                         ))}
-                                    </select>
+                                    </OptionSelect>
                                 )}
                             </Field>
                         ))}

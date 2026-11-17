@@ -4,9 +4,7 @@ import { useState } from "react";
 import { useEmailConfig } from "@/hooks/useEmailConfig";
 import { useSession } from "@/contexts/SessionContext";
 import { useSenderProfiles } from "@/hooks/useSenderProfiles";
-import { useSignatures } from "@/hooks/useSignatures";
 import SenderProfileManager from "./SenderProfileManager";
-import SignatureManager from "./SignatureManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +18,6 @@ export default function EmailConfigForm() {
     // 조직 전체 발송에 쓰는 키라 관리자만 바꾼다 — 서버 POST도 관리자만 받는다 (UX-155)
     const canEditKeys = user?.role !== "member";
     const { profiles, createProfile, updateProfile, deleteProfile, isLoading: profilesLoading } = useSenderProfiles();
-    const { signatures, createSignature, updateSignature, deleteSignature, isLoading: signaturesLoading } = useSignatures();
 
     // 입력 전에는 저장된 키를 보인다 (effect로 상태를 채우지 않고 그때그때 계산한다)
     const [appKeyDraft, setAppKey] = useState<string | null>(null);
@@ -71,7 +68,7 @@ export default function EmailConfigForm() {
         }
     };
 
-    if (configLoading || profilesLoading || signaturesLoading) {
+    if (configLoading || profilesLoading) {
         return (
             <div className="flex items-center justify-center p-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -137,14 +134,6 @@ export default function EmailConfigForm() {
                 createProfile={createProfile}
                 updateProfile={updateProfile}
                 deleteProfile={deleteProfile}
-            />
-
-            {/* 서명 관리 */}
-            <SignatureManager
-                signatures={signatures}
-                createSignature={createSignature}
-                updateSignature={updateSignature}
-                deleteSignature={deleteSignature}
             />
         </div>
     );

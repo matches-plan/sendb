@@ -1051,6 +1051,41 @@
       "when": 1794418419000,
       "tag": "0147_inbox_snoozed_until",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1794677619000,
+      "tag": "0150_email_template_purpose",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1794850419000,
+      "tag": "0152_user_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1795109619000,
+      "tag": "0155_email_signature_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1795109629000,
+      "tag": "0156_lead_basic_fields_first",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1795196019000,
+      "tag": "0157_health_event_resolved",
+      "breakpoints": true
     }
   ]
 }

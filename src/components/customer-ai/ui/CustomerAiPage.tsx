@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { workspaceAbilities } from "@/components/customer-access/utils/abilities";
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -39,7 +40,7 @@ export function CustomerAiPage({ role }: { role: string }) {
                 </div>
                 <label className="text-sm">
                     사업
-                    <select
+                    <OptionSelect
                         aria-label="상담 AI 사업"
                         className="ml-3 rounded-lg border p-2"
                         value={workspaceId ?? ""}
@@ -58,7 +59,7 @@ export function CustomerAiPage({ role }: { role: string }) {
                                 {workspaceLabel(w)}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
             </header>
             {(bootstrap.error || catalog.error) && (

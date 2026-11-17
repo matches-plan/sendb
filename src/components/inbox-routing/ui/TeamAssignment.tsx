@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import type { InboxBootstrap, Conversation } from "@/components/inbox/types";
 export function TeamAssignment({
@@ -40,7 +41,7 @@ export function TeamAssignment({
             <h3 className="font-semibold">담당 정보</h3>
             <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 담당자
-                <select
+                <OptionSelect
                     aria-label="담당자"
                     disabled={disabled}
                     value={chat.assigneeId ?? ""}
@@ -61,7 +62,7 @@ export function TeamAssignment({
                             {m.name}
                         </option>
                     ))}
-                </select>
+                </OptionSelect>
             </label>
             {pending && (
                 <p role="status" className="text-[10px] text-muted-foreground">

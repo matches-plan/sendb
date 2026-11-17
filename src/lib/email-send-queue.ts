@@ -759,7 +759,7 @@ async function resolveDrainRows(group: DrainGroup, rows: DrainRow[]): Promise<Ma
             ? await Promise.all([
                   loadCooldownRecordIds(live.map((r) => r.record_id)),
                   loadDuplicateRecipients(group.partitionId, [...dupEmails]),
-                  loadUnsubscribedEmails(group.orgId, [...unsubEmails]),
+                  loadUnsubscribedEmails(group.orgId, workspaceId, [...unsubEmails]),
                   // 보내기 직전 막기 (findReplyStop과 같은 조건, DESIGN-RPL 7-4) — 묶음 주소를 한 번에
                   loadReplyStops(group.orgId, workspaceId, [...unsubEmails]),
               ])
@@ -789,8 +789,9 @@ async function resolveDrainRows(group: DrainGroup, rows: DrainRow[]): Promise<Ma
         cooldownActive: cooldownIds.has(row.record_id),
         isDuplicate: (email) => (dupEmails.has(email) ? duplicates.has(email) : undefined),
         workspaceId: row.workspace_id,
+        // 수신거부는 사업부별 — 묶음의 사업부로 읽은 값이라 다른 사업부 줄은 줄마다 처리로 넘긴다
         isUnsubscribed: (email) =>
-            unsubEmails.has(email) ? unsubscribed.has(email) : undefined,
+            row.workspace_id === workspaceId && unsubEmails.has(email) ? unsubscribed.has(email) : undefined,
         isReplyStopped: (email) =>
             row.workspace_id === workspaceId && unsubEmails.has(email) ? replyStops.get(email)?.reason ?? null : undefined,
         aiClientReady,
@@ -901,14 +902,14 @@ async function loadDuplicateRecipients(partitionId: number, emails: string[]): P
 }
 
 /**
- * isOrganizationUnsubscribed와 같은 계정 전체·공백/대소문자 정규화 조건으로 거부한 받는 주소.
+ * isWorkspaceUnsubscribed와 같은 사업부 범위(그 사업부 + 사업부 없는 줄)·공백/대소문자 정규화 조건으로 거부한 받는 주소.
  * 값을 VALUES로 넘겨 SQL의 lower로 비교한다 — JS 소문자와 Postgres lower가 다를 수 있는 글자에서도 같은 답이 나오게
  */
-async function loadUnsubscribedEmails(orgId: string, emails: string[]): Promise<Set<string>> {
+async function loadUnsubscribedEmails(orgId: string, workspaceId: number | null, emails: string[]): Promise<Set<string>> {
     const out = new Set<string>();
     for (let i = 0; i < emails.length; i += IN_CHUNK) {
         const part = emails.slice(i, i + IN_CHUNK);
-        const rows = (await db.execute(unsubscribedRecipientsQuery(orgId, part))) as unknown as Array<{ ordinal: number }>;
+        const rows = (await db.execute(unsubscribedRecipientsQuery(orgId, workspaceId, part))) as unknown as Array<{ ordinal: number }>;
         for (const r of rows) out.add(part[r.ordinal]);
     }
     return out;

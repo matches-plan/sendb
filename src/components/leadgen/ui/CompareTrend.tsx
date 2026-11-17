@@ -18,7 +18,7 @@ export function CompareTrend({ groups, names, byDay = false }: { groups: Compare
     return (
         <StatCard
             title="일별 추세 비교"
-            info={`메일을 보낸 날만 점이 찍혀요. 집계가 끝나지 않은 날은 비워 둡니다.${byDay ? "\n가로축은 기간마다 첫날부터 며칠째인지예요." : ""}\nA는 실선, B는 긴 점선, C는 짧은 점선이에요.`}
+            info={`메일을 보낸 날만 점이 찍혀요. 집계가 끝나지 않은 날은 비워 둡니다.${byDay ? " 가로축은 기간마다 첫날부터 며칠째인지예요." : ""} A는 실선, B는 긴 점선, C는 짧은 점선이에요.`}
             action={
                 <Tabs value={t.metric} onValueChange={t.setMetric}>
                     <TabsList>

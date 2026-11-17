@@ -3,48 +3,51 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import WorkspaceLayout, { QueryErrorState } from "@/components/layouts/WorkspaceLayout";
-import { PageContainer } from "@/components/common/page-container";
-import { PageHeader } from "@/components/common/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 import { Settings, Mail } from "lucide-react";
-import EmailDashboard from "@/components/email/dashboard/ui/EmailDashboard";
 import EmailSendLogTable from "@/components/email/EmailSendLogTable";
-import EmailSendStats from "@/components/email/EmailSendStats";
-import EmailConfigForm from "@/components/email/EmailConfigForm";
-import EmailCategoryManager from "@/components/email/EmailCategoryManager";
 import AutoPersonalizedEmailConfig from "@/components/email/AutoPersonalizedEmailConfig";
-import FollowupQueueTable from "@/components/email/FollowupQueueTable";
-import AssetManager from "@/components/email/assets/ui/AssetManager";
 import RepliesTab from "@/components/email/replies/ui/RepliesTab";
 import { useRepliesEnabled } from "@/components/email/replies/hooks/useRepliesEnabled";
 import { useAllPartitionOptions } from "@/components/email/hooks/useAllPartitionOptions";
+import { LeadWorkspaceTabs } from "@/components/leads/ui/LeadWorkspaceTabs";
+import { useLeadgenWorkspaces } from "@/components/leadgen/hooks/useLeadgenWorkspaces";
 import { useEmailConfig } from "@/hooks/useEmailConfig";
 import { useSenderProfiles } from "@/hooks/useSenderProfiles";
 import AiCopyManager from "@/components/ai-copy/ui/AiCopyManager";
-import ExperimentManager from "@/components/email-experiments/ui/ExperimentManager";
-import { experimentHref } from "@/components/email-experiments/experiment-href";
-
-const CRM_EMAIL_TABS = ["templates", "links"];
 
 function EmailPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const activeTab = searchParams.get("tab") || "dashboard";
-    // 템플릿·템플릿 자동발송은 CRM관리 > 이메일(/crm-email)로 옮겼다 — 예전 링크·대시보드 바로가기도 그쪽으로 보낸다
+    const activeTab = searchParams.get("tab") || "ai-auto";
+    // 위쪽 사업부 탭 — 주소(?ws=)에 남겨 새로고침·뒤로 가기에도 유지한다. 없으면 전체
+    const workspaceId = Number(searchParams.get("ws")) || null;
+    const emailHref = (tab: string, ws: number | null) => `/email?tab=${tab}${ws ? `&ws=${ws}` : ""}`;
     const setActiveTab = (tab: string) => {
-        if (CRM_EMAIL_TABS.includes(tab)) router.push(`/crm-email?tab=${tab}`);
-        else router.replace(`/email?tab=${tab}`);
+        router.replace(emailHref(tab, workspaceId));
     };
+    const setWorkspaceId = (ws: number | null) => router.replace(emailHref(activeTab, ws));
+    // 발송 경고 알림에서 오면 ?health=<알림 id> — 발송 이력을 그 사건의 메일로 거른다
+    const healthAlertId = Number(searchParams.get("health")) || null;
+    // 발송 이력 "확인할 문제" 카드로 열면 ?hev=<사건 id> — 알림 안의 그 사건부터
+    const healthEventId = Number(searchParams.get("hev")) || null;
+    const workspaceTabs = useLeadgenWorkspaces();
+    // 없앤 탭의 예전 주소: 고정 본문(템플릿)·에셋 → AI 콜드메일 설정, 후속 큐 → 발송 이력(줄을 펼쳐 후속을 본다)
     useEffect(() => {
-        if (CRM_EMAIL_TABS.includes(activeTab)) router.replace(`/crm-email?tab=${activeTab}`);
-    }, [activeTab, router]);
-    // 실험 선택은 주소에 남긴다 — push라서 뒤로 가기로 이전에 본 실험으로 돌아간다 (UX-242)
-    const selectExperiment = (id: number) => {
-        if (searchParams.get("tab") === "experiments" && Number(searchParams.get("experimentId")) === id) return;
-        router.push(experimentHref(id, searchParams.toString()), { scroll: false });
-    };
+        if (activeTab === "settings") { router.replace("/leadgen/settings"); return; }
+        // 발송 상태는 리드젠 설정 › 발송 경고로 옮겼다 — 예전 탭 주소와 구글 챗 알림 링크(/email#send-health)도 그리로
+        if (activeTab === "dashboard" || (!searchParams.get("tab") && window.location.hash === "#send-health")) {
+            router.replace("/leadgen/settings?menu=health");
+            return;
+        }
+        // AB테스트 결과는 리드젠통계 › AB 테스트로 옮겼다
+        if (activeTab === "experiments") { router.replace("/leadgen/stats?view=ab"); return; }
+        const moved: Record<string, string> = { templates: "ai-auto", links: "ai-auto", assets: "ai-auto", "followup-queue": "logs", "send-stats": "ai-auto" };
+        if (moved[activeTab]) router.replace(`/email?tab=${moved[activeTab]}${workspaceId ? `&ws=${workspaceId}` : ""}`);
+    }, [activeTab, router, workspaceId, searchParams]);
 
     const { config, isLoading: configLoading } = useEmailConfig();
     const { profiles, isLoading: profilesLoading } = useSenderProfiles();
@@ -62,33 +65,18 @@ function EmailPageContent() {
 
     return (
         <WorkspaceLayout>
-            <PageContainer>
-                <PageHeader
-                    title={
-                        <span className="flex items-center gap-1.5">
-                            콜드메일
-                            <Button
-                                variant={activeTab === "settings" ? "secondary" : "ghost"}
-                                size="icon"
-                                className="size-7"
-                                aria-label={activeTab === "settings" ? "콜드메일 설정 닫기" : "콜드메일 설정 열기"}
-                                aria-pressed={activeTab === "settings"}
-                                onClick={() => setActiveTab(activeTab === "settings" ? "dashboard" : "settings")}
-                            >
-                                <Settings className="size-4" />
-                            </Button>
-                        </span>
-                    }
-                    description="NHN Cloud Email을 통해 이메일을 발송하고 관리합니다."
-                />
-
-                {activeTab === "settings" ? (
-                    <div className="mt-6 space-y-6">
-                        <EmailConfigForm />
-                        <EmailCategoryManager />
-                    </div>
-                ) : !isSetupLoading && !isReady && !["ai-quality", "experiments"].includes(activeTab) ? (
-                    <div className="mt-6 flex flex-col items-center justify-center py-20">
+            <div className="flex min-h-0 flex-1 flex-col">
+            <LeadWorkspaceTabs
+                value={workspaceId}
+                onChange={setWorkspaceId}
+                items={workspaceTabs.items}
+                loading={workspaceTabs.isLoading}
+                allTab={{ onSelect: () => setWorkspaceId(null) }}
+                prefKey="email"
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
+                {!isSetupLoading && !isReady && activeTab !== "ai-quality" ? (
+                    <div className="flex flex-col items-center justify-center py-20">
                         <Card className="max-w-md w-full text-center">
                             <CardHeader>
                                 <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-muted">
@@ -102,71 +90,54 @@ function EmailPageContent() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <Button onClick={() => setActiveTab("settings")}>
-                                    <Settings className="size-4 mr-2" />
-                                    설정으로 이동
+                                <Button asChild>
+                                    <Link href="/leadgen/settings">
+                                        <Settings className="size-4 mr-2" />
+                                        리드젠 설정으로 이동
+                                    </Link>
                                 </Button>
                             </CardContent>
                         </Card>
                     </div>
                 ) : (
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
+                        <div className="overflow-x-auto">
                         <TabsList className="[&>button]:flex-none">
-                            <TabsTrigger value="dashboard">대시보드</TabsTrigger>
-                            <TabsTrigger value="ai-auto">AI 자동발송</TabsTrigger>
-                            <TabsTrigger value="ai-quality">AI 품질</TabsTrigger>
-                            <TabsTrigger value="experiments">문구 실험</TabsTrigger>
-                            <TabsTrigger value="assets">에셋</TabsTrigger>
-                            <TabsTrigger value="followup-queue">후속 큐</TabsTrigger>
+                            <TabsTrigger value="ai-auto">AI콜드메일 설정</TabsTrigger>
+                            {/* AI 품질 탭은 숨긴다 (주소 ?tab=ai-quality로는 열린다) */}
                             {repliesEnabled && <TabsTrigger value="replies">회신</TabsTrigger>}
                             <TabsTrigger value="logs">발송 이력</TabsTrigger>
-                            <TabsTrigger value="send-stats">발송 통계</TabsTrigger>
                         </TabsList>
                         </div>
 
-                        <TabsContent value="dashboard" className="mt-6">
-                            <EmailDashboard onTabChange={setActiveTab} />
-                        </TabsContent>
-
                         <TabsContent value="ai-auto" className="mt-6">
-                            <AutoPersonalizedEmailConfig partitions={partitions} />
+                            <AutoPersonalizedEmailConfig partitions={partitions} workspaceId={workspaceId} />
                         </TabsContent>
                         <TabsContent value="ai-quality" className="mt-6">
                             <AiCopyManager />
                         </TabsContent>
-                        <TabsContent value="experiments" className="mt-6">
-                            <ExperimentManager
-                                initialRuleId={Number(searchParams.get("ruleId")) || undefined}
-                                experimentId={Number(searchParams.get("experimentId")) || undefined}
-                                onSelectExperiment={selectExperiment}
-                            />
-                        </TabsContent>
-
-                        <TabsContent value="assets" className="mt-6">
-                            <AssetManager />
-                        </TabsContent>
-
-                        <TabsContent value="followup-queue" className="mt-6">
-                            <FollowupQueueTable />
-                        </TabsContent>
 
                         {repliesEnabled && (
                             <TabsContent value="replies" className="mt-6">
-                                <RepliesTab />
+                                <RepliesTab workspaceId={workspaceId} />
                             </TabsContent>
                         )}
 
                         <TabsContent value="logs" className="mt-6">
-                            <EmailSendLogTable />
+                            <EmailSendLogTable
+                                workspaceId={workspaceId}
+                                partitions={partitions}
+                                healthAlertId={healthAlertId}
+                                healthEventId={healthEventId}
+                                onClearHealth={() => router.replace(emailHref("logs", workspaceId))}
+                                onPickHealth={(p) => router.replace(`${emailHref("logs", workspaceId)}&health=${p.alertId}&hev=${p.eventId}`)}
+                            />
                         </TabsContent>
 
-                        <TabsContent value="send-stats" className="mt-6">
-                            <EmailSendStats />
-                        </TabsContent>
                     </Tabs>
                 )}
-            </PageContainer>
+            </div>
+            </div>
         </WorkspaceLayout>
     );
 }

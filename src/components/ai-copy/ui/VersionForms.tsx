@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
@@ -33,7 +34,7 @@ function BusinessField({
     return (
         <Field label="사업">
             {(id) => (
-                <select
+                <OptionSelect
                     id={id}
                     required
                     className={controlClass}
@@ -46,7 +47,7 @@ function BusinessField({
                             {workspaceLabel(w)}
                         </option>
                     ))}
-                </select>
+                </OptionSelect>
             )}
         </Field>
     );
@@ -152,7 +153,7 @@ export function KnowledgeForm({
             {claims.map((claim, index) => (
                 <fieldset
                     key={index}
-                    className="space-y-3 rounded-md border p-4"
+                    className="space-y-3 rounded-md border border-border/40 p-4"
                 >
                     <legend className="px-1 text-sm">
                         안내할 사실 {index + 1}
@@ -390,7 +391,7 @@ export function PolicyForm({
                 </Field>
                 <Field label="사용 목적">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={purpose}
@@ -414,7 +415,7 @@ export function PolicyForm({
                                     {purposeLabel(p)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field
@@ -426,7 +427,7 @@ export function PolicyForm({
                     }
                 >
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={model}
@@ -443,7 +444,7 @@ export function PolicyForm({
                                     {configured(m.id) ? "" : " · 연결 필요"}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
             </div>
@@ -506,7 +507,7 @@ export function PolicyForm({
                     />
                 )}
             </Field>
-            <details className="rounded-md border p-4">
+            <details className="rounded-md border border-border/40 p-4">
                 <summary className="cursor-pointer text-sm font-medium">
                     성능 기준과 생성 설정
                 </summary>

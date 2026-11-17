@@ -283,7 +283,7 @@ async function sendEmailSingle(
             ...(unsubscribeToken
                 ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                 : {}),
-        });
+        }, { workspaceId });
 
         const sendResult = nhnResult.data?.results?.[0];
         const submissionStatus = classifyEmailSubmission(nhnResult);

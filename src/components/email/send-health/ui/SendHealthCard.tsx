@@ -89,7 +89,7 @@ export default function SendHealthCard() {
                         {view.holds.length > 0 && (
                             <section className="space-y-2">
                                 <p className="font-medium">보류 중인 명단</p>
-                                <ul className="divide-y rounded-md border">
+                                <ul className="divide-y rounded-md border border-border/40">
                                     {view.holds.map((h) => (
                                         <li key={h.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                                             <HoldBadge kind="hold" reason={h.reasonText} since={h.heldAt} />
@@ -127,7 +127,7 @@ export default function SendHealthCard() {
                             {visiblePartitions.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">위험·주의 명단이 없습니다.</p>
                             ) : (
-                                <div className="overflow-x-auto rounded-md border">
+                                <div className="overflow-x-auto rounded-md border border-border/40">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
@@ -170,7 +170,7 @@ export default function SendHealthCard() {
                             {senders.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">위험·주의·자동 멈춤 주소가 없습니다.</p>
                             ) : (
-                                <ul className="divide-y rounded-md border">
+                                <ul className="divide-y rounded-md border border-border/40">
                                     {senders.map((s) => {
                                         const autoPaused = s.isPaused && s.pausedSource === "auto";
                                         return (

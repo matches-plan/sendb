@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { controlClass, Field } from "@/components/ai-copy/ui/Fields";
@@ -89,7 +90,7 @@ export default function ExperimentForm({
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="사업">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             required
                             className={controlClass}
@@ -108,12 +109,12 @@ export default function ExperimentForm({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="이메일 규칙">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             required
                             className={controlClass}
@@ -128,7 +129,7 @@ export default function ExperimentForm({
                                         {r.name ?? `규칙 #${r.id}`}
                                     </option>
                                 ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="실험 이름">
@@ -159,7 +160,7 @@ export default function ExperimentForm({
                 </Field>
                 <Field label="바꿔 볼 한 가지">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={axis}
@@ -169,7 +170,7 @@ export default function ExperimentForm({
                             <option value="opening">도입 방식</option>
                             <option value="tone">말투</option>
                             <option value="length">문장 길이</option>
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="예상하는 변화와 이유">
@@ -191,7 +192,7 @@ export default function ExperimentForm({
                 ].map((p) => (
                     <Field key={p.label} label={p.label}>
                         {(id) => (
-                            <select
+                            <OptionSelect
                                 id={id}
                                 required
                                 className={controlClass}
@@ -204,13 +205,13 @@ export default function ExperimentForm({
                                         {v.name} · #{v.id}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         )}
                     </Field>
                 ))}
                 <Field label="공통 지식 버전">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             required
@@ -227,7 +228,7 @@ export default function ExperimentForm({
                                         {k.name} · #{k.id}
                                     </option>
                                 ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
             </div>
@@ -236,7 +237,7 @@ export default function ExperimentForm({
                     AI 품질 화면에서 첫 소개 메일 작성 지침을 평가·승인한 뒤 선택할 수 있습니다.
                 </p>
             )}
-            <fieldset className="grid gap-4 rounded-md border p-4 sm:grid-cols-3">
+            <fieldset className="grid gap-4 rounded-md border border-border/40 p-4 sm:grid-cols-3">
                 <legend className="px-1 text-sm font-medium">성과와 표본 계획</legend>
                 <Field label="현재 긍정 회신율 예상 %">
                     {(id) => (
@@ -296,7 +297,7 @@ export default function ExperimentForm({
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="회신 수집 방법">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={replySource}
@@ -304,13 +305,13 @@ export default function ExperimentForm({
                         >
                             <option value="manual">담당자가 확인한 회신을 수동 기록</option>
                             <option value="connected">연결된 회신 수집 사용</option>
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 {replySource === "manual" && (
                     <Field label="회신 수집 담당자">
                         {(id) => (
-                            <select
+                            <OptionSelect
                                 id={id}
                                 className={controlClass}
                                 required
@@ -323,12 +324,12 @@ export default function ExperimentForm({
                                         {m.name}
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                         )}
                     </Field>
                 )}
             </div>
-            <fieldset className="space-y-4 rounded-md border p-4">
+            <fieldset className="space-y-4 rounded-md border border-border/40 p-4">
                 <legend className="px-1 text-sm font-medium">
                     기존 실적을 바탕으로 정할 중단 기준
                 </legend>

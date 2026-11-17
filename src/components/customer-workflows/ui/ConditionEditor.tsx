@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import type { WorkflowGroup } from "../types";
 import { conditionFields, conditionChoices } from "../utils/labels";
 export function ConditionEditor({
@@ -14,7 +15,7 @@ export function ConditionEditor({
     return (
         <div className="space-y-2 rounded-lg bg-muted/30 p-3 text-xs">
             <div className="flex flex-wrap items-center gap-2">
-                <select
+                <OptionSelect
                     aria-label={`${prefix} 조건 결합`}
                     className="rounded border p-2"
                     value={value.mode}
@@ -27,7 +28,7 @@ export function ConditionEditor({
                 >
                     <option value="all">모든 조건 일치</option>
                     <option value="any">하나 이상 일치</option>
-                </select>
+                </OptionSelect>
                 <button
                     type="button"
                     onClick={() =>
@@ -68,7 +69,7 @@ export function ConditionEditor({
                         className="grid gap-2 sm:grid-cols-[1.4fr_1fr_0.7fr_1fr_auto]"
                     >
                         <div className="min-w-0 space-y-1">
-                            <select
+                            <OptionSelect
                                 aria-label={`${prefix} 조건 필드 ${i + 1}`}
                                 className="w-full rounded border p-2"
                                 value={
@@ -109,7 +110,7 @@ export function ConditionEditor({
                                 <option value="custom">
                                     기타 고객·이벤트 속성
                                 </option>
-                            </select>
+                            </OptionSelect>
                             {!conditionFields[r.path] && (
                                 <input
                                     aria-label={`${prefix} 기타 필드 경로 ${i + 1}`}
@@ -122,7 +123,7 @@ export function ConditionEditor({
                                 />
                             )}
                         </div>
-                        <select
+                        <OptionSelect
                             aria-label={`${prefix} 비교 방식 ${i + 1}`}
                             value={r.op}
                             onChange={(e) =>
@@ -143,8 +144,8 @@ export function ConditionEditor({
                                     {label}
                                 </option>
                             ))}
-                        </select>
-                        <select
+                        </OptionSelect>
+                        <OptionSelect
                             aria-label={`${prefix} 비교값 종류 ${i + 1}`}
                             className="rounded border p-2"
                             value={r.value === null ? "null" : typeof r.value}
@@ -165,10 +166,10 @@ export function ConditionEditor({
                             <option value="number">숫자</option>
                             <option value="boolean">예·아니오</option>
                             <option value="null">빈 값</option>
-                        </select>
+                        </OptionSelect>
                         {typeof r.value === "string" &&
                         conditionChoices[r.path] ? (
-                            <select
+                            <OptionSelect
                                 aria-label={`${prefix} 비교값 ${i + 1}`}
                                 value={r.value}
                                 className="min-w-0 rounded border p-2"
@@ -191,9 +192,9 @@ export function ConditionEditor({
                                         </option>
                                     ),
                                 )}
-                            </select>
+                            </OptionSelect>
                         ) : typeof r.value === "boolean" ? (
-                            <select
+                            <OptionSelect
                                 aria-label={`${prefix} 비교값 ${i + 1}`}
                                 value={String(r.value)}
                                 onChange={(e) =>
@@ -203,7 +204,7 @@ export function ConditionEditor({
                             >
                                 <option value="true">예</option>
                                 <option value="false">아니오</option>
-                            </select>
+                            </OptionSelect>
                         ) : (
                             <input
                                 aria-label={`${prefix} 비교값 ${i + 1}`}

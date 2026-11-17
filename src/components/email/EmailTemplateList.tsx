@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useEmailSection } from "@/components/email/hooks/useEmailSection";
 import EmailTestSendDialog from "@/components/email/EmailTestSendDialog";
 import type { EmailTemplate } from "@/lib/db";
 import { QueryErrorState } from "@/components/layouts/WorkspaceLayout";
@@ -33,6 +34,7 @@ import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 export default function EmailTemplateList() {
     const { confirm, confirmationDialog } = useAsyncConfirm();
     const router = useRouter();
+    const { base, purpose } = useEmailSection();
     const { categories } = useEmailCategories();
     const [categoryFilter, setCategoryFilter] = useState<string>("all");
     const [searchInput, setSearchInput] = useState("");
@@ -46,6 +48,7 @@ export default function EmailTemplateList() {
         page,
         q: search,
         categoryId: categoryFilter === "all" ? undefined : categoryFilter === "none" ? "none" : Number(categoryFilter),
+        purpose,
     });
 
     useEffect(() => {
@@ -102,7 +105,7 @@ export default function EmailTemplateList() {
                         className="h-8 w-48 text-sm"
                     />
                 </div>
-                <Button onClick={() => router.push("/crm-email/templates/new")} className="shrink-0">
+                <Button onClick={() => router.push(`${base}/templates/new`)} className="shrink-0">
                     <Plus className="h-4 w-4 mr-2" />
                     새 템플릿
                 </Button>
@@ -169,7 +172,7 @@ export default function EmailTemplateList() {
                                         >
                                             <Send className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => router.push(`/crm-email/templates/${template.id}`)}>
+                                        <Button variant="ghost" size="icon" onClick={() => router.push(`${base}/templates/${template.id}`)}>
                                             <Pencil className="h-4 w-4" />
                                         </Button>
                                         <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)}>

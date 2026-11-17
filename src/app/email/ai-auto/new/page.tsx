@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { PromptWithVariableInsert } from "@/components/email/PromptWithVariableInsert";
+import { AbTestField } from "@/components/email/ab-test/ui/AbTestField";
+import { useRuleAbTest } from "@/components/email/ab-test/hooks/useRuleAbTest";
 import {
     Card,
     CardContent,
@@ -45,7 +47,7 @@ import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
 import useSWR from "swr";
 import { blockingError, defaultFetcher } from "@/lib/swr-fetcher";
 
-interface EmailSignature { id: number; name: string; isDefault: boolean; }
+interface EmailSignature { id: number; name: string; isDefault: boolean; workspaceId: number | null; }
 
 const FORMAT_OPTIONS = [
     { value: "plain", label: "간결한 텍스트" },
@@ -97,6 +99,7 @@ function NewAiAutoPageContent() {
     const { createLink } = useAutoPersonalizedEmail(partitionId || null);
     const { products } = useProducts({ activeOnly: true });
     const { fields } = useResolvedFields(partitionId || null);
+    const abTest = useRuleAbTest(null);
     const { data: signaturesData, error: signaturesError, mutate: mutateSignatures } = useSWR("/api/email/signatures", defaultFetcher);
     const signatures: EmailSignature[] = signaturesData?.data ?? [];
 
@@ -133,6 +136,10 @@ function NewAiAutoPageContent() {
             toast.error("필수 항목을 입력해주세요.");
             return;
         }
+        if (!asDraft && abTest.invalid) {
+            toast.error("추가한 AB 테스트의 B안 지시를 입력해주세요.");
+            return;
+        }
         setSaving(true);
         try {
             const triggerCondition = conditionEnabled && conditionField
@@ -163,6 +170,15 @@ function NewAiAutoPageContent() {
                 isDraft: asDraft ? 1 : 0,
             });
             if (result.success) {
+                // 새 규칙을 만든 뒤 AB 테스트를 시작한다 (임시저장은 제외)
+                const newId = Number(result.data?.id);
+                if (!asDraft && newId) {
+                    try {
+                        await abTest.save(newId);
+                    } catch (error) {
+                        toast.error(`규칙은 만들었지만 AB 테스트를 시작하지 못했습니다: ${error instanceof Error ? error.message : "규칙 수정에서 다시 추가해주세요."}`);
+                    }
+                }
                 toast.success(asDraft ? "임시저장되었습니다." : "규칙이 생성되었습니다.");
                 router.push("/email?tab=ai-auto");
             } else {
@@ -263,7 +279,11 @@ function NewAiAutoPageContent() {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="default">기본 서명</SelectItem>
-                                                {signatures.map((s) => (
+                                                {signatures.filter((s) => {
+                                                    // 이 규칙 사업부의 서명 + 공통 서명 (이미 고른 서명은 그대로 보인다)
+                                                    const ws = ((allPartitionsData?.data as Array<{ id: number; workspaceId: number }>) ?? []).find((x) => x.id === partitionId)?.workspaceId;
+                                                    return s.id === signatureId || s.workspaceId == null || !ws || s.workspaceId === ws;
+                                                }).map((s) => (
                                                     <SelectItem key={s.id} value={String(s.id)}>
                                                         {s.name}{s.isDefault ? " (기본)" : ""}
                                                     </SelectItem>
@@ -398,22 +418,19 @@ function NewAiAutoPageContent() {
                                     <div className="space-y-2">
                                         <Label>
                                             AI 지시사항
-                                            <HelpTip text="직접 입력하면 형식/톤 설정 대신 이 내용이 사용됩니다. ##필드명## 형태로 수신자 정보를 끼워 넣을 수 있습니다." />
+                                            <HelpTip text="##필드명## 형태로 수신자 정보를 끼워 넣을 수 있습니다." />
                                         </Label>
                                         <PromptWithVariableInsert
                                             value={prompt}
                                             onChange={setPrompt}
                                             fields={fields.map((f) => ({ key: f.key, label: f.label }))}
-                                            placeholder="직접 지시사항을 입력하면 아래 형식/톤 설정 대신 이 내용이 사용됩니다. 우측 '변수 삽입' 버튼으로 수신자 정보를 끼워넣을 수 있어요."
+                                            placeholder="AI가 쓸 메일 내용·방향을 입력하세요."
                                             rows={5}
                                         />
-                                        {prompt.trim() && (
-                                            <p className="text-xs text-muted-foreground">직접 지시사항이 입력되어 형식/톤 설정은 무시됩니다.</p>
-                                        )}
                                     </div>
+                                    <AbTestField abTest={abTest} fields={fields.map((f) => ({ key: f.key, label: f.label }))} />
 
-                                    {!prompt.trim() && (
-                                        <>
+                                    <>
                                             <div className="space-y-2">
                                                 <Label>이메일 형식</Label>
                                                 <Select value={format} onValueChange={(v) => setFormat(v as "plain" | "designed")}>
@@ -448,8 +465,7 @@ function NewAiAutoPageContent() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                        </>
-                                    )}
+                                    </>
 
                                     <div className="space-y-2">
                                         <Label>AI 모델</Label>
@@ -620,17 +636,15 @@ function NewAiAutoPageContent() {
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">형식</span>
                                             <Badge variant="outline">
-                                                {prompt.trim() ? "커스텀" : FORMAT_OPTIONS.find((f) => f.value === format)?.label}
+                                                {FORMAT_OPTIONS.find((f) => f.value === format)?.label}
                                             </Badge>
                                         </div>
-                                        {!prompt.trim() && (
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-muted-foreground">톤</span>
-                                                <Badge variant="outline">
-                                                    {TONE_OPTIONS.find((t) => t.value === tone)?.label || "기본"}
-                                                </Badge>
-                                            </div>
-                                        )}
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">톤</span>
+                                            <Badge variant="outline">
+                                                {TONE_OPTIONS.find((t) => t.value === tone)?.label || "기본"}
+                                            </Badge>
+                                        </div>
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">자동 조사</span>
                                             <Badge variant={autoResearch ? "default" : "outline"}>

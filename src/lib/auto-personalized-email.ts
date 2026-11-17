@@ -341,6 +341,7 @@ export async function processAutoPersonalizedEmail(
                 const signatureJson = await resolveSignature(orgId, {
                     requestedId: link.signatureId ?? undefined,
                     config: emailConfig,
+                    workspaceId,
                 });
 
                 // 7. 회사 조사 (autoResearch && _companyResearch 없으면)
@@ -416,8 +417,13 @@ export async function processAutoPersonalizedEmail(
                 }
 
                 // 8-1. 발신자 페르소나 (서명에서 추출)
-                if (experimentEnrollment.kind === "assigned") {
-                    assetUrls = experimentEnrollment.experiment.config.ruleSnapshot.assetUrls as string[];
+                // 작성 지침 비교 실험(policy)은 시작할 때의 규칙 그대로 비교한다. AB 테스트(prompt)는 지시사항만 다르다
+                const pinnedExperiment = experimentEnrollment.kind === "assigned" && !!experimentEnrollment.policy && !!experimentEnrollment.knowledge
+                    ? experimentEnrollment : null;
+                const promptArm = experimentEnrollment.kind === "assigned" && experimentEnrollment.armPrompt
+                    ? experimentEnrollment : null;
+                if (pinnedExperiment) {
+                    assetUrls = pinnedExperiment.experiment.config.ruleSnapshot.assetUrls as string[];
                 }
                 let senderPersona: { name: string; title?: string; company?: string } | null = null;
                 if (link.useSignaturePersona === 1 && signatureJson) {
@@ -434,7 +440,8 @@ export async function processAutoPersonalizedEmail(
                 }
 
                 // 8-2. AI 이메일 생성 — 프롬프트의 ##필드명## 변수를 레코드 값으로 치환
-                const rawPrompt = link.prompt || "이 회사에 적합한 제품 소개 이메일을 작성해주세요.";
+                // AB 테스트 배정이면 그 집단(A·B)의 지시사항으로 쓴다
+                const rawPrompt = promptArm?.armPrompt || link.prompt || "이 회사에 적합한 제품 소개 이메일을 작성해주세요.";
                 const prompt = substitutePromptVariables(rawPrompt, recordData);
                 const emailInput = {
                     prompt,
@@ -452,11 +459,12 @@ export async function processAutoPersonalizedEmail(
                     model: link.model ?? undefined,
                     legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt },
                     approvedContext: { system: buildEmailSystemPrompt({ ...emailInput, product: null, format: "plain",
-                        ctaUrl: experimentEnrollment.kind === "assigned" ? String(experimentEnrollment.experiment.config.ruleSnapshot.resolvedCtaUrl ?? "") || undefined : emailInput.ctaUrl }), user: prompt,
-                        fixedSubject: experimentEnrollment.kind === "assigned" ? experimentEnrollment.experiment.config.subject : undefined,
-                        allowedUrls: experimentEnrollment.kind === "assigned" ? [experimentEnrollment.experiment.config.ruleSnapshot.resolvedCtaUrl, ...assetUrls].filter((url): url is string => typeof url === "string" && !!url)
+                        ctaUrl: pinnedExperiment ? String(pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl ?? "") || undefined : emailInput.ctaUrl }), user: prompt,
+                        fixedSubject: pinnedExperiment ? pinnedExperiment.experiment.config.subject : undefined,
+                        allowedUrls: pinnedExperiment ? [pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl, ...assetUrls].filter((url): url is string => typeof url === "string" && !!url)
                             : [link.ctaUrl, product?.url, ...assetUrls].filter((url): url is string => !!url) },
-                    pinned: experimentEnrollment.kind === "assigned" ? { policy: experimentEnrollment.policy, knowledge: experimentEnrollment.knowledge, assignmentId: experimentEnrollment.assignment.id } : undefined,
+                    pinned: pinnedExperiment ? { policy: pinnedExperiment.policy!, knowledge: pinnedExperiment.knowledge!, assignmentId: pinnedExperiment.assignment.id } : undefined,
+                    assignmentId: promptArm?.assignment.id,
                 });
                 console.log(`[AutoEmail] Email generated for record ${record.id}: subject="${emailResult.subject}"`);
 
@@ -557,7 +565,7 @@ export async function processAutoPersonalizedEmail(
                 ...(unsubscribeToken
                     ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                     : {}),
-            });
+            }, { workspaceId });
 
             const sendResult = nhnResult.data?.results?.[0];
             submissionStatus = classifyEmailSubmission(nhnResult);

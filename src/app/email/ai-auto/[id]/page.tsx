@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { PromptWithVariableInsert } from "@/components/email/PromptWithVariableInsert";
+import { AbTestField } from "@/components/email/ab-test/ui/AbTestField";
+import { useRuleAbTest } from "@/components/email/ab-test/hooks/useRuleAbTest";
 import {
     Card,
     CardContent,
@@ -58,7 +60,7 @@ import { linkSenderPool } from "@/lib/email-sender-limit-rules";
 import useSWR from "swr";
 import { defaultFetcher } from "@/lib/swr-fetcher";
 
-interface EmailSignature { id: number; name: string; isDefault: boolean; }
+interface EmailSignature { id: number; name: string; isDefault: boolean; workspaceId: number | null; }
 
 const FORMAT_OPTIONS = [
     { value: "plain", label: "간결한 텍스트" },
@@ -120,6 +122,7 @@ function EditAiAutoPageContent() {
     const { links, isLoading, updateLink } = useAutoPersonalizedEmail(initialPartitionId || null);
     const { products } = useProducts({ activeOnly: true });
     const { fields } = useResolvedFields(currentPartitionId || null);
+    const abTest = useRuleAbTest(linkId || null);
     const { data: signaturesData } = useSWR("/api/email/signatures", defaultFetcher);
     const signatures: EmailSignature[] = signaturesData?.data ?? [];
     const link = links.find((l) => l.id === linkId);
@@ -301,6 +304,14 @@ function EditAiAutoPageContent() {
             return result.experiments as ImpactedExperiment[];
         }
         if (!result?.success) throw new Error(result?.error || "저장에 실패했습니다.");
+        // 규칙을 저장한 뒤 AB 테스트를 맞춘다 (A안 = 방금 저장한 지시사항). 임시저장은 건드리지 않는다
+        if (!asDraft) {
+            try {
+                await abTest.save(linkId);
+            } catch (error) {
+                throw new Error(`규칙은 저장했지만 AB 테스트를 맞추지 못했습니다: ${error instanceof Error ? error.message : "다시 시도해주세요."}`);
+            }
+        }
         toast.success(asDraft ? "임시저장되었습니다." : "규칙이 수정되었습니다.");
         router.push("/email?tab=ai-auto");
         return null;
@@ -314,6 +325,10 @@ function EditAiAutoPageContent() {
     const handleSave = async (asDraft = false) => {
         if (!asDraft && (!recipientField || !companyField)) {
             toast.error("필수 항목을 입력해주세요.");
+            return;
+        }
+        if (!asDraft && abTest.invalid) {
+            toast.error("추가한 AB 테스트의 B안 지시를 입력해주세요.");
             return;
         }
         // 초안을 정식으로 저장하면 자동 발송이 켜진다 — 상태가 바뀌는 저장만 확인을 받는다 (UX-139)
@@ -429,7 +444,11 @@ function EditAiAutoPageContent() {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="default">기본 서명</SelectItem>
-                                                {signatures.map((s) => (
+                                                {signatures.filter((s) => {
+                                                    // 이 규칙 사업부의 서명 + 공통 서명 (이미 고른 서명은 그대로 보인다)
+                                                    const ws = partitionItems.find((x) => x.id === currentPartitionId)?.workspaceId;
+                                                    return s.id === signatureId || s.workspaceId == null || !ws || s.workspaceId === ws;
+                                                }).map((s) => (
                                                     <SelectItem key={s.id} value={String(s.id)}>
                                                         {s.name}{s.isDefault ? " (기본)" : ""}
                                                     </SelectItem>
@@ -564,22 +583,24 @@ function EditAiAutoPageContent() {
                                     <div className="space-y-2">
                                         <Label>
                                             AI 지시사항
-                                            <HelpTip text="직접 입력하면 형식/톤 설정 대신 이 내용이 사용됩니다. ##필드명## 형태로 수신자 정보를 끼워 넣을 수 있습니다." />
+                                            <HelpTip text="##필드명## 형태로 수신자 정보를 끼워 넣을 수 있습니다." />
                                         </Label>
                                         <PromptWithVariableInsert
                                             value={prompt}
                                             onChange={setPrompt}
                                             fields={fields.map((f) => ({ key: f.key, label: f.label }))}
-                                            placeholder="직접 지시사항을 입력하면 아래 형식/톤 설정 대신 이 내용이 사용됩니다. 우측 '변수 삽입' 버튼으로 수신자 정보를 끼워넣을 수 있어요."
+                                            placeholder="AI가 쓸 메일 내용·방향을 입력하세요."
                                             rows={5}
                                         />
-                                        {prompt.trim() && (
-                                            <p className="text-xs text-muted-foreground">직접 지시사항이 입력되어 형식/톤 설정은 무시됩니다.</p>
-                                        )}
                                     </div>
+                                    <AbTestField
+                                        abTest={abTest}
+                                        fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+                                        prompt={prompt}
+                                        onApplied={(applied) => applied !== null && setPrompt(applied)}
+                                    />
 
-                                    {!prompt.trim() && (
-                                        <>
+                                    <>
                                             <div className="space-y-2">
                                                 <Label>이메일 형식</Label>
                                                 <Select value={format} onValueChange={(v) => setFormat(v as "plain" | "designed")}>
@@ -614,8 +635,7 @@ function EditAiAutoPageContent() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                        </>
-                                    )}
+                                    </>
 
                                     <div className="space-y-2">
                                         <Label>AI 모델</Label>
@@ -786,17 +806,15 @@ function EditAiAutoPageContent() {
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">형식</span>
                                             <Badge variant="outline">
-                                                {prompt.trim() ? "커스텀" : FORMAT_OPTIONS.find((f) => f.value === format)?.label}
+                                                {FORMAT_OPTIONS.find((f) => f.value === format)?.label}
                                             </Badge>
                                         </div>
-                                        {!prompt.trim() && (
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-muted-foreground">톤</span>
-                                                <Badge variant="outline">
-                                                    {TONE_OPTIONS.find((t) => t.value === tone)?.label || "기본"}
-                                                </Badge>
-                                            </div>
-                                        )}
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">톤</span>
+                                            <Badge variant="outline">
+                                                {TONE_OPTIONS.find((t) => t.value === tone)?.label || "기본"}
+                                            </Badge>
+                                        </div>
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">자동 조사</span>
                                             <Badge variant={autoResearch ? "default" : "outline"}>
@@ -886,8 +904,8 @@ function EditAiAutoPageContent() {
                 <AsyncAlertDialog
                     open={experimentImpact !== null}
                     onOpenChange={(open) => { if (!open) setExperimentImpact(null); }}
-                    title="진행 중인 문구 실험이 있습니다"
-                    description={"이 변경을 저장하면 아래 실험이 비교하는 규칙 조건이 달라져, 다음 발송 준비 때 실험이 무효화됩니다.\n이미 실험에 배정된 미발송 메일은 실험을 종료할 때까지 보류됩니다. 이메일 > 문구 실험에서 실험을 종료하며 남은 메일을 계속 보낼지 취소할지 고를 수 있습니다."}
+                    title="진행 중인 자동 실험이 있습니다"
+                    description={"이 변경을 저장하면 아래 실험이 비교하는 규칙 조건이 달라져, 다음 발송 준비 때 실험이 무효화됩니다.\n이미 실험에 배정된 미발송 메일은 실험을 종료할 때까지 보류됩니다. 콜드메일 > AB테스트 결과에서 실험을 종료하며 남은 메일을 계속 보낼지 취소할지 고를 수 있습니다."}
                     confirmLabel="그래도 저장"
                     pendingLabel="저장 중..."
                     onConfirm={async () => {
@@ -904,7 +922,7 @@ function EditAiAutoPageContent() {
                         ))}
                     </ul>
                     <Button variant="link" className="h-auto p-0 self-start" onClick={() => router.push("/email?tab=experiments")}>
-                        문구 실험 보기
+                        AB테스트 결과 보기
                     </Button>
                 </AsyncAlertDialog>
             </TooltipProvider>

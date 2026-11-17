@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { UnsubscribeEntry, UnsubscribeLookupResult, UnsubscribeTarget } from "@/components/email/unsubscribes/types";
-import { manualUnsubscribeInput, parseUnsubscribePagination, parseUnsubscribeTarget, unsubscribeLookupInput } from "./email-unsubscribe-management-rules";
+import type { UnsubscribeEntry } from "@/components/email/unsubscribes/types";
+import { manualUnsubscribeInput, parsePositiveId, parseUnsubscribePagination } from "./email-unsubscribe-management-rules";
 
 interface Identity { orgId: string; role: string }
 interface Dependencies {
     authenticate: (request: NextRequest) => Identity | null | Promise<Identity | null>;
-    list: (orgId: string, options: { page: number; pageSize: number; q: string }) => Promise<{ items: UnsubscribeEntry[]; totalCount: number }>;
-    register: (orgId: string, input: { email: string; reason?: string }) => Promise<void>;
-    lookup: (orgId: string, targets: UnsubscribeTarget[]) => Promise<UnsubscribeLookupResult[]>;
+    workspaceInOrg: (orgId: string, workspaceId: number) => Promise<boolean>;
+    list: (orgId: string, options: { workspaceId: number; page: number; pageSize: number; q: string }) => Promise<{ items: UnsubscribeEntry[]; totalCount: number }>;
+    register: (orgId: string, input: { email: string; workspaceId: number; reason?: string }) => Promise<void>;
+    /** 그 사업부 목록에 보이는 줄(그 사업부 또는 사업부 없음)을 지운다. 지운 주소, 없으면 null */
+    remove: (orgId: string, workspaceId: number, id: number) => Promise<string | null>;
 }
 
 function failure(error: string, status: number) {
@@ -18,57 +20,59 @@ function success(data: unknown) {
     return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
 }
 
-/** Keep identity outside request bodies: all reads and writes take the authenticated organization. */
+const canManage = (user: Identity) => user.role === "owner" || user.role === "admin";
+const WORKSPACE_NOT_FOUND = "사업부를 찾을 수 없습니다.";
+
+/** Keep identity outside request bodies: all reads and writes take the authenticated organization. 수신거부는 사업부별이다 */
 export function createUnsubscribeManagementHandlers(deps: Dependencies) {
-    function identityError(request: NextRequest, user: Identity) {
+    async function identify(request: NextRequest): Promise<Identity | NextResponse> {
+        const user = await deps.authenticate(request);
+        if (!user) return failure("인증이 필요합니다.", 401);
         const expectedOrgId = request.headers.get("x-sendb-org-id");
-        return expectedOrgId && expectedOrgId !== user.orgId
-            ? failure("조직이 변경되었습니다. 페이지를 새로고침해주세요.", 409)
-            : null;
+        if (expectedOrgId && expectedOrgId !== user.orgId) return failure("조직이 변경되었습니다. 페이지를 새로고침해주세요.", 409);
+        return user;
     }
     return {
         async GET(request: NextRequest) {
-            const user = await deps.authenticate(request);
-            if (!user) return failure("인증이 필요합니다.", 401);
-            const mismatch = identityError(request, user);
-            if (mismatch) return mismatch;
+            const user = await identify(request);
+            if (user instanceof NextResponse) return user;
             const options = parseUnsubscribePagination(request.nextUrl.searchParams);
-            if (!options) return failure("검색어나 페이지 범위를 확인해주세요.", 400);
+            if (!options) return failure("사업부·검색어·페이지 범위를 확인해주세요.", 400);
             try {
-                return success({ ...await deps.list(user.orgId, options), page: options.page, pageSize: options.pageSize, canManage: user.role === "owner" || user.role === "admin" });
+                if (!await deps.workspaceInOrg(user.orgId, options.workspaceId)) return failure(WORKSPACE_NOT_FOUND, 404);
+                return success({ ...await deps.list(user.orgId, options), page: options.page, pageSize: options.pageSize, canManage: canManage(user) });
             } catch {
                 return failure("수신거부 목록을 불러오지 못했습니다.", 500);
             }
         },
         async POST(request: NextRequest) {
-            const user = await deps.authenticate(request);
-            if (!user) return failure("인증이 필요합니다.", 401);
-            const mismatch = identityError(request, user);
-            if (mismatch) return mismatch;
-            if (user.role !== "owner" && user.role !== "admin") return failure("수동 등록은 관리자만 할 수 있습니다.", 403);
+            const user = await identify(request);
+            if (user instanceof NextResponse) return user;
+            if (!canManage(user)) return failure("수동 등록은 관리자만 할 수 있습니다.", 403);
             const parsed = manualUnsubscribeInput.safeParse(await request.json().catch(() => null));
             if (!parsed.success) return failure("정확한 이메일 주소와 1,000자 이내의 사유를 입력해주세요. 도메인 전체 등록은 지원하지 않습니다.", 400);
             try {
+                if (!await deps.workspaceInOrg(user.orgId, parsed.data.workspaceId)) return failure(WORKSPACE_NOT_FOUND, 404);
                 await deps.register(user.orgId, parsed.data);
                 return success({ email: parsed.data.email });
             } catch {
                 return failure("수신거부 등록에 실패했습니다.", 500);
             }
         },
-        async lookup(request: NextRequest) {
-            const user = await deps.authenticate(request);
-            if (!user) return failure("인증이 필요합니다.", 401);
-            const mismatch = identityError(request, user);
-            if (mismatch) return mismatch;
-            const parsed = unsubscribeLookupInput.safeParse(await request.json().catch(() => null));
-            if (!parsed.success) return failure("이메일 또는 도메인을 1~50개 입력해주세요.", 400);
-            const targets = parsed.data.targets.map(parseUnsubscribeTarget);
-            if (targets.some((target) => !target)) return failure("이메일 또는 도메인 형식을 확인해주세요. URL과 와일드카드는 사용할 수 없습니다.", 400);
-            const uniqueTargets = [...new Map((targets as UnsubscribeTarget[]).map((target) => [target.query, target])).values()];
+        async DELETE(request: NextRequest, rawId: string) {
+            const user = await identify(request);
+            if (user instanceof NextResponse) return user;
+            if (!canManage(user)) return failure("수신거부 해제는 관리자만 할 수 있습니다.", 403);
+            const id = parsePositiveId(rawId);
+            const workspaceId = parsePositiveId(request.nextUrl.searchParams.get("workspaceId"));
+            if (!id || !workspaceId) return failure("해제할 수신거부와 사업부를 확인해주세요.", 400);
             try {
-                return success(await deps.lookup(user.orgId, uniqueTargets));
+                if (!await deps.workspaceInOrg(user.orgId, workspaceId)) return failure(WORKSPACE_NOT_FOUND, 404);
+                const email = await deps.remove(user.orgId, workspaceId, id);
+                if (!email) return failure("이미 해제됐거나 찾을 수 없는 수신거부입니다.", 404);
+                return success({ email });
             } catch {
-                return failure("수신거부 여부를 확인하지 못했습니다.", 500);
+                return failure("수신거부 해제에 실패했습니다.", 500);
             }
         },
     };

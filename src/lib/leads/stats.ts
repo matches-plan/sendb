@@ -1,5 +1,7 @@
-import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { db, memos, partitions, recordEvents, records } from "@/lib/db";
+import { and, asc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { db, memos, partitions, recordEvents, records, workspaces } from "@/lib/db";
+import { filterAccessiblePartitions, loadOrgScopes } from "@/lib/partition-access";
+import type { OrgRole } from "@/types";
 
 const CONVERTED = "전환";
 const CLOSED = "종료";
@@ -54,18 +56,48 @@ function monthKey(d: Date) {
     return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** 워크스페이스 리드(리드 관리 파티션) 통계 — from~to(포함) 사이에 들어온 리드만, 없으면 전체 */
+type LeadUser = { userId: string; orgId: string; role: OrgRole };
+
+/**
+ * 사용자가 볼 수 있는 리드 파티션 — workspaceId가 있으면 그 사업부, null이면 숨기지 않은 모든 사업부(전체 탭).
+ * 관리자는 전부, 직원은 권한 범위(member scope)로 거른다
+ */
+export async function accessibleLeadPartitions(user: LeadUser, workspaceId: number | null) {
+    const parts = await db
+        .select({
+            id: partitions.id,
+            name: partitions.name,
+            folderId: partitions.folderId,
+            workspaceId: partitions.workspaceId,
+            workspaceName: workspaces.name,
+        })
+        .from(partitions)
+        .innerJoin(workspaces, eq(workspaces.id, partitions.workspaceId))
+        .where(
+            and(
+                eq(workspaces.orgId, user.orgId),
+                eq(partitions.category, "lead"),
+                workspaceId === null ? isNull(workspaces.hiddenAt) : eq(partitions.workspaceId, workspaceId),
+            ),
+        )
+        .orderBy(partitions.workspaceId, partitions.displayOrder, partitions.id);
+    if (user.role !== "member") return parts;
+    const orgScopes = await loadOrgScopes(user.orgId);
+    return filterAccessiblePartitions({ user, partitions: parts, permission: "read", orgScopes });
+}
+
+/** 리드(리드 관리 파티션) 통계 — workspaceId가 null이면 모든 사업부 합계. from~to(포함) 사이에 들어온 리드만, 없으면 전체 */
 export async function getLeadStats(
-    orgId: string,
-    workspaceId: number,
+    user: LeadUser,
+    workspaceId: number | null,
     period: { from: Date | null; to: Date | null },
 ): Promise<LeadStats> {
     const { from, to } = period;
+    const orgId = user.orgId;
 
-    const leadPartitions = await db
-        .select({ id: partitions.id, name: partitions.name })
-        .from(partitions)
-        .where(and(eq(partitions.workspaceId, workspaceId), eq(partitions.category, "lead")));
+    const accessible = await accessibleLeadPartitions(user, workspaceId);
+    // 전체 탭에서는 사업부마다 같은 이름의 리드함이 있어 사업부 이름을 앞에 붙인다
+    const leadPartitions = accessible.map((p) => ({ id: p.id, name: workspaceId === null ? `${p.workspaceName} › ${p.name}` : p.name }));
     const partitionIds = leadPartitions.map((p) => p.id);
 
     const empty: LeadStats = {
@@ -83,6 +115,12 @@ export async function getLeadStats(
     };
     if (partitionIds.length === 0) return empty;
 
+    const leadWhere = and(
+        eq(records.orgId, orgId),
+        inArray(records.partitionId, partitionIds),
+        from ? gte(records.registeredAt, from) : undefined,
+        to ? lt(records.registeredAt, to) : undefined,
+    );
     const leadRows = await db
         .select({
             id: records.id,
@@ -91,27 +129,21 @@ export async function getLeadStats(
             registeredAt: records.registeredAt,
         })
         .from(records)
-        .where(
-            and(
-                eq(records.orgId, orgId),
-                inArray(records.partitionId, partitionIds),
-                from ? gte(records.registeredAt, from) : undefined,
-                to ? lt(records.registeredAt, to) : undefined,
-            ),
-        );
+        .where(leadWhere);
     if (leadRows.length === 0) return empty;
-    const ids = leadRows.map((r) => r.id);
+    // 댓글·상태 기록은 같은 조건의 리드 id를 하위 쿼리로 건다 (전체 탭에서 id 목록이 길어져도 파라미터가 늘지 않게)
+    const leadIds = db.select({ id: records.id }).from(records).where(leadWhere);
 
     const [memoRows, statusEvents] = await Promise.all([
         db
             .select({ recordId: memos.recordId, kind: memos.kind, createdAt: memos.createdAt })
             .from(memos)
-            .where(inArray(memos.recordId, ids))
+            .where(inArray(memos.recordId, leadIds))
             .orderBy(asc(memos.createdAt)),
         db
             .select({ recordId: recordEvents.recordId, meta: recordEvents.meta, occurredAt: recordEvents.occurredAt })
             .from(recordEvents)
-            .where(and(inArray(recordEvents.recordId, ids), eq(recordEvents.type, "status")))
+            .where(and(inArray(recordEvents.recordId, leadIds), eq(recordEvents.type, "status")))
             .orderBy(asc(recordEvents.occurredAt)),
     ]);
 

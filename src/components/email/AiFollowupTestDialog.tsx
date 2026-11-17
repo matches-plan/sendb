@@ -200,7 +200,7 @@ export default function AiFollowupTestDialog({ open, onOpenChange, linkId, linkN
                                             className="pl-8 h-9"
                                         />
                                     </div>
-                                    <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+                                    <div className="max-h-64 overflow-y-auto rounded-md border border-border/40 divide-y">
                                         {filteredLogs.length === 0 ? (
                                             <p className="text-xs text-muted-foreground p-4 text-center">
                                                 검색 결과가 없습니다.
@@ -285,7 +285,7 @@ export default function AiFollowupTestDialog({ open, onOpenChange, linkId, linkN
 
                                     <div className="space-y-2">
                                         <Label>이전 메일 링크 클릭 여부</Label>
-                                        <div className="flex items-center justify-between rounded-md border h-10 px-3">
+                                        <div className="flex items-center justify-between rounded-md border border-border/40 h-10 px-3">
                                             <span className="text-sm">{isClicked ? "클릭함" : "클릭 안 함"}</span>
                                             <Switch checked={isClicked} onCheckedChange={setIsClicked} />
                                         </div>
@@ -293,7 +293,7 @@ export default function AiFollowupTestDialog({ open, onOpenChange, linkId, linkN
                                 </div>
 
                                 {currentStep && (
-                                    <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+                                    <div className="rounded-md border border-border/40 bg-muted/30 p-3 space-y-1">
                                         <p className="text-xs font-medium">
                                             선택된 분기: {stepIndex + 1}단계 / {isClicked ? "클릭함" : "클릭 안 함"}
                                         </p>
@@ -324,7 +324,7 @@ export default function AiFollowupTestDialog({ open, onOpenChange, linkId, linkN
                                 {preview && (
                                     <div className="space-y-2 min-w-0">
                                         <Label>생성된 후속 메일 미리보기</Label>
-                                        <div className="rounded-md border p-3 space-y-2 min-w-0">
+                                        <div className="rounded-md border border-border/40 p-3 space-y-2 min-w-0">
                                             <p className="text-sm font-medium wrap-break-word">
                                                 제목: {preview.subject}
                                             </p>

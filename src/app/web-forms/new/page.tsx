@@ -24,13 +24,15 @@ import { toast } from "sonner";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
 import { workspaceLabel } from "@/lib/workspace-label";
+import { autoLinkBasic, basicQuestions } from "@/components/web-forms/utils/remap-fields";
 
 export default function NewWebFormPage() {
     const router = useRouter();
     const { workspaces } = useWorkspaces();
     const [workspaceId, setWorkspaceId] = useState<number | null>(null);
     const [partitionId, setPartitionId] = useState<number | null>(null);
-    const { partitionTree } = usePartitions(workspaceId);
+    // 웹 폼 리드는 리드관리 파티션에만 쌓는다
+    const { partitionTree } = usePartitions(workspaceId, "lead");
     const { fields: workspaceFields } = useResolvedFields(partitionId);
     const { createForm, updateForm } = useWebForms(workspaceId);
 
@@ -73,6 +75,11 @@ export default function NewWebFormPage() {
 
         const formId = result.data.id;
 
+        // AI 프롬프트가 없으면 이름·이메일·연락처 질문을 파티션 기본 칸에 연결해 넣는다
+        if (!aiPrompt.trim()) {
+            await updateForm(formId, { fields: basicQuestions(workspaceFields) });
+        }
+
         // AI 프롬프트가 있으면 필드 자동 생성 후 저장
         if (aiPrompt.trim()) {
             try {
@@ -92,7 +99,7 @@ export default function NewWebFormPage() {
                         name: data.name || name,
                         title: data.title,
                         description: data.description,
-                        fields: data.fields.map((f: any) => ({
+                        fields: autoLinkBasic(data.fields.map((f: any) => ({
                             label: f.label,
                             description: f.description || "",
                             placeholder: f.placeholder || "",
@@ -100,7 +107,7 @@ export default function NewWebFormPage() {
                             linkedFieldKey: f.linkedFieldKey || "",
                             isRequired: !!f.isRequired,
                             options: f.options || [],
-                        })),
+                        })), workspaceFields),
                     });
                     toast.success(`${data.fields.length}개 필드가 AI로 생성되었습니다.`);
                 } else {
@@ -171,7 +178,7 @@ export default function NewWebFormPage() {
                             <Label>연결 파티션</Label>
                             {allPartitions.length === 0 ? (
                                 <p className="text-sm text-muted-foreground py-2">
-                                    {workspaceId ? "파티션이 없습니다. 레코드 페이지에서 파티션을 먼저 생성해주세요." : "워크스페이스를 선택해주세요."}
+                                    {workspaceId ? "리드관리 파티션이 없습니다. 리드관리에서 파티션을 먼저 만들어주세요." : "워크스페이스를 선택해주세요."}
                                 </p>
                             ) : (
                                 <Select

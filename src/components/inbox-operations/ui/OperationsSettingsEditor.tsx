@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useOperationsSettings } from "../hooks/useOperations";
@@ -144,7 +145,7 @@ export function OperationsSettingsEditor({
                             key={i}
                             className="flex flex-wrap items-center gap-2"
                         >
-                            <select
+                            <OptionSelect
                                 className="rounded border p-2"
                                 aria-label={`업무 구간 ${i + 1} 요일`}
                                 value={row.day}
@@ -173,7 +174,7 @@ export function OperationsSettingsEditor({
                                         {d}요일
                                     </option>
                                 ))}
-                            </select>
+                            </OptionSelect>
                             <input
                                 aria-label={`업무 구간 ${i + 1} 시작`}
                                 className="w-24 rounded border p-2"

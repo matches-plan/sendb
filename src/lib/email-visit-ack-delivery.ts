@@ -438,6 +438,7 @@ export async function handleVisitAcknowledgement(item: {
                     const signature = await sender.resolveSignature(p.org_id, {
                         requestedId: signatureId,
                         config,
+                        workspaceId: p.workspace_id,
                     });
                     const token = unsub.generateUnsubscribeToken();
                     const [{ prepareCopy, attachCopyToSend, resolveCopyJob }, { generationDeps }] = await Promise.all([import("./ai-copy/preparation"), import("./ai-copy/runtime")]);
@@ -482,7 +483,7 @@ export async function handleVisitAcknowledgement(item: {
                                 ],
                                 customHeaders:
                                     unsub.buildListUnsubscribeHeaders(token),
-                            });
+                            }, { workspaceId: p.workspace_id });
                             const recipient = result.data?.results?.find(
                                 (r) =>
                                     normalizeEmail(r.receiveMailAddr) ===

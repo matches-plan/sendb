@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import type { ImportFile } from "../types";
 import { MAX_FILE_BYTES } from "@/lib/inbox/file-rules";
@@ -182,7 +183,7 @@ export function ImportFilesPanel({ jobId }: { jobId: string }) {
                 )}
                 <label className="flex items-center gap-2 text-xs">
                     상태
-                    <select
+                    <OptionSelect
                         aria-label="첨부 상태 필터"
                         className="rounded-lg border bg-background p-2 text-xs"
                         value={actions.state}
@@ -195,7 +196,7 @@ export function ImportFilesPanel({ jobId }: { jobId: string }) {
                                 {name}
                             </option>
                         ))}
-                    </select>
+                    </OptionSelect>
                 </label>
             </div>
             <p className="text-xs text-muted-foreground">

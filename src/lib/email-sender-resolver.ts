@@ -179,6 +179,8 @@ export interface ResolveSignatureOpts {
     /** null은 "서명 없음" 확정, undefined(키 부재)는 "미지정 → 기본값" */
     requestedId?: number | null;
     config: LegacyEmailConfig | null;
+    /** 발송 규칙의 사업부 — 그 사업부 기본 서명 → 공통 기본 서명 순 */
+    workspaceId?: number | null;
 }
 
 export async function resolveSignature(
@@ -190,6 +192,7 @@ export async function resolveSignature(
             id: emailSignatures.id,
             signature: emailSignatures.signature,
             isDefault: emailSignatures.isDefault,
+            workspaceId: emailSignatures.workspaceId,
         })
         .from(emailSignatures)
         .where(eq(emailSignatures.orgId, orgId))
@@ -199,9 +202,11 @@ export async function resolveSignature(
         id: r.id,
         signature: r.signature,
         isDefault: r.isDefault,
+        workspaceId: r.workspaceId,
     }));
 
     return pickSignature({
+        workspaceId: opts.workspaceId,
         // pickSignature가 null(서명 없음)과 undefined(미지정)를 값으로 구분한다
         requestedId: opts.requestedId,
         candidates,

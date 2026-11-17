@@ -24,7 +24,7 @@ import {
     checkEmailSubmission,
     EMAIL_SEND_BLOCKED,
 } from "@/lib/email-send-guard";
-import { isOrganizationUnsubscribed } from "@/lib/email-unsubscribe";
+import { isWorkspaceUnsubscribed } from "@/lib/email-unsubscribe";
 import { googleMailWorkerEnabled } from "./google-config";
 export function replyRequestFingerprint(selection?: EmailReplySelection) {
     return createHash("sha256")
@@ -171,7 +171,7 @@ export async function queueEmailReply(
     const decision = await checkEmailSubmission(
         row.mailbox.orgId,
         [...recipients.to, ...recipients.cc],
-        (orgId, email) => isOrganizationUnsubscribed(orgId, email, exec),
+        (orgId, email) => isWorkspaceUnsubscribed(orgId, row.mailbox.workspaceId, email, exec),
     );
     if (!decision.allowed)
         throw new InboxError(

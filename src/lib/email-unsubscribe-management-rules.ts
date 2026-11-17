@@ -12,21 +12,27 @@ export function parseUnsubscribeTarget(value: string): UnsubscribeTarget | null 
     return domain.safeParse(candidate).success ? { query: candidate, kind: "domain" } : null;
 }
 
+/** 양의 정수 id (사업부·수신거부 줄). 아니면 null */
+export function parsePositiveId(value: unknown): number | null {
+    const text = typeof value === "number" ? String(value) : value;
+    if (typeof text !== "string" || !/^[1-9]\d{0,9}$/.test(text)) return null;
+    const id = Number(text);
+    return Number.isSafeInteger(id) && id <= 2_147_483_647 ? id : null;
+}
+
 export const manualUnsubscribeInput = z.object({
     email,
+    workspaceId: z.number().int().positive().max(2_147_483_647),
     reason: z.string().trim().max(1000).optional(),
-}).strict();
-
-export const unsubscribeLookupInput = z.object({
-    targets: z.array(z.string().max(254)).min(1).max(50),
 }).strict();
 
 export function parseUnsubscribePagination(params: URLSearchParams) {
     const pageText = params.get("page") ?? "1";
     const sizeText = params.get("pageSize") ?? "20";
     const q = normalizeEmail(params.get("q"));
-    if (!/^[1-9]\d*$/.test(pageText) || !/^[1-9]\d*$/.test(sizeText)) return null;
+    const workspaceId = parsePositiveId(params.get("workspaceId"));
+    if (!workspaceId || !/^[1-9]\d*$/.test(pageText) || !/^[1-9]\d*$/.test(sizeText)) return null;
     const page = Number(pageText), pageSize = Number(sizeText);
     if (!Number.isSafeInteger(page) || page > 1_000_000 || pageSize > 100 || q.length > 200) return null;
-    return { page, pageSize, q };
+    return { workspaceId, page, pageSize, q };
 }

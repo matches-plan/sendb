@@ -3,11 +3,13 @@ import { isExactEmailSearch } from "@/lib/send-log-search";
 import { openSignalsForSendLogs, EMPTY_OPEN_SIGNAL } from "@/lib/email-open-signals";
 import { clickSignalsForSendLogs, EMPTY_CLICK_SIGNAL } from "@/lib/email-click-signals";
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailSendLogs, emailSenderProfiles } from "@/lib/db";
-import { eq, and, desc, sql, gte, lte, or, ilike } from "drizzle-orm";
+import { db, emailSendLogs, emailSenderProfiles, partitions } from "@/lib/db";
+import { eq, and, desc, sql, gte, lte, or, ilike, isNull } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { repliesForSendLogs } from "@/lib/email-reply-list";
 import { pgErrorOf } from "@/lib/email-reply-rules";
+import { healthLogConditions } from "@/lib/sender-health-focus-db";
+import { parseHealthCats } from "@/lib/sender-health-focus";
 
 export async function GET(req: NextRequest) {
     const user = await getActiveUserFromNextRequest(req);
@@ -38,6 +40,16 @@ export async function GET(req: NextRequest) {
         if (status) {
             conditions.push(eq(emailSendLogs.status, status));
         }
+        // 첫 메일만 (후속 메일은 그 줄을 펼쳐서 본다). 후속 방식으로 거를 때는 후속 줄도 그대로 보인다
+        const triggerParam = searchParams.get("triggerType");
+        if (searchParams.get("roots") === "1" && !(triggerParam && /followup/.test(triggerParam))) {
+            conditions.push(isNull(emailSendLogs.parentLogId));
+        }
+        // 사업부별: 보낸 파티션이 그 사업부에 있는 줄만
+        const workspaceId = Number(searchParams.get("workspaceId"));
+        if (workspaceId > 0) {
+            conditions.push(sql`${emailSendLogs.partitionId} IN (SELECT ${partitions.id} FROM ${partitions} WHERE ${partitions.workspaceId} = ${workspaceId})`);
+        }
         const partitionId = searchParams.get("partitionId");
         if (partitionId) {
             conditions.push(eq(emailSendLogs.partitionId, Number(partitionId)));
@@ -61,12 +73,44 @@ export async function GET(req: NextRequest) {
         }
         if (dates.fromIso) conditions.push(gte(emailSendLogs.sentAt, new Date(dates.fromIso)));
         if (dates.toIso) conditions.push(lte(emailSendLogs.sentAt, new Date(dates.toIso)));
+        // 발송 경고 알림에서 온 거르기 — 명단 여럿·발신 프로필(0 = 프로필 없음)·발신 도메인·정확한 기간·건강 갈래(반송·발신 인증 실패 등)
+        const partitionIds = (searchParams.get("partitionIds") ?? "")
+            .split(",")
+            .map(Number)
+            .filter((n) => Number.isSafeInteger(n) && n > 0)
+            .slice(0, 50);
+        const senderProfileRaw = searchParams.get("senderProfileId");
+        const senderProfileId = senderProfileRaw !== null && /^\d+$/.test(senderProfileRaw) ? Number(senderProfileRaw) : null;
+        const senderDomain = (searchParams.get("senderDomain") ?? "").trim().slice(0, 200) || null;
+        const isoParam = (name: string) => {
+            const v = searchParams.get(name);
+            if (!v) return null;
+            const d = new Date(v);
+            return Number.isFinite(d.getTime()) ? d : null;
+        };
+        conditions.push(
+            ...healthLogConditions({
+                partitionIds,
+                senderProfileId,
+                senderDomain,
+                sentFrom: isoParam("sentFrom"),
+                sentTo: isoParam("sentTo"),
+                cats: parseHealthCats(searchParams.get("healthCat")),
+            })
+        );
         const isClicked = searchParams.get("isClicked");
         if (isClicked === "1") {
             conditions.push(sql`EXISTS (SELECT 1 FROM email_click_logs ecl WHERE ecl.send_log_id = email_send_logs.id AND ecl.is_bot = false)`);
         } else if (isClicked === "0") {
             conditions.push(sql`NOT EXISTS (SELECT 1 FROM email_click_logs ecl WHERE ecl.send_log_id = email_send_logs.id AND ecl.is_bot = false)`);
             conditions.push(eq(emailSendLogs.status, "sent"));
+        }
+        // "후속 있음": 이 메일 뒤로 후속이 나갔거나 기다리는 줄만
+        if (searchParams.get("hasFollowup") === "1") {
+            // IN (UNION)이 줄마다 EXISTS 두 번보다 훨씬 빠르다 (로컬 덤프 6초 → 0.1초)
+            conditions.push(sql`${emailSendLogs.id} IN (
+                SELECT parent_log_id FROM email_send_logs WHERE parent_log_id IS NOT NULL AND org_id = ${user.orgId}
+                UNION SELECT parent_log_id FROM email_followup_queue WHERE status IN ('pending', 'processing', 'held') AND org_id = ${user.orgId})`);
         }
         // "회신 있음" 거르개 (DESIGN-RPL 11절) — 사람 회신이 이어진 발송
         if (searchParams.get("hasReply") === "1") {
@@ -124,11 +168,15 @@ export async function GET(req: NextRequest) {
             if (pgErrorOf(e)?.code !== "42P01") throw e;
         }
 
+        const followups = await followupSummaries(user.orgId, logIds);
+
         const logsWithClicks = logs.map(log => ({
             ...log,
             ...(signals.get(log.id) ?? EMPTY_CLICK_SIGNAL),
             ...(openSignals.get(log.id) ?? EMPTY_OPEN_SIGNAL),
             reply: replies.get(log.id) ?? null,
+            followupCount: followups.get(log.id)?.sent ?? 0,
+            followupPending: followups.get(log.id)?.pending ?? 0,
         }));
 
         return NextResponse.json({
@@ -140,4 +188,29 @@ export async function GET(req: NextRequest) {
         console.error("Email logs fetch error:", error);
         return NextResponse.json({ success: false, error: "서버 오류가 발생했습니다." }, { status: 500 });
     }
+}
+
+/** 줄마다 이어서 나간 후속 메일 수와 아직 기다리는 후속 수 — 후속의 후속(parent_log_id 사슬)까지 센다 */
+async function followupSummaries(orgId: string, logIds: number[]) {
+    const out = new Map<number, { sent: number; pending: number }>();
+    if (logIds.length === 0) return out;
+    const ids = sql.join(logIds.map((id) => sql`${id}`), sql`, `);
+    const rows = await db.execute<{ root_id: number; sent: number; pending: number }>(sql`
+        WITH RECURSIVE chain AS (
+            SELECT id AS root_id, id FROM email_send_logs WHERE id IN (${ids})
+            UNION ALL
+            SELECT c.root_id, l.id FROM email_send_logs l JOIN chain c ON l.parent_log_id = c.id
+            WHERE l.org_id = ${orgId}
+        )
+        SELECT c.root_id,
+            (count(*) FILTER (WHERE c.id <> c.root_id))::int AS sent,
+            (SELECT count(*)::int FROM email_followup_queue q
+                WHERE q.org_id = ${orgId} AND q.status IN ('pending', 'processing', 'held')
+                AND q.parent_log_id IN (SELECT id FROM chain c2 WHERE c2.root_id = c.root_id)) AS pending
+        FROM chain c GROUP BY c.root_id
+    `);
+    for (const r of rows as unknown as Array<{ root_id: number; sent: number; pending: number }>) {
+        out.set(Number(r.root_id), { sent: Number(r.sent), pending: Number(r.pending) });
+    }
+    return out;
 }

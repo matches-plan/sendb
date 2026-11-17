@@ -7,8 +7,9 @@ const hours = (v: number | null) => (v === null ? "-" : v < 1 ? `${Math.round(v 
 const days = (v: number | null) => (v === null ? "-" : v < 1 ? "1일 미만" : `${v.toFixed(1)}일`);
 
 /** 리드통계 기간 비교 (A·B·C) — 훅 개수를 고정하려고 세 자리를 늘 부른다 (빈 자리는 요청 안 함) */
-export function useLeadStatsCompare(workspaceId: number | null, periods: Period[]) {
-    const slot = (i: number) => (periods[i] ? workspaceId : null);
+/** workspace: 사업부 id, "all"이면 모든 사업부, null이면 부르지 않는다 */
+export function useLeadStatsCompare(workspace: number | "all" | null, periods: Period[]) {
+    const slot = (i: number) => (periods[i] ? workspace : null);
     const a = useLeadStats(slot(0), periods[0] ?? {});
     const b = useLeadStats(slot(1), periods[1] ?? {});
     const c = useLeadStats(slot(2), periods[2] ?? {});
@@ -47,7 +48,7 @@ export function useLeadStatsCompare(workspaceId: number | null, periods: Period[
               compareCard({
                   key: "within30d",
                   label: "30일 안 전환율",
-                  tooltip: "들어온 지 30일이 지난 리드 중 30일 안에 전환된 비율이에요.\n최근 기간은 아직 전환될 시간이 부족해서, 기간끼리 공정하게 비교하려면 이 값을 보세요.",
+                  tooltip: "들어온 지 30일이 지난 리드 중 30일 안에 전환된 비율이에요. 최근 기간은 아직 전환될 시간이 부족해서, 기간끼리 공정하게 비교하려면 이 값을 보세요.",
                   groups,
                   values: list.map((s) => (s.within30d.eligible ? s.within30d.converted / s.within30d.eligible : null)),
                   format: pct,

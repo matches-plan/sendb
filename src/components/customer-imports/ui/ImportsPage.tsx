@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
@@ -379,7 +380,7 @@ export function ImportsPage({ role }: { role: string }) {
             </header>
             <label className="block max-w-sm space-y-2 text-sm">
                 가져올 사업
-                <select
+                <OptionSelect
                     className={inputClass}
                     value={workspaceId}
                     disabled={locked}
@@ -393,7 +394,7 @@ export function ImportsPage({ role }: { role: string }) {
                             {w.name}
                         </option>
                     ))}
-                </select>
+                </OptionSelect>
             </label>
             {bootstrap.error && (
                 <p role="alert" className="text-sm text-red-700">
@@ -410,7 +411,7 @@ export function ImportsPage({ role }: { role: string }) {
                 <div className="grid gap-4 md:grid-cols-3">
                     <label className="space-y-1 text-sm">
                         원본 서비스
-                        <select
+                        <OptionSelect
                             className={inputClass}
                             value={form.source}
                             disabled={locked}
@@ -429,7 +430,7 @@ export function ImportsPage({ role }: { role: string }) {
                             <option value="hubspot">
                                 허브스팟 CRM 내보내기
                             </option>
-                        </select>
+                        </OptionSelect>
                     </label>
                     <label className="space-y-1 text-sm">
                         원본 계정 이름
@@ -445,7 +446,7 @@ export function ImportsPage({ role }: { role: string }) {
                     </label>
                     <label className="space-y-1 text-sm">
                         자료 형식
-                        <select
+                        <OptionSelect
                             className={inputClass}
                             value={form.format}
                             disabled={locked}
@@ -458,7 +459,7 @@ export function ImportsPage({ role }: { role: string }) {
                         >
                             <option value="json">JSON 묶음</option>
                             <option value="csv">CSV 한 종류</option>
-                        </select>
+                        </OptionSelect>
                     </label>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -511,7 +512,7 @@ export function ImportsPage({ role }: { role: string }) {
                     <div className="space-y-3 rounded-lg bg-muted/40 p-3">
                         <label className="block max-w-sm space-y-1 text-sm">
                             CSV 자료 종류
-                            <select
+                            <OptionSelect
                                 className={inputClass}
                                 value={form.csvKind || "contacts"}
                                 onChange={(e) =>
@@ -533,7 +534,7 @@ export function ImportsPage({ role }: { role: string }) {
                                         </option>
                                     ),
                                 )}
-                            </select>
+                            </OptionSelect>
                         </label>
                         <button
                             className={button}

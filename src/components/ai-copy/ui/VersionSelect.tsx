@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { Button } from "@/components/ui/button";
 import { useVersionOptions } from "../hooks/useCopyManager";
 import type { CopyPurpose } from "../types";
@@ -34,7 +35,7 @@ export function VersionSelect({
     const selectedMissing = value > 0 && !listed.some((v) => v.id === value);
     return (
         <div className="space-y-1.5">
-            <select
+            <OptionSelect
                 id={id}
                 className={controlClass}
                 required
@@ -49,7 +50,7 @@ export function VersionSelect({
                         {v.name} · #{v.id}
                     </option>
                 ))}
-            </select>
+            </OptionSelect>
             {options.error ? (
                 <p className="text-xs text-destructive" role="alert">
                     버전 목록을 불러오지 못했습니다.{" "}

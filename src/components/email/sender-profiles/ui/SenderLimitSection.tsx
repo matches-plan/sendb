@@ -495,7 +495,7 @@ function LimitPreview({
                         <div
                             key={c.date}
                             className={cn(
-                                "rounded border px-0.5 py-1.5 text-center",
+                                "rounded border border-border/40 px-0.5 py-1.5 text-center",
                                 c.date === today && "border-primary",
                                 c.kind === "off" && "bg-muted text-muted-foreground",
                                 c.kind === "paused" && "bg-destructive/10 text-destructive",

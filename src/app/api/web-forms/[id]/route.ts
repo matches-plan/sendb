@@ -3,6 +3,7 @@ import { db, webForms, webFormFields } from "@/lib/db";
 import { eq, and, asc } from "drizzle-orm";
 import { InvalidFormFields, saveWebFormFields } from "@/lib/web-form-fields";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
+import { requirePartitionAccess } from "@/lib/partition-access";
 
 export async function GET(
     req: NextRequest,
@@ -63,7 +64,7 @@ export async function PUT(
         completionButtonText, completionButtonUrl,
         coverImageUrl, coverColor,
         defaultValues, isActive,
-        fields,
+        fields, partitionId,
     } = await req.json();
 
     try {
@@ -74,6 +75,20 @@ export async function PUT(
 
         if (!existing) {
             return NextResponse.json({ success: false, error: "폼을 찾을 수 없습니다." }, { status: 404 });
+        }
+
+        // 리드가 쌓일 파티션 변경 — 내 조직의 리드관리 파티션이고 생성 권한이 있어야 한다. 워크스페이스는 파티션의 것을 쓴다.
+        // 이미 들어온 리드는 원래 파티션에 그대로 있고, 바꾼 뒤 제출분부터 새 파티션에 쌓인다.
+        let destination: { partitionId: number; workspaceId: number } | null = null;
+        if (partitionId !== undefined && Number(partitionId) !== existing.partitionId) {
+            const access = await requirePartitionAccess(user, Number(partitionId), "create");
+            if (!access.ok) {
+                return NextResponse.json({ success: false, error: access.error }, { status: access.status });
+            }
+            if (access.partition.category !== "lead") {
+                return NextResponse.json({ success: false, error: "웹 폼은 리드관리 파티션으로만 연결할 수 있습니다." }, { status: 400 });
+            }
+            destination = { partitionId: access.partition.id, workspaceId: access.partition.workspaceId };
         }
 
         const { updated, updatedFields } = await db.transaction(async (tx) => {
@@ -93,6 +108,7 @@ export async function PUT(
                 ...(coverColor !== undefined && { coverColor }),
                 ...(defaultValues !== undefined && { defaultValues }),
                 ...(isActive !== undefined && { isActive }),
+                ...(destination ?? {}),
                 updatedAt: new Date(),
             })
             .where(eq(webForms.id, formId))

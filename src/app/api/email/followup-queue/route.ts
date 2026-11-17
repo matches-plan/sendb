@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailFollowupQueue, emailSendLogs } from "@/lib/db";
+import { db, emailFollowupQueue, emailSendLogs, partitions } from "@/lib/db";
 import { eq, and, desc, sql, ilike } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 
@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
         const offset = (page - 1) * pageSize;
 
         const conditions: ReturnType<typeof eq>[] = [eq(emailFollowupQueue.orgId, user.orgId)];
+
+        // 사업부별: 첫 메일을 보낸 파티션이 그 사업부에 있는 줄만
+        const workspaceId = Number(searchParams.get("workspaceId"));
+        if (workspaceId > 0) {
+            conditions.push(sql`${emailSendLogs.partitionId} IN (SELECT ${partitions.id} FROM ${partitions} WHERE ${partitions.workspaceId} = ${workspaceId})`);
+        }
 
         const status = searchParams.get("status");
         if (status) {

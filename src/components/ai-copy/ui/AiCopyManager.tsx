@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { useSession } from "@/contexts/SessionContext";
 import { Button } from "@/components/ui/button";
@@ -130,7 +131,7 @@ export default function AiCopyManager() {
                         </p>
                     )}
                     {catalog.versions.map((p) => (
-                        <article key={p.id} className="space-y-3 rounded-md border p-4">
+                        <article key={p.id} className="space-y-3 rounded-md border border-border/40 p-4">
                             <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-medium">
                                     {p.name} · #{p.id}
@@ -245,7 +246,7 @@ export default function AiCopyManager() {
                         </p>
                     )}
                     {knowledge.versions.map((k) => (
-                        <article key={k.id} className="space-y-3 rounded-md border p-4">
+                        <article key={k.id} className="space-y-3 rounded-md border border-border/40 p-4">
                             <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-medium">
                                     {k.name} · #{k.id}
@@ -562,7 +563,7 @@ function BindingForm({
             >
                 <Field label="사업">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             required
@@ -580,12 +581,12 @@ function BindingForm({
                                     {workspaceLabel(w)}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 <Field label="메일 목적">
                     {(id) => (
-                        <select
+                        <OptionSelect
                             id={id}
                             className={controlClass}
                             value={purpose}
@@ -596,13 +597,13 @@ function BindingForm({
                         >
                             <option value="visit_ack">방문 감사 메일</option>
                             <option value="initial_email">첫 소개 메일</option>
-                        </select>
+                        </OptionSelect>
                     )}
                 </Field>
                 {purpose === "initial_email" && (
                     <Field label="AI 자동발송 규칙">
                         {(id) => (
-                            <select
+                            <OptionSelect
                                 id={id}
                                 className={controlClass}
                                 required
@@ -617,7 +618,7 @@ function BindingForm({
                                             {r.name ?? `규칙 #${r.id}`}
                                         </option>
                                     ))}
-                            </select>
+                            </OptionSelect>
                         )}
                     </Field>
                 )}
@@ -662,7 +663,7 @@ function BindingForm({
                     {catalog.bindings.map((b) => (
                         <li
                             key={`${b.workspace_id}-${b.purpose}-${b.rule_id}`}
-                            className="rounded-md border p-3"
+                            className="rounded-md border border-border/40 p-3"
                         >
                             {names.workspace(b.workspace_id)} · {purposeLabel(b.purpose)}
                             {b.rule_id > 0 && ` · ${names.rule(b.rule_id)}`}

@@ -147,3 +147,21 @@ export interface SendHealthView {
 export type ReleaseTarget =
     | { kind: "hold"; holdId: number; name: string; queued: number }
     | { kind: "sender"; profileId: number; email: string; reason: string | null; preview: SenderHealthRow["releasePreview"] };
+
+/** GET /api/email/send-health/alerts — 발송 이력 위 "확인할 문제" 카드 (서버 sender-health-focus-db.ts의 HealthProblem과 같은 모양) */
+export interface HealthProblem {
+    alertId: number;
+    eventId: number;
+    kind: string;
+    /** 지금 보류 중인 명단·자동 멈춤인 주소 — 해결 완료 대신 발송 다시 시작 */
+    active: boolean;
+    /** 조직 공통 문제 — 모든 사업부 화면에 보인다 */
+    common: boolean;
+    headline: string;
+    detail: string;
+    outcome: string | null;
+    todo: string;
+    devIssue: boolean;
+    createdAt: string;
+    mailCount: number;
+}

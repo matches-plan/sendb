@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ArrowLeft, HelpCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useEmailSection } from "@/components/email/hooks/useEmailSection";
 import { linkTemplateIds, useEmailTemplateOptions } from "@/hooks/useEmailTemplates";
 import TemplateSelectField from "@/components/email/template-links/ui/TemplateSelectField";
 import { useEmailTemplateLinks } from "@/hooks/useEmailTemplateLinks";
@@ -68,6 +69,7 @@ function HelpTip({ text }: { text: string }) {
 
 function NewLinkPageContent() {
     const router = useRouter();
+    const { base, purpose } = useEmailSection();
     const searchParams = useSearchParams();
     const partitionIdParam = searchParams.get("partitionId");
     const [selectedPartitionId, setSelectedPartitionId] = useState<number | null>(
@@ -97,7 +99,7 @@ function NewLinkPageContent() {
     const [preventDuplicate, setPreventDuplicate] = useState(0);
     // 선택지: 발행 템플릿 검색 결과(최대 100) + 이 연결이 이미 쓰는 템플릿(목록 밖·초안이어도) (UX-146)
     const [templateSearch, setTemplateSearch] = useState("");
-    const templateOptions = useEmailTemplateOptions(templateSearch, linkTemplateIds(emailTemplateId, followupConfig));
+    const templateOptions = useEmailTemplateOptions(templateSearch, linkTemplateIds(emailTemplateId, followupConfig), purpose);
     const templates = templateOptions.templates;
 
     const selectedTemplate = templates.find((t) => t.id === emailTemplateId);
@@ -127,7 +129,7 @@ function NewLinkPageContent() {
         });
         if (!result.success) throw new Error(result.error || "저장에 실패했습니다.");
         toast.success("연결이 생성되었습니다.");
-        router.push("/crm-email?tab=links");
+        router.push(`${base}?tab=links`);
     };
 
     const handleSave = async () => {
@@ -168,7 +170,7 @@ function NewLinkPageContent() {
             <WorkspaceLayout>
                 <PageContainer>
                     <div className="flex items-center gap-3 mb-6">
-                        <Button variant="ghost" size="icon" onClick={() => router.push("/crm-email?tab=links")}>
+                        <Button variant="ghost" size="icon" onClick={() => router.push(`${base}?tab=links`)}>
                             <ArrowLeft className="h-5 w-5" />
                         </Button>
                         <h1 className="text-xl font-semibold">이메일 자동발송 규칙 추가</h1>
@@ -198,7 +200,7 @@ function NewLinkPageContent() {
                 <PageContainer>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <Button variant="ghost" size="icon" onClick={() => router.push("/crm-email?tab=links")}>
+                            <Button variant="ghost" size="icon" onClick={() => router.push(`${base}?tab=links`)}>
                                 <ArrowLeft className="h-5 w-5" />
                             </Button>
                             <h1 className="text-xl font-semibold">새 연결</h1>

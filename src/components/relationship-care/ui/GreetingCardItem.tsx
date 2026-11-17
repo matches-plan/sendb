@@ -1,4 +1,5 @@
 "use client";
+import { OptionSelect } from "@/components/ui/option-select";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -254,7 +255,7 @@ export function GreetingCardItem({
                         {channel === "kakao" ? "복사하기" : "보내기"}
                     </button>
                     <span className="flex items-center gap-1 rounded-lg border px-1">
-                        <select
+                        <OptionSelect
                             aria-label="이미 연락한 방법"
                             className="bg-transparent py-1.5 text-sm"
                             value={logChannel}
@@ -265,7 +266,7 @@ export function GreetingCardItem({
                                     {c.label}
                                 </option>
                             ))}
-                        </select>
+                        </OptionSelect>
                         <button
                             className="flex items-center gap-1 px-2 py-1.5 disabled:opacity-50"
                             disabled={!canRespond || !!busy}

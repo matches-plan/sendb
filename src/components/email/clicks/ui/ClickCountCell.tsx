@@ -1,23 +1,15 @@
 "use client";
 
 import { Bot, MousePointerClick } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import type { ClickCellSource, ClickCellTone } from "../types";
 import { clickCellView } from "../utils/clickCell";
 
-const TONE: Record<ClickCellTone, { variant: "default" | "outline"; badge: string; action: string }> = {
-    human: { variant: "default", badge: "bg-blue-600 text-xs", action: "" },
-    humanAction: {
-        variant: "default",
-        badge: "bg-blue-600 text-xs font-bold ring-2 ring-blue-300 dark:ring-blue-400/60",
-        action: "",
-    },
-    bot: { variant: "outline", badge: "border-dashed text-xs text-muted-foreground/70", action: "" },
-    botAction: {
-        variant: "outline",
-        badge: "border-dashed border-blue-300 text-xs text-muted-foreground/70 dark:border-blue-400/60",
-        action: "text-blue-600 dark:text-blue-400",
-    },
+/** 클릭 수는 배지 없이 글자로 — 사람 클릭은 진하게, 봇 의심은 옅게 */
+const TONE: Record<ClickCellTone, string> = {
+    human: "text-foreground",
+    humanAction: "font-semibold text-blue-600 dark:text-blue-400",
+    bot: "text-muted-foreground/70",
+    botAction: "text-muted-foreground/70",
 };
 
 export function ClickCountCell({ log }: { log: ClickCellSource }) {
@@ -25,10 +17,10 @@ export function ClickCountCell({ log }: { log: ClickCellSource }) {
     if (view.kind === "empty") return null;
     if (view.kind === "dash") return <span className="text-xs text-muted-foreground">-</span>;
     return (
-        <Badge variant={TONE[view.tone].variant} className={TONE[view.tone].badge} title={view.title}>
+        <span className={`inline-flex items-center gap-1 text-sm [&_svg]:size-3.5 ${TONE[view.tone]}`} title={view.title}>
             {view.botIcon && <Bot />}
-            {view.actionIcon && <MousePointerClick className={TONE[view.tone].action} />}
+            {view.actionIcon && <MousePointerClick className="text-blue-600 dark:text-blue-400" />}
             {view.text}
-        </Badge>
+        </span>
     );
 }

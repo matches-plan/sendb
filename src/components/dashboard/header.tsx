@@ -1,6 +1,7 @@
 "use client";
 
 import {SupportAlertLink} from "@/components/inbox-operations/ui/SupportNotifications";
+import { NotificationBell } from "@/components/notifications/ui/NotificationBell";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -183,6 +184,7 @@ export function Header() {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+                {user && <NotificationBell />}
             </div>
         </header>
     );

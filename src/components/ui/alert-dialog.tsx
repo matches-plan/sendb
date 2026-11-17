@@ -189,6 +189,8 @@ interface AsyncAlertDialogProps {
   confirmLabel?: string
   pendingLabel?: string
   confirmDisabled?: boolean
+  /** 되돌릴 수 없는 확인(삭제 등)은 destructive(기본), 그 밖의 확인은 default */
+  confirmVariant?: "destructive" | "default"
   children?: React.ReactNode
 }
 
@@ -233,7 +235,7 @@ async function runConfirm(busy: { current: boolean }, handlers: ConfirmFlowHandl
 /** 실패는 throw 또는 success:false로 전달한다. 성공 시에만 닫힌다. */
 function AsyncAlertDialog({
   open, onOpenChange, title, description, onConfirm,
-  confirmLabel = "삭제", pendingLabel = "처리 중...", confirmDisabled, children,
+  confirmLabel = "삭제", pendingLabel = "처리 중...", confirmDisabled, confirmVariant = "destructive", children,
 }: AsyncAlertDialogProps) {
   const busyRef = React.useRef(false)
   const openerRef = React.useRef<HTMLElement | null>(null)
@@ -263,7 +265,7 @@ function AsyncAlertDialog({
           {/* 진행 중에도 disabled 대신 aria-disabled를 써서 포커스가 버튼에 남게 한다(닫기는 changeOpen이 막는다) */}
           <AlertDialogCancel aria-disabled={pending} className={cn(pending && "pointer-events-none opacity-50")}>취소</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            variant={confirmVariant}
             disabled={confirmDisabled}
             aria-disabled={pending}
             className={cn(pending && "pointer-events-none opacity-50")}
