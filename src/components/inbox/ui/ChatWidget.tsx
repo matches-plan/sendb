@@ -11,7 +11,7 @@ import type { MessengerBrand, PublicMessengerSettings } from "@/components/custo
 import { ChatHeader, HomeNav } from "@/components/customer-messenger/ui/ChatChrome";
 import { CustomerMessage, StaffMessage, customerBubbleClass, messageTime } from "@/components/customer-messenger/ui/ChatMessage";
 import type { ReplyContactDraft } from "@/lib/customer-messenger/rules";
-import { MessengerHome } from "@/components/customer-messenger/ui/MessengerHome";
+import { MessengerHome, responseStatus } from "@/components/customer-messenger/ui/MessengerHome";
 import { inboxRequest, InboxRequestError } from "../api";
 import type { SendbCustomerMessages } from "../../../../sdk/messenger";
 import { useAttachmentDrafts } from "../hooks/useAttachmentDrafts";
@@ -72,6 +72,8 @@ export function ChatWidget({
     const [text, setText] = useState(""),
         [busy, setBusy] = useState(false),
         [error, setError] = useState("");
+    // 보내는 중인 메시지 — 서버 응답을 기다리지 않고 바로 말풍선으로 보여준다
+    const [outgoing, setOutgoing] = useState<{ id: string; body: string } | null>(null);
     const [suggestedText, setSuggestedText] = useState("");
     const deferredDraft = useRef<string | null>(null);
     const [hasDeferredDraft, setHasDeferredDraft] = useState(false);
@@ -100,6 +102,7 @@ export function ChatWidget({
     const acknowledgedConfiguration = useRef(0);
     const loadedOrigin = useRef("");
     const navigation = useRef<(view: string, id?: string) => void>(() => {});
+    const openLatest = useRef<(conversationId?: unknown) => void>(() => {});
     const history = useCustomerConversations(channelKey, token, ready, opened);
     const markSeen = history.markSeen;
     const invalidateConversation = history.invalidate;
@@ -309,7 +312,8 @@ export function ChatWidget({
             sessionToken: value,
         }),
         {
-            refreshInterval: opened ? 3000 : 15000,
+            // AI가 답을 쓰는 중이면 더 자주 확인해 답이 바로 보이게 한다
+            refreshInterval: (latest) => (!opened ? 15000 : latest?.aiTyping ? 1000 : 3000),
             refreshWhenHidden: false,
             shouldRetryOnError: (error) => !isWidgetAccessDenied(error),
         },
@@ -477,6 +481,8 @@ export function ChatWidget({
             if (event.data.type === "sendb:visibility") {
                 setOpened(!!event.data.opened);
             }
+            // 사이트의 새 답변 말풍선을 눌렀을 때 — 그 상담을 바로 보여준다
+            if (event.data.type === "sendb:open-latest") openLatest.current(event.data.conversationId);
             if (event.data.type === "sendb:journey-context")
                 setJourneyToken(
                     typeof event.data.journeyToken === "string"
@@ -577,16 +583,28 @@ export function ChatWidget({
     useEffect(() => {
         if (!managed || !data.data || history.enabled || linking) return;
         const reading = opened && !isHome;
-        const unread = reading
-            ? 0
+        const replies = reading
+            ? []
             : data.data.messages.filter(
                   (m) => m.kind === "reply" && m.id > readId,
-              ).length;
+              );
         if (reading && latestId > readId) {
             setReadId(latestId);
             parentMessage("sendb:read", { readId: latestId });
         }
-        parentMessage("sendb:unread", { count: unread });
+        const last = replies.at(-1);
+        // 상담창이 닫혀 있어도 사이트의 상담 버튼 위에 새 답변을 미리 보여준다
+        parentMessage("sendb:unread", {
+            count: replies.length,
+            latest: last
+                ? {
+                      id: `${data.data.conversationId ?? ""}:${last.id}`,
+                      name: last.authorName || config.data?.name || "",
+                      body: last.body || "파일을 보냈어요",
+                      at: last.createdAt,
+                  }
+                : null,
+        });
     }, [
         managed,
         opened,
@@ -597,11 +615,36 @@ export function ChatWidget({
         history.enabled,
         linking,
         parentMessage,
+        config.data?.name,
     ]);
+    const unreadRow = history.rows.find((row) => row.unread > 0 && !row.readOnly);
     useEffect(() => {
         if (managed && history.enabled && history.unreadCount !== undefined)
-            parentMessage("sendb:unread", { count: history.unreadCount });
-    }, [managed, history.enabled, history.unreadCount, parentMessage]);
+            parentMessage("sendb:unread", {
+                count: history.unreadCount,
+                latest: unreadRow
+                    ? {
+                          id: `${unreadRow.id}:${unreadRow.lastMessageAt}`,
+                          name: config.data?.name ?? "",
+                          body: unreadRow.preview,
+                          at: unreadRow.lastMessageAt,
+                          conversationId: unreadRow.id,
+                      }
+                    : null,
+            });
+    }, [managed, history.enabled, history.unreadCount, parentMessage, unreadRow, config.data?.name]);
+    // 사이트 상담 버튼의 색·인사 말풍선
+    useEffect(() => {
+        const settings = config.data?.messengerSettings;
+        if (!managed || !settings) return;
+        const status = responseStatus(settings, config.data?.businessHours);
+        parentMessage("sendb:launcher", {
+            color: config.data?.color,
+            greeting: settings.launcherBubbleEnabled ? settings.launcherBubble : "",
+            status: status.text,
+            quick: status.quick,
+        });
+    }, [managed, config.data, parentMessage]);
     useEffect(() => {
         const id = data.data?.conversationId;
         if (
@@ -773,6 +816,14 @@ export function ChatWidget({
         }
     }
     navigation.current = changeConversation;
+    openLatest.current = (conversationId?: unknown) => {
+        if (history.enabled) {
+            if (typeof conversationId === "string" && conversationUuid.test(conversationId)) changeConversation("thread", conversationId);
+            return;
+        }
+        setThreadList(false);
+        setIsHome(false);
+    };
     // Pin the first resolved member inquiry. Another device starting a new
     // inquiry must not silently change the destination of this draft.
     useEffect(() => {
@@ -823,6 +874,9 @@ export function ChatWidget({
                         : 500,
             });
     }, [data.error, configuration, parentMessage]);
+    useEffect(() => {
+        if (outgoing) end.current?.scrollIntoView({ block: "end" });
+    }, [outgoing]);
     const baseError = config.error?.message;
     if (baseError || blocked)
         return (
@@ -865,6 +919,16 @@ export function ChatWidget({
                 id: crypto.randomUUID(),
                 files: attachments.signature,
             };
+        const sent = { id: pending.current!.id, body };
+        if (body) {
+            setOutgoing(sent);
+            setText("");
+            follow.current = true;
+        }
+        const restore = () => {
+            setOutgoing((current) => (current?.id === sent.id ? null : current));
+            if (body) setText((current) => current || body);
+        };
         try {
             let session = token;
             if (!session) {
@@ -886,7 +950,7 @@ export function ChatWidget({
                         headers: { "Content-Type": "application/json" },
                     },
                 );
-                if (currentGeneration !== generation.current) return;
+                if (currentGeneration !== generation.current) return restore();
                 session = result.token;
                 // First anonymous session belongs to the current draft; parent echo must not reset it.
                 configured.current = draftSessionKey(session);
@@ -904,7 +968,7 @@ export function ChatWidget({
                 "customer",
                 { Authorization: `Bearer ${session}` },
             );
-            if (currentGeneration !== generation.current) return;
+            if (currentGeneration !== generation.current) return restore();
             const result = await inboxRequest<{ conversationId?: string }>(
                 isNew ? `${baseUrl}/conversations` : selectedUrl,
                 {
@@ -920,7 +984,7 @@ export function ChatWidget({
                     },
                 },
             );
-            if (currentGeneration !== generation.current) return;
+            if (currentGeneration !== generation.current) return restore();
             await savePendingContact(
                 session,
                 result.conversationId ?? selectedId,
@@ -937,6 +1001,7 @@ export function ChatWidget({
             } else await data.mutate();
             void history.refresh();
         } catch (e) {
+            restore();
             if (currentGeneration === generation.current)
                 setError((e as Error).message);
         } finally {
@@ -956,6 +1021,7 @@ export function ChatWidget({
                       message.kind === "customer" || message.kind === "reply",
               );
     const firstCustomer = messages.findIndex((m) => m.kind === "customer");
+    const showOutgoing = !!outgoing && !messages.some((m) => m.clientId === outgoing.id);
     const unreadCount = history.enabled
         ? (history.unreadCount ?? 0)
         : (data.data?.messages.filter(
@@ -1330,6 +1396,15 @@ export function ChatWidget({
                                         </StaffMessage>
                                     );
                                 })}
+                                {showOutgoing && (
+                                    <div className="opacity-60">
+                                        <CustomerMessage time={null}>
+                                            <div className={customerBubbleClass}>
+                                                <FormattedText text={outgoing.body} />
+                                            </div>
+                                        </CustomerMessage>
+                                    </div>
+                                )}
                                 {/* AI가 답장을 만드는 동안 점 세 개가 움직인다 */}
                                 {!isNew && data.data?.aiTyping && (
                                     <div role="status" aria-label="답변을 작성하고 있어요" className="flex w-fit items-center gap-1 py-2">
@@ -1554,7 +1629,7 @@ export function ChatWidget({
                                                 className="flex h-9 w-9 items-center justify-center rounded-lg text-white disabled:opacity-40"
                                                 style={{ backgroundColor: color }}
                                             >
-                                                {busy ? (
+                                                {busy && !showOutgoing ? (
                                                     <RotateCcw
                                                         size={17}
                                                         className="animate-spin"

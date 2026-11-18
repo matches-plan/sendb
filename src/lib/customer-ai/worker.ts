@@ -421,15 +421,17 @@ const runtime = globalThis as typeof globalThis & {
 export function startSupportAiScheduler() {
     if (!aiWorkerEnabled() || runtime.__sendbSupportAiTimer) return;
     const tick = async () => {
+        let processed = 0;
         try {
-            await processSupportQueue();
+            ({ processed } = await processSupportQueue());
         } catch {
             console.error("[customer-ai] 처리 실패, 다음 회차에서 다시 확인");
         } finally {
-            runtime.__sendbSupportAiTimer = setTimeout(() => void tick(), 5000);
+            // 방금 하나를 처리했으면 밀린 것이 있을 수 있어 바로 다시 본다
+            runtime.__sendbSupportAiTimer = setTimeout(() => void tick(), processed ? 0 : 1000);
             runtime.__sendbSupportAiTimer.unref();
         }
     };
-    runtime.__sendbSupportAiTimer = setTimeout(() => void tick(), 5000);
+    runtime.__sendbSupportAiTimer = setTimeout(() => void tick(), 1000);
     runtime.__sendbSupportAiTimer.unref();
 }

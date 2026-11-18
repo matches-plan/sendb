@@ -39,6 +39,9 @@ export const messengerLink = z.object({
 export type MessengerLink = z.infer<typeof messengerLink>;
 export const messengerSettingsSchema = z.object({
     tagline: z.string().trim().max(120).default(""),
+    /** 사이트 상담 버튼 위에 뜨는 인사 말풍선 */
+    launcherBubbleEnabled: z.boolean().default(true),
+    launcherBubble: z.string().trim().max(40).default("궁금한 건 채팅으로 문의하세요"),
     /** 예전 "1:1 도입 상담 링크" — 저장된 값은 링크 카드로 옮겨 읽는다 (messengerLinks) */
     consultationUrl: z.string().default(""),
     /** 상담 홈 아래 링크 카드 (도입 상담 신청·카카오 채널 등) */

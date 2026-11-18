@@ -42,6 +42,69 @@
                 state.frameOrigin,
             );
     }
+    var ICON_CHAT =
+        '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M20 13v2a2 2 0 0 1-2 2h-1v-5h1a2 2 0 0 1 2 2"/><path d="M4 13v2a2 2 0 0 0 2 2h1v-5H6a2 2 0 0 0-2 2"/><path d="M18 17c0 2-2 3-5 3"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/></svg>',
+        ICON_CLOSE =
+            '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    function session(key, value) {
+        try {
+            if (value === undefined) return sessionStorage.getItem(key);
+            sessionStorage.setItem(key, value);
+        } catch {}
+        return null;
+    }
+    function el(tag, css, text) {
+        var node = document.createElement(tag);
+        if (css) node.style.cssText = css;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function ago(iso) {
+        var t = Date.parse(iso);
+        if (!t) return "";
+        var minutes = Math.floor((Date.now() - t) / 60000);
+        if (minutes < 1) return "방금";
+        if (minutes < 60) return minutes + "분 전";
+        var d = new Date(t);
+        return (d.getHours() < 12 ? "오전 " : "오후 ") + ((d.getHours() % 12) || 12) + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+    // 런처 버튼 모양·안 읽은 수 배지·닫혀 있을 때 위에 뜨는 말풍선(새 답변 미리보기 또는 인사말)
+    function paintLauncher(state) {
+        if (!state.button) return;
+        var opened = !!state.opened;
+        state.icon.innerHTML = opened ? ICON_CLOSE : ICON_CHAT;
+        state.button.style.background = opened ? "#f3f4f6" : state.color || "#635BFF";
+        state.button.style.color = opened ? "#4b5563" : "#fff";
+        var count = opened ? 0 : state.unread || 0;
+        state.badge.textContent = count > 99 ? "99+" : String(count);
+        state.badge.style.display = count > 0 ? "flex" : "none";
+        var bubble = state.bubble, preview = state.preview, greeting = state.greeting;
+        var showPreview = !!preview && preview.id !== session(state.dismissKey);
+        var showGreeting = !showPreview && !!greeting && !!greeting.text && session(state.greetingKey) !== "1";
+        if (opened || state.launcherHidden || !state.ready || (!showPreview && !showGreeting)) {
+            bubble.style.display = "none";
+            return;
+        }
+        bubble.style.display = "block";
+        bubble.setAttribute("aria-label", showPreview ? "새 답변 보기" : "상담 열기");
+        state.bubbleBody.textContent = "";
+        if (showPreview) {
+            var head = el("div", "display:flex;align-items:baseline;gap:8px;margin-bottom:4px;min-width:0");
+            head.appendChild(el("strong", "font-size:15px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis", preview.name || ""));
+            head.appendChild(el("span", "font-size:13px;color:#9ca3af;white-space:nowrap", ago(preview.at)));
+            state.bubbleBody.appendChild(head);
+            state.bubbleBody.appendChild(el("p", "margin:0;font-size:15px;line-height:1.45;color:#111827;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all", preview.body || ""));
+        } else {
+            state.bubbleBody.appendChild(el("p", "margin:0 0 4px;font-size:15px;font-weight:700;color:#111827;line-height:1.4", greeting.text));
+            if (greeting.status) {
+                var line = el("div", "display:flex;align-items:center;gap:6px;font-size:13px;color:#9ca3af");
+                line.appendChild(el("span", "width:7px;height:7px;border-radius:50%;flex:none;background:" + (greeting.quick ? "#22c55e" : "#d1d5db")));
+                line.appendChild(el("span", "", greeting.status));
+                state.bubbleBody.appendChild(line);
+            }
+        }
+        state.bubbleShowsPreview = showPreview;
+    }
     function configure(state) {
         state.configurationId++;
         post(state, "sendb:configure", {
@@ -105,7 +168,9 @@
         if (!current || !current.frame) return;
         current.opened = opened;
         current.frame.style.display = opened ? "block" : "none";
-        current.button.textContent = opened ? "닫기" : "상담";
+        // 상담창을 한 번 열었으면 인사 말풍선은 이번 방문 동안 다시 띄우지 않는다
+        if (opened) session(current.greetingKey, "1");
+        paintLauncher(current);
         current.button.setAttribute(
             "aria-label",
             opened ? "고객 상담 닫기" : "고객 상담 열기",
@@ -126,6 +191,7 @@
         store(previous.readStorageKey, null);
         if (previous.frame) previous.frame.remove();
         if (previous.button) previous.button.remove();
+        if (previous.bubble) previous.bubble.remove();
         if (!previous.ready && previous.reject)
             previous.reject(new Error("상담 연결이 종료되었습니다."));
         emit("shutdown");
@@ -318,11 +384,46 @@
         if (current !== state) return;
         state.button = document.createElement("button");
         state.button.id = "sendb-chat-launcher";
-        state.button.textContent = "상담";
         state.button.setAttribute("aria-label", "고객 상담 열기");
         state.button.setAttribute("aria-expanded", "false");
         state.button.style.cssText =
-            "position:fixed;right:24px;bottom:24px;z-index:2147483000;width:56px;height:56px;border:0;border-radius:50%;padding:0;background:#635BFF;color:white;font:600 14px system-ui;box-shadow:0 6px 24px #0002;cursor:pointer";
+            "position:fixed;right:24px;bottom:24px;z-index:2147483000;width:60px;height:60px;border:0;border-radius:50%;padding:0;background:#635BFF;color:white;box-shadow:0 6px 24px #0002;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s";
+        state.icon = el("span", "display:flex;align-items:center;justify-content:center;pointer-events:none");
+        state.badge = el("span", "position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:11px;background:#ef4444;color:#fff;font:700 12px/22px system-ui;align-items:center;justify-content:center;display:none;pointer-events:none");
+        state.button.appendChild(state.icon);
+        state.button.appendChild(state.badge);
+        state.dismissKey = "sendb:bubble-dismissed:" + options.channelKey;
+        state.greetingKey = "sendb:greeting-dismissed:" + options.channelKey;
+        state.bubble = el("div", "position:fixed;right:24px;bottom:100px;z-index:2147483000;display:none;box-sizing:border-box;width:max-content;max-width:min(340px,calc(100vw - 48px));padding:16px 52px 16px 20px;background:#fff;border-radius:24px;box-shadow:0 8px 28px #0000001f;cursor:pointer;font-family:system-ui,-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;text-align:left");
+        state.bubble.setAttribute("role", "button");
+        state.bubble.tabIndex = 0;
+        state.bubbleBody = el("div", "min-width:0");
+        var dismiss = el("button", "position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;border-radius:50%;background:#f3f4f6;color:#6b7280;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0");
+        dismiss.setAttribute("aria-label", "말풍선 닫기");
+        dismiss.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        state.bubble.appendChild(state.bubbleBody);
+        state.bubble.appendChild(dismiss);
+        dismiss.addEventListener("click", function (event) {
+            event.stopPropagation();
+            if (state.bubbleShowsPreview && state.preview) session(state.dismissKey, state.preview.id);
+            else session(state.greetingKey, "1");
+            paintLauncher(state);
+        });
+        var openFromBubble = function () {
+            if (current !== state) return;
+            var target = state.bubbleShowsPreview && state.preview;
+            if (target) session(state.dismissKey, target.id);
+            visibility(true);
+            if (target) post(state, "sendb:open-latest", { conversationId: target.conversationId || undefined });
+        };
+        state.bubble.addEventListener("click", openFromBubble);
+        state.bubble.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openFromBubble();
+            }
+        });
+        paintLauncher(state);
         // 연결이 확인되기 전에는 런처를 숨긴다(설치 도메인 미등록 등으로 동작하지 않는 버튼 방지).
         state.launcherHidden = !!options.hideLauncher;
         state.button.hidden = true;
@@ -385,15 +486,16 @@
                 state.ready = true;
                 state.hasConnected = true;
                 if (typeof data.color === "string" && /^#[0-9a-fA-F]{6}$/.test(data.color))
-                    state.button.style.background = data.color;
+                    state.color = data.color;
                 if (!state.launcherHidden) {
                     state.button.hidden = false;
-                    state.button.style.display = "";
+                    state.button.style.display = "flex";
                 }
                 state.waiting = false;
                 state.awaitingReady = false;
                 clearTimeout(state.timer);
                 state.resolve();
+                paintLauncher(state);
                 scheduleRefresh(state);
                 emit("ready");
                 // 답변 알림 메일·알림톡의 링크(?sendb_chat=open)로 들어오면 상담창을 바로 연다
@@ -424,8 +526,31 @@
                 if (!state.identityToken && store(state.storageKey))
                     store(state.readStorageKey, String(data.readId));
             }
-            if (data.type === "sendb:unread")
-                emit("unreadCountChange", Math.max(0, Number(data.count) || 0));
+            if (data.type === "sendb:unread") {
+                state.unread = Math.max(0, Number(data.count) || 0);
+                var latest = data.latest;
+                state.preview =
+                    latest && typeof latest.id === "string" && typeof latest.body === "string"
+                        ? {
+                              id: latest.id.slice(0, 200),
+                              name: String(latest.name || "").slice(0, 60),
+                              body: latest.body.slice(0, 300),
+                              at: String(latest.at || ""),
+                              conversationId: typeof latest.conversationId === "string" ? latest.conversationId : null,
+                          }
+                        : null;
+                paintLauncher(state);
+                emit("unreadCountChange", state.unread);
+            }
+            if (data.type === "sendb:launcher") {
+                if (typeof data.color === "string" && /^#[0-9a-fA-F]{6}$/.test(data.color)) state.color = data.color;
+                state.greeting = {
+                    text: typeof data.greeting === "string" ? data.greeting.slice(0, 60) : "",
+                    status: typeof data.status === "string" ? data.status.slice(0, 60) : "",
+                    quick: !!data.quick,
+                };
+                paintLauncher(state);
+            }
             if (data.type === "sendb:refresh") refresh(state);
             if (data.type === "sendb:error") {
                 if (state.identifying) return;
@@ -445,6 +570,7 @@
         };
         window.addEventListener("message", state.listener);
         document.body.appendChild(state.frame);
+        document.body.appendChild(state.bubble);
         document.body.appendChild(state.button);
         return promise;
     }
@@ -530,7 +656,8 @@
                 current.launcherHidden = false;
                 if (!current.hasConnected) return;
                 current.button.hidden = false;
-                current.button.style.display = "";
+                current.button.style.display = "flex";
+                paintLauncher(current);
             }
         },
         hideLauncher: function () {
@@ -538,6 +665,7 @@
                 current.launcherHidden = true;
                 current.button.hidden = true;
                 current.button.style.display = "none";
+                paintLauncher(current);
             }
         },
         getSessionType: function () {

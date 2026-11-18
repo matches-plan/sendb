@@ -49,8 +49,8 @@ export function useInbox(
         { refreshInterval: 4000, refreshWhenHidden: false },
     );
     const counts = useSWR<InboxCounts>(
-        // 숫자는 "안 읽은 것만" 토글과 상관없다
-        channelId ? `/api/inbox?${new URLSearchParams({ view: "counts", channelId: String(channelId), ...withoutUnreadOnly(filters) })}` : null,
+        // 숫자는 고른 메뉴·상태 탭·"안 읽은 것만"과 상관없다 — 키에 넣으면 메뉴마다 따로 캐시돼 예전 숫자가 잠깐 보인다
+        channelId ? `/api/inbox?${new URLSearchParams({ view: "counts", channelId: String(channelId), q: filters.q, ...(filters.teamId ? { teamId: filters.teamId } : {}) })}` : null,
         inboxRequest,
         { refreshInterval: 15000, refreshWhenHidden: false },
     );
@@ -107,8 +107,4 @@ export function useInbox(
         }, { revalidate: false });
     }
     return { bootstrap, list, detail, patch, receiveMessage };
-}
-function withoutUnreadOnly<T extends { unreadOnly?: string }>({ unreadOnly, ...rest }: T) {
-    void unreadOnly;
-    return rest;
 }

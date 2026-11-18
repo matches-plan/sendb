@@ -18,6 +18,22 @@ export function MessengerSettingsFields({
         <div className="space-y-5">
             <div className="space-y-1.5">
                 <label className="flex items-center justify-between gap-4 text-sm font-medium">
+                    상담 버튼 말풍선
+                    <Switch aria-label="상담 버튼 말풍선 사용" checked={value.launcherBubbleEnabled} onCheckedChange={(launcherBubbleEnabled) => update({ launcherBubbleEnabled })} />
+                </label>
+                {value.launcherBubbleEnabled && (
+                    <Input
+                        aria-label="상담 버튼 말풍선 문구"
+                        className="border-border/70"
+                        value={value.launcherBubble}
+                        onChange={(e) => update({ launcherBubble: e.target.value })}
+                        maxLength={40}
+                        required
+                    />
+                )}
+            </div>
+            <div className="space-y-1.5">
+                <label className="flex items-center justify-between gap-4 text-sm font-medium">
                     전화 문의
                     <Switch aria-label="전화 문의 사용" checked={value.phoneEnabled} onCheckedChange={(phoneEnabled) => update({ phoneEnabled })} />
                 </label>

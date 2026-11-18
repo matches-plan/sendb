@@ -204,7 +204,8 @@ export async function queueSupportJob(
                 sources,
                 context: input,
                 requestedBy: actor?.userId,
-                eligibleAt: new Date(Date.now() + (actor ? 0 : 10000)),
+                // 고객이 이어서 보내는 메시지를 모아 답하려고 잠깐 기다린다
+                eligibleAt: new Date(Date.now() + (actor ? 0 : 3000)),
             })
             .returning();
         return job;

@@ -39,7 +39,7 @@ export function MessengerHome({
     onConversations: () => void;
 }) {
     const avatar = settings?.profileImageUrl || brand?.iconUrl;
-    const quick = settings?.aiAvailable || businessHours?.open !== false;
+    const { quick, text: statusText } = responseStatus(settings, businessHours);
     return (
         <section aria-label="상담 홈" className="min-h-0 flex-1 overflow-y-auto bg-[#f6f6f6] px-4 pb-6 pt-6">
             <header className="mb-5 flex items-center gap-3 px-1">
@@ -70,7 +70,7 @@ export function MessengerHome({
                 </button>
                 <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-gray-400">
                     <span className={`h-2 w-2 rounded-full ${quick ? "bg-emerald-500" : "bg-gray-300"}`} aria-hidden="true" />
-                    {quick ? "몇 분 내 답변 받으실 수 있어요" : nextOpenText(businessHours)}
+                    {statusText}
                 </p>
             </article>
 
@@ -123,6 +123,12 @@ export function MessengerHome({
             ))}
         </section>
     );
+}
+
+/** 상담 홈·사이트 상담 버튼 말풍선에 보이는 응답 안내 */
+export function responseStatus(settings?: { aiAvailable?: boolean } | null, businessHours?: MessengerBusinessHours | null) {
+    const quick = !!settings?.aiAvailable || businessHours?.open !== false;
+    return { quick, text: quick ? "몇 분 내 답변 받으실 수 있어요" : nextOpenText(businessHours) };
 }
 
 /** 운영시간 밖일 때 — "내일 오전 10:00부터 답변드려요" */
