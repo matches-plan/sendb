@@ -1,53 +1,44 @@
 "use client";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useState } from "react";
-import Link from "next/link";
-import { Bell } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import {
-    useNotificationCount,
-    useSupportNotifications,
-} from "../hooks/useOperations";
+import { useSupportNotifications } from "../hooks/useOperations";
+import { useReplyAlerts } from "../hooks/useReplyAlerts";
+import { Switch } from "@/components/ui/switch";
 import { readSupportNotifications } from "../api";
 import { operationsLabels, operationTime } from "../utils/display";
+import { toPlainText } from "@/lib/rich-text/format";
 import type { OpenSupportConversation } from "../types";
-export function SupportAlertLink() {
-    const { data } = useNotificationCount();
-    return (
-        <Link
-            className="rounded-lg border px-3 py-1.5 text-xs"
-            href="/inbox?notifications=open"
-        >
-            상담 알림 {data?.unread ?? 0}
-        </Link>
-    );
-}
 export function SupportNotifications({
     onSelect,
     initialOpen = false,
-    channels,
+    channels = [],
+    scope,
 }: {
     onSelect: OpenSupportConversation;
     initialOpen?: boolean;
-    channels: { id: number; name: string }[];
+    channels?: { id: number; name: string }[];
+    scope: string;
 }) {
     const [open, setOpen] = useState(initialOpen),
         [unread, setUnread] = useState(false),
         [busy, setBusy] = useState(false),
-        pages = useSupportNotifications(unread),
+        { recent, browserAlerts, setBrowserAlerts } = useReplyAlerts(scope, onSelect),
+        pages = useSupportNotifications(scope, unread, open),
         rows =
             pages.data
                 ?.flatMap((p) => p.rows)
                 .filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i) ??
             [],
-        count = pages.data?.[0]?.unread ?? 0;
+        count = recent.data?.unread ?? 0;
     async function read(ids: string[], quiet = false) {
         if (!ids.length) return;
         setBusy(true);
         try {
             for (let i = 0; i < ids.length; i += 100)
                 await readSupportNotifications(ids.slice(i, i + 100));
-            await pages.mutate();
+            await Promise.all([pages.mutate(), recent.mutate()]);
         } catch (e) {
             if (!quiet) toast.error((e as Error).message);
             throw e;
@@ -59,13 +50,14 @@ export function SupportNotifications({
         <>
             <button
                 onClick={() => setOpen(true)}
-                className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label={`상담 알림 ${count}개`}
                 title="상담 알림"
             >
-                <Bell size={18} />
+                <MessageCircle size={16} />
+                <span className="hidden sm:inline">상담 알림</span>
                 {count > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-semibold leading-4 text-white">
+                    <span className="min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-semibold leading-4 text-white">
                         {count > 99 ? "99+" : count}
                     </span>
                 )}
@@ -92,6 +84,12 @@ export function SupportNotifications({
                                 닫기
                             </button>
                         </header>
+                        {typeof window !== "undefined" && "Notification" in window && (
+                            <label className="flex items-center justify-between text-sm">
+                                브라우저 알림
+                                <Switch aria-label="브라우저 알림" checked={browserAlerts} onCheckedChange={setBrowserAlerts} />
+                            </label>
+                        )}
                         <p className="text-xs text-muted-foreground">
                             내 담당 문의와 미배정 문의, 멘션·배정·응대 목표
                             알림입니다. 상담을 읽으면 해당 고객 문의 알림도 읽음
@@ -162,7 +160,7 @@ export function SupportNotifications({
                                 </p>
                                 <p className="font-medium">{row.name}</p>
                                 <p className="line-clamp-2 text-sm text-muted-foreground">
-                                    {row.preview}
+                                    {toPlainText(row.preview)}
                                 </p>
                                 <time className="block text-xs text-muted-foreground">
                                     {operationTime(row.createdAt)}

@@ -14,6 +14,8 @@ import { recordCustomerEvent } from "@/lib/customer-platform/repository";
 import { linkVisitorIdentity } from "@/lib/inbox/link-identity";
 import { updateVisitorProfile } from "@/lib/inbox/visitor-profile";
 import { selectedConversation } from "@/lib/inbox-customer-history/rules";
+import { readAsCustomer } from "@/lib/inbox/receipts";
+import { z } from "zod";
 import { attachJourneyContext } from "@/lib/inbox-journey/repository";
 import {
     applyMessengerHeaders,
@@ -60,6 +62,8 @@ export async function GET(req: NextRequest, ctx: Context) {
 export async function POST(req: NextRequest, ctx: Context) {
     return run(req, ctx, async (key) => {
         const input = await jsonBody(req);
+        if (input.action === "read-messages")
+            return readAsCustomer(key, visitorToken(req), z.uuid().parse(req.nextUrl.searchParams.get("conversationId")), input);
         if (input.action === "journey")
             return attachJourneyContext(key, visitorToken(req), input);
         if (input.action === "identify")

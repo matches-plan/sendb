@@ -21,6 +21,7 @@ import { useInboxSearch } from "../hooks/useInboxSearch";
 import { useStaffDraftSession, type SubscribeSessionInvalidation } from "../hooks/useStaffDraftSession";
 import { useEmailMailboxes } from "@/components/inbox-email/hooks/useEmailMailboxes";
 import { InboxChannelTabs, useFirstChannel } from "./InboxChannelTabs";
+import { SupportNotifications } from "@/components/inbox-operations/ui/SupportNotifications";
 import { Switch } from "@/components/ui/switch";
 import { ConversationPane, statusNames } from "./ConversationPane";
 import type { ConversationFilter, ConversationStatus } from "../types";
@@ -137,6 +138,20 @@ export function InboxPage({ userId, orgId = "", role, subscribeSessionInvalidati
                     <InboxChannelTabs
                         bootstrap={bootstrap}
                         channelId={channelId}
+                        right={<SupportNotifications
+                            scope={`${orgId}:${userId}`}
+                            channels={bootstrap.channels}
+                            initialOpen={params.get("notifications") === "open"}
+                            onSelect={row => {
+                                setChannel(row.channelId);
+                                setStatus(row.status);
+                                setFilter("all");
+                                setQuery("");
+                                setUnreadOnly(false);
+                                setSelectedState(row.conversationId);
+                                setFocusMessageId(row.messageId ?? null);
+                            }}
+                        />}
                         onChange={(next) => {
                             setChannel(next);
                             setSelected(null);

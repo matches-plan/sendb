@@ -8,16 +8,18 @@ export function StaffMessage({
     avatar,
     color,
     time,
+    receiptId,
     children,
 }: {
     name: string;
     avatar?: string;
     color: string;
     time?: ReactNode;
+    receiptId?: number;
     children: ReactNode;
 }) {
     return (
-        <div className="max-w-[92%]">
+        <div data-receipt-id={receiptId} className="max-w-[92%]">
             <div className="break-words text-[15px] leading-[1.5] text-gray-900">{children}</div>
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400">
                 <ProfileAvatar src={avatar} name={name} color={color} size={18} />

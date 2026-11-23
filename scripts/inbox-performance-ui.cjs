@@ -73,6 +73,11 @@ async function main() {
    if(suffix==='/audit')return reply({rows:[],hasMore:false});
    if(suffix)return json({success:false,error:'Unmocked path: '+suffix},500);
    if(req.method==='POST'&&body.action==='read'){chat.unread=false;return reply({read:true})}
+   if(req.method==='POST'&&body.action==='read-messages'){
+    for(const message of messages.get(id))
+     if(message.kind==='customer'&&body.messageIds.includes(message.id)) message.recipientReadAt??=new Date().toISOString();
+    return reply({read:true});
+   }
    if(req.method==='POST'){let message=messages.get(id).find(m=>m.clientId===body.clientId);if(!message){message={id:messages.get(id).length+1,clientId:body.clientId,kind:body.kind,body:body.body,authorName:'가상 담당자',createdAt:new Date().toISOString(),attachments:[]};messages.get(id).push(message);chat.replyRevision++;sentAt.set(id,Date.now());evidence.sends.push({id,clientId:body.clientId,body:body.body});}const scenario=new URL(req.headers.referer||'http://127.0.0.1').searchParams.get('send');
     if(scenario==='lost'&&!lostOnce.has(body.clientId)){lostOnce.add(body.clientId);const timer=setTimeout(()=>reply(message,0),25000);res.on('close',()=>clearTimeout(timer));return;}
     return reply(message,80)}

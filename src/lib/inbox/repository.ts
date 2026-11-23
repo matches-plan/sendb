@@ -1835,6 +1835,7 @@ export async function visitorDetail(
                 clientId: m.clientId,
                 kind: m.kind,
                 body: m.body,
+                recipientReadAt: m.recipientReadAt,
                 authorName: m.authorName,
                 createdAt: m.createdAt,
                 attachments: m.attachments.map((file) => ({

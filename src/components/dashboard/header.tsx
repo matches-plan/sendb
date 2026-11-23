@@ -1,6 +1,6 @@
 "use client";
 
-import {SupportAlertLink} from "@/components/inbox-operations/ui/SupportNotifications";
+import { SupportNotifications } from "@/components/inbox-operations/ui/SupportNotifications";
 import { NotificationBell } from "@/components/notifications/ui/NotificationBell";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -129,7 +129,17 @@ export function Header() {
             <MobileTitle />
             <div className="flex-1" />
             <div className="flex items-center gap-2">
-                {user&&currentPath!=="/inbox"&&<SupportAlertLink/>}
+                {user && currentPath !== "/inbox" && (
+                    <SupportNotifications key={`${user.orgId}:${user.id}`} scope={`${user.orgId}:${user.id}`}
+                        onSelect={row => {
+                            const query = new URLSearchParams({
+                                channelId: String(row.channelId), conversation: row.conversationId, status: row.status,
+                            });
+                            if (row.messageId) query.set("message", String(row.messageId));
+                            router.push(`/inbox?${query}`);
+                        }}
+                    />
+                )}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="gap-2">

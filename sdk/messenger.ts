@@ -38,6 +38,7 @@ export interface SendbCustomerMessages {
         id: number;
         clientId: string;
         kind: "customer" | "reply";
+        recipientReadAt?: string | null;
         body: string;
         authorName: string;
         createdAt: string;
@@ -176,6 +177,12 @@ export class SendbMessengerClient {
                 lastMessageId,
                 ...(readRevision === undefined ? {} : { readRevision }),
             },
+        );
+    }
+    /** 화면에 표시된 상담 답변의 읽음 확인 (한 번에 최대 100개). */
+    markMessagesRead(conversationId: string, messageIds: number[]) {
+        return this.#request<{ read: boolean }>(
+            `?conversationId=${encodeURIComponent(conversationId)}`, "POST", { action: "read-messages", messageIds },
         );
     }
     upload(

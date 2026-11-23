@@ -15,6 +15,7 @@ import { MessengerHome, responseStatus } from "@/components/customer-messenger/u
 import { inboxRequest, InboxRequestError } from "../api";
 import type { SendbCustomerMessages } from "../../../../sdk/messenger";
 import { useAttachmentDrafts } from "../hooks/useAttachmentDrafts";
+import { useVisibleMessageReceipts } from "../hooks/useVisibleMessageReceipts";
 import { AttachmentDrafts, AttachmentPicker } from "./AttachmentDrafts";
 import { AttachmentList } from "./AttachmentList";
 import { draftSessionKey } from "../utils/session";
@@ -298,6 +299,10 @@ export function ChatWidget({
         refreshInterval: 60000,
         refreshWhenHidden: false,
     });
+    const detailPollInterval = useCallback(
+        (latest?: VisitorDetail) => !opened ? 15000 : latest?.aiTyping ? 1000 : 3000,
+        [opened],
+    );
     const data = useSWR<
         VisitorDetail & { configurationNonce: number; sessionToken: string }
     >(
@@ -313,7 +318,7 @@ export function ChatWidget({
         }),
         {
             // AI가 답을 쓰는 중이면 더 자주 확인해 답이 바로 보이게 한다
-            refreshInterval: (latest) => (!opened ? 15000 : latest?.aiTyping ? 1000 : 3000),
+            refreshInterval: detailPollInterval,
             refreshWhenHidden: false,
             shouldRetryOnError: (error) => !isWidgetAccessDenied(error),
         },
@@ -580,35 +585,37 @@ export function ChatWidget({
         parentMessage,
     ]);
     const latestId = data.data?.messages.at(-1)?.id ?? 0;
+    const baseError = config.error?.message;
+    const viewingThread = detailResolved && opened && !isHome && !isList && !isNew &&
+        !(threadList && !history.enabled) && !readOnly && !linking && !leaveOpen && !blocked && !baseError;
     useEffect(() => {
-        if (!managed || !data.data || history.enabled || linking) return;
-        const reading = opened && !isHome;
-        const replies = reading
-            ? []
-            : data.data.messages.filter(
-                  (m) => m.kind === "reply" && m.id > readId,
-              );
-        if (reading && latestId > readId) {
-            setReadId(latestId);
-            parentMessage("sendb:read", { readId: latestId });
-        }
-        const last = replies.at(-1);
-        // 상담창이 닫혀 있어도 사이트의 상담 버튼 위에 새 답변을 미리 보여준다
-        parentMessage("sendb:unread", {
-            count: replies.length,
-            latest: last
-                ? {
-                      id: `${data.data.conversationId ?? ""}:${last.id}`,
-                      name: last.authorName || config.data?.name || "",
-                      body: last.body || "파일을 보냈어요",
-                      at: last.createdAt,
-                  }
-                : null,
-        });
+        const detail = data.data;
+        if (!managed || !detail || !detailResolved || history.enabled || linking) return;
+        const syncUnread = () => {
+            const reading = viewingThread && document.visibilityState === "visible";
+            const replies = reading ? [] : detail.messages.filter(m => m.kind === "reply" && m.id > readId);
+            if (reading && latestId > readId) {
+                setReadId(latestId);
+                parentMessage("sendb:read", { readId: latestId });
+            }
+            const last = replies.at(-1);
+            parentMessage("sendb:unread", {
+                count: replies.length,
+                latest: last ? {
+                    id: `${detail.conversationId ?? ""}:${last.id}`,
+                    name: last.authorName || config.data?.name || "",
+                    body: last.body || "파일을 보냈어요",
+                    at: last.createdAt,
+                } : null,
+            });
+        };
+        syncUnread();
+        document.addEventListener("visibilitychange", syncUnread);
+        return () => document.removeEventListener("visibilitychange", syncUnread);
     }, [
         managed,
-        opened,
-        isHome,
+        viewingThread,
+        detailResolved,
         latestId,
         readId,
         data.data,
@@ -647,19 +654,7 @@ export function ChatWidget({
     }, [managed, config.data, parentMessage]);
     useEffect(() => {
         const id = data.data?.conversationId;
-        if (
-            !history.enabled ||
-            !opened ||
-            isHome ||
-            linking ||
-            isList ||
-            isNew ||
-            readOnly ||
-            !detailResolved ||
-            !id ||
-            !latestId
-        )
-            return;
+        if (!history.enabled || !viewingThread || !id || !latestId) return;
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const mark = () => {
@@ -678,13 +673,7 @@ export function ChatWidget({
     }, [
         history.enabled,
         markSeen,
-        opened,
-        isHome,
-        linking,
-        isList,
-        isNew,
-        readOnly,
-        detailResolved,
+        viewingThread,
         latestId,
         data.data?.conversationId,
         data.data?.readRevision,
@@ -692,13 +681,7 @@ export function ChatWidget({
     useEffect(() => {
         if (
             !config.data?.messengerSettings?.emailNotifications ||
-            !opened ||
-            isHome ||
-            isList ||
-            isNew ||
-            readOnly ||
-            linking ||
-            !detailResolved ||
+            !viewingThread ||
             !data.data?.conversationId ||
             !latestId ||
             !token
@@ -727,13 +710,7 @@ export function ChatWidget({
         return () => document.removeEventListener("visibilitychange", seen);
     }, [
         config.data?.messengerSettings?.emailNotifications,
-        opened,
-        isHome,
-        isList,
-        isNew,
-        readOnly,
-        linking,
-        detailResolved,
+        viewingThread,
         data.data?.conversationId,
         latestId,
         token,
@@ -877,15 +854,6 @@ export function ChatWidget({
     useEffect(() => {
         if (outgoing) end.current?.scrollIntoView({ block: "end" });
     }, [outgoing]);
-    const baseError = config.error?.message;
-    if (baseError || blocked)
-        return (
-            <div className="flex h-dvh items-center justify-center bg-white p-8 text-center text-sm text-gray-500">
-                {blocked
-                    ? "이 사이트에는 상담창이 설치되어 있지 않습니다."
-                    : baseError}
-            </div>
-        );
     const color = config.data?.color ?? "#635BFF";
     const channelName = config.data?.name ?? "고객 상담";
     const avatar = config.data?.messengerSettings?.profileImageUrl || brand?.iconUrl;
@@ -1021,6 +989,11 @@ export function ChatWidget({
                       message.kind === "customer" || message.kind === "reply",
               );
     const firstCustomer = messages.findIndex((m) => m.kind === "customer");
+    useVisibleMessageReceipts(
+        scroll,
+        viewingThread && data.data?.conversationId ? `${baseUrl}?conversationId=${data.data.conversationId}` : null,
+        messages, "reply", token,
+    );
     const showOutgoing = !!outgoing && !messages.some((m) => m.clientId === outgoing.id);
     const unreadCount = history.enabled
         ? (history.unreadCount ?? 0)
@@ -1039,6 +1012,14 @@ export function ChatWidget({
             setIsHome(false);
         }
     }
+    if (baseError || blocked)
+        return (
+            <div className="flex h-dvh items-center justify-center bg-white p-8 text-center text-sm text-gray-500">
+                {blocked
+                    ? "이 사이트에는 상담창이 설치되어 있지 않습니다."
+                    : baseError}
+            </div>
+        );
     return (
         <div className="relative flex h-dvh flex-col bg-white font-sans text-gray-900">
             {leaveOpen && (
@@ -1351,7 +1332,7 @@ export function ChatWidget({
                                     );
                                     return m.kind === "customer" ? (
                                         <div key={m.id} className="space-y-4">
-                                            <CustomerMessage time={time}>
+                                            <CustomerMessage time={<>{time}{!readOnly && m.recipientReadAt && " · 읽음"}</>}>
                                                 {m.body && (
                                                     <div className={customerBubbleClass}>
                                                         <FormattedText text={m.body} />
@@ -1386,7 +1367,7 @@ export function ChatWidget({
                                             )}
                                         </div>
                                     ) : (
-                                        <StaffMessage key={m.id} name={channelName} avatar={avatar} color={color} time={time}>
+                                        <StaffMessage key={m.id} receiptId={m.id} name={channelName} avatar={avatar} color={color} time={time}>
                                             {m.body && (
                                                 <div className="whitespace-pre-wrap">
                                                     <FormattedText text={m.body} />
