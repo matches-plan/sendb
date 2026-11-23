@@ -204,6 +204,7 @@ export const inboxMessages = pgTable(
         clientId: uuid("client_id").notNull(),
         kind: varchar("kind", { length: 16 }).notNull(),
         body: text("body").notNull(),
+        recipientReadAt: time("recipient_read_at"),
         authorId: uuid("author_id").references(() => users.id, {
             onDelete: "set null",
         }),

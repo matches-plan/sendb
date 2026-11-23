@@ -8,6 +8,7 @@ import {
     startStaffConversation,
 } from "@/lib/inbox/repository";
 import { handleInbox, inboxActor, jsonBody } from "@/lib/inbox/http";
+import { readAsStaff } from "@/lib/inbox/receipts";
 type Context = { params: Promise<{ id: string }> };
 async function chatId(ctx: Context) {
     return z
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest, ctx: Context) {
         const actor = inboxActor(req),
             id = await chatId(ctx),
             body = await jsonBody(req);
+        if (body.action === "read-messages") return readAsStaff(actor, id, body);
         if (body.action === "read") {
             await markRead(
                 actor,

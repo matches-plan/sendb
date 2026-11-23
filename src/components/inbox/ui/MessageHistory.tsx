@@ -29,6 +29,7 @@ export const MessageHistory = memo(function MessageHistory({ messages, historyOn
                 </div>
             )}
             <div
+                data-receipt-id={m.kind === "customer" ? m.id : undefined}
                 className={`flex ${m.kind === "customer" ? "justify-start" : "justify-end"}`}
             >
                 <div className="max-w-[85%] space-y-1.5">
@@ -45,6 +46,7 @@ export const MessageHistory = memo(function MessageHistory({ messages, historyOn
                         <time>
                             {time.format(new Date(m.createdAt))}
                         </time>
+                        {!historyOnly && m.kind === "reply" && m.recipientReadAt && <span>읽음</span>}
                     </div>
                     {historyOnly && (
                         <p className="text-[10px] text-muted-foreground">

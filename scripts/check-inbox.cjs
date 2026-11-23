@@ -99,6 +99,11 @@ async function fixture(testRuntime) {
         "0113_inbox_lead_journey.sql",
         "0114_inbox_private_archive.sql",
         "0116_customer_messenger_contact.sql",
+        "0145_inbox_followers_macros.sql",
+        "0146_inbox_responders.sql",
+        "0147_inbox_snoozed_until.sql",
+        "0153_customer_reply_alimtalk.sql",
+        "0158_inbox_message_receipts.sql",
     ])
         for (const statement of fs
             .readFileSync(
@@ -204,6 +209,7 @@ async function runCheck(extra) {
             enabled: true,
         };
         const channel = await repo.saveChannel(actor, config, db);
+        await db.insert(schema.inboxResponders).values({ orgId: org, workspaceId: config.workspaceId, userId: user });
         const channelOther = await repo.saveChannel(
             otherActor,
             { ...config, workspaceId: 9 },
@@ -762,6 +768,7 @@ async function runCheck(extra) {
                 );
                 assert.deepEqual(result.counts, {
                     all: 1,
+                    ai: 0,
                     history: 0,
                     mine: 1,
                     unassigned: 0,
@@ -769,6 +776,9 @@ async function runCheck(extra) {
                     priority: 1,
                     mentioned: 0,
                     myTeams: 0,
+                    searchOpen: 1,
+                    searchSnoozed: 0,
+                    searchClosed: 1,
                 });
                 await repo.markRead(actor, open.id, 2, db);
                 assert.equal(
@@ -803,9 +813,53 @@ async function runCheck(extra) {
                 );
             },
         );
-        console.log(
-            `고객 상담 SQL QA: ${checks}개 통과. 실제 고객/외부 전송 0건.`,
-        );
+        const { readAsStaff, readAsCustomer } = require("../src/lib/inbox/receipts.ts");
+        const { notificationsPage, readNotifications } = require("../src/lib/inbox-operations/repository.ts");
+        const key = channel.publicKey;
+        const sample = await repo.startVisitorSession(key, { name: "읽음 확인용 방문자" }, db);
+        const send = body => repo.sendVisitorMessage(key, sample.token, { body, clientId: randomUUID() }, db);
+        const first = await send("첫 문의");
+        const reply = await repo.sendAgentMessage(actor, sample.id, { kind: "reply", body: "상담 답변", clientId: randomUUID() }, db);
+        const followUp = await send("후속 답장");
+        const note = await repo.sendAgentMessage(actor, sample.id, { kind: "note", body: "내부 메모", clientId: randomUUID() }, db);
+        const staffView = async () => (await repo.conversationDetail(actor, sample.id, db)).messages;
+        const visitorView = async () => (await repo.visitorDetail(key, sample.token, db)).messages;
+        await check("첫 문의와 후속 답장은 각각 한 번씩 담당자에게 알림", async () => {
+            const mine = await notificationsPage(actor, { unread: true }, db);
+            assert.deepEqual(mine.rows.filter(n => n.conversationId === sample.id && n.type === "customer").map(n => n.preview), ["후속 답장", "첫 문의"]);
+            assert.ok(!(await notificationsPage(otherActor, {}, db)).rows.some(n => n.conversationId === sample.id));
+            await readNotifications(actor, { action: "read", ids: mine.rows.filter(n => n.conversationId === sample.id).map(n => n.id) }, undefined, db);
+        });
+        await check("대화 조회만으로 읽음이 생기지 않고 상대가 본 메시지에만 양쪽 읽음 표시", async () => {
+            assert.ok((await staffView()).every(m => m.recipientReadAt === null));
+            assert.ok((await visitorView()).every(m => m.recipientReadAt === null));
+            await readAsStaff(actor, sample.id, { messageIds: [first.id, reply.id, note.id] }, db);
+            assert.deepEqual((await visitorView()).filter(m => m.recipientReadAt).map(m => m.id), [first.id]);
+            await readAsCustomer(key, sample.token, sample.id, { messageIds: [reply.id, followUp.id, note.id] }, db);
+            const seen = (await staffView()).filter(m => m.recipientReadAt);
+            assert.deepEqual(seen.map(m => m.id), [first.id, reply.id]);
+            await readAsCustomer(key, sample.token, sample.id, { messageIds: [reply.id] }, db);
+            assert.deepEqual((await staffView()).filter(m => m.recipientReadAt), seen);
+        });
+        await check("다른 상담·조직의 읽음 요청 차단", async () => {
+            await assert.rejects(readAsCustomer(key, session.token, sample.id, { messageIds: [reply.id] }, db), e => e.status === 404);
+            await assert.rejects(readAsStaff(otherActor, sample.id, { messageIds: [followUp.id] }, db), e => e.status === 404);
+            await readAsStaff(actor, session.id, { messageIds: [followUp.id] }, db);
+            assert.equal((await visitorView()).find(m => m.id === followUp.id).recipientReadAt, null);
+        });
+        await check("확인된 회원 세션에서 자기 상담의 답변만 읽음", async () => {
+            const { issueCustomerIdentity } = require("../src/lib/customer-platform/identity.ts");
+            const [member] = await db.insert(schema.crmContacts).values({
+                orgId: org, workspaceId: config.workspaceId, externalId: randomUUID(), name: "가상 회원",
+            }).returning();
+            const { identityToken } = issueCustomerIdentity(member.id, key);
+            const memberChat = await repo.startVisitorSession(key, { identityToken }, db);
+            const answer = await repo.sendAgentMessage(actor, memberChat.id, { kind: "reply", body: "회원 답변", clientId: randomUUID() }, db);
+            await readAsCustomer(key, identityToken, memberChat.id, { messageIds: [answer.id] }, db);
+            assert.ok((await repo.conversationDetail(actor, memberChat.id, db)).messages[0].recipientReadAt);
+            await assert.rejects(readAsCustomer(key, identityToken, sample.id, { messageIds: [reply.id] }, db), e => e.status === 404);
+        });
+        console.log(`고객 상담 SQL QA: ${checks}개 통과. 실제 고객/외부 전송 0건.`);
         global.fetch = originalFetch;
         if (extra) {
             await pg.exec(

@@ -11,6 +11,7 @@ import { useAttachmentDrafts } from "../hooks/useAttachmentDrafts";
 import type { StaffDraftSession } from "../hooks/staff-draft-session";
 import { AttachmentDrafts, AttachmentPicker } from "./AttachmentDrafts";
 import { MessageHistory } from "./MessageHistory";
+import { useVisibleMessageReceipts } from "../hooks/useVisibleMessageReceipts";
 import { inboxDraftStorageKey } from "../utils/draft-storage";
 import { InboxAudit } from "./InboxAudit";
 import { StaffReplyContact } from "@/components/customer-messenger/ui/StaffReplyContact";
@@ -196,12 +197,28 @@ export function ConversationPane({
         if (follow.current) end.current?.scrollIntoView({ block: "end" });
     }, [lastMessageId]);
     useEffect(() => {
-        void inboxWrite(`/api/inbox/conversations/${chat.id}`, {
-            action: "read",
-            customerSeq: chat.customerSeq,
-        })
-            .then(refresh)
-            .catch(() => {});
+        let active = true, requested = false;
+        let retry: ReturnType<typeof setTimeout> | undefined;
+        const markRead = () => {
+            if (!active || requested || !follow.current || document.visibilityState !== "visible") return;
+            requested = true;
+            void inboxWrite(`/api/inbox/conversations/${chat.id}`, { action: "read", customerSeq: chat.customerSeq })
+                .then(() => { if (active) void refresh().catch(() => {}); })
+                .catch(() => {
+                    requested = false;
+                    if (active) retry = setTimeout(markRead, 5000);
+                });
+        };
+        const log = scroll.current;
+        markRead();
+        document.addEventListener("visibilitychange", markRead);
+        log?.addEventListener("scroll", markRead);
+        return () => {
+            active = false;
+            clearTimeout(retry);
+            document.removeEventListener("visibilitychange", markRead);
+            log?.removeEventListener("scroll", markRead);
+        };
     }, [chat.id, chat.customerSeq]); // eslint-disable-line react-hooks/exhaustive-deps
     const changingRef = useRef(false);
     const [changing, setChanging] = useState(false);
@@ -374,6 +391,8 @@ ${body}` : body, key);
         const ids = new Set(messages.map(m => m.id));
         return [...older.filter(m => !ids.has(m.id)), ...messages];
     }, [older, messages]);
+    useVisibleMessageReceipts(scroll, chat.medium === "web" && !chat.historyOnly
+        ? `/api/inbox/conversations/${chat.id}` : null, allMessages, "customer");
     return (
         <div className="flex min-h-0 min-w-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col bg-background">

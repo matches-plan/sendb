@@ -46,6 +46,7 @@ export interface Conversation {
     unread: boolean;
 }
 export interface ChatMessage {
+    recipientReadAt?: string | null;
     mentions?: { userId: string; name: string }[];
     email?: {
         from: string;

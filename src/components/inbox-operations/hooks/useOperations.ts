@@ -19,21 +19,25 @@ export const useConversationOperations = (id: string) =>
         operationsRequest<ConversationOperations>,
         { refreshInterval: 15000, refreshWhenHidden: false },
     );
-export function useSupportNotifications(unread = false) {
+export function useSupportNotifications(scope: string, unread: boolean, open: boolean) {
     return useSWRInfinite<NotificationPage>(
         (index, previous) => {
-            if (index > 0 && !previous?.hasMore) return null;
-            return `/api/inbox-notifications?unread=${unread}${index && previous?.rows.at(-1) ? `&before=${previous.rows.at(-1)!.id}` : ""}`;
+            if (!open || (index > 0 && !previous?.hasMore)) return null;
+            return [`/api/inbox-notifications?unread=${unread}${index && previous?.rows.at(-1) ? `&before=${previous.rows.at(-1)!.id}` : ""}`, scope] as const;
         },
-        operationsRequest,
+        ([url]: readonly [string, string]) => operationsRequest<NotificationPage>(url),
         { refreshInterval: 15000, refreshWhenHidden: false },
     );
 }
-export const useNotificationCount = () =>
+const replyPollInterval = () => document.visibilityState === "visible" ? 5000 : 15000;
+export const useRecentSupportNotifications = (scope: string, browserAlerts: boolean) =>
     useSWR(
-        "/api/inbox-notifications?unread=true",
-        operationsRequest<NotificationPage>,
-        { refreshInterval: 15000, refreshWhenHidden: false },
+        ["/api/inbox-notifications?unread=false", scope] as const,
+        ([url]) => operationsRequest<NotificationPage>(url),
+        {
+            refreshInterval: replyPollInterval,
+            refreshWhenHidden: browserAlerts,
+        },
     );
 const reportKey = (id: number, q: StatsQuery, before?: string) =>
     `/api/inbox-operations/reports?${new URLSearchParams({ channelId: String(id), from: q.from, to: q.to, medium: q.medium, ...(before ? { before } : {}) })}`;
