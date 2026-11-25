@@ -346,8 +346,8 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                             : (inboxCount.inboxCounts?.[p.id] ?? 0);
                         const single = inboxes.length === 1;
                         const active = single || inbox === p.id;
-                        // 리드가 없는 리드함은 칩을 감춘다
-                        if (!single && p.id !== null && n === 0 && !active) return null;
+                        // 리드가 없는 리드함은 흐리게 (새로 만든 리드함도 보이고 오른쪽 클릭으로 관리)
+                        const empty = p.id !== null && n === 0 && !active;
                         return (
                             <button
                                 key={p.id ?? "all"}
@@ -369,6 +369,7 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                                 className={cn(
                                     "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm",
                                     active ? "bg-foreground text-background" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                    empty && "opacity-50 hover:opacity-100",
                                 )}
                             >
                                 {p.name}
