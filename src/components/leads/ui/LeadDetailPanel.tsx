@@ -9,6 +9,7 @@ import type { LeadRecord } from "../types";
 import { AUTO_FILLED_KEYS, extraFields, formatDate, formatDateTime, resolveBasicSlots, summarizeLead } from "../utils/lead-fields";
 import { LeadCommentComposer, LeadCommentList } from "./LeadComments";
 import { InflowBadge } from "./InflowBadge";
+import { InflowMailColumn } from "./InflowMailColumn";
 import { LeadActivitySection } from "./LeadActivitySection";
 import { StatusBadge } from "./StatusBadge";
 import { EditableField, Field, PropRow } from "./DetailParts";
@@ -34,6 +35,9 @@ interface LeadDetailPanelProps {
     onSecondaryFieldChange?: (key: string, value: unknown) => void;
     /** 서버가 돌려준 리드로 열린 리드를 바꾼다 (사업부 변경 등) */
     onRecordUpdate?: (r: Partial<LeadRecord> & { id: number }) => void;
+    /** 리드관리: 오른쪽 절반에 연 콜드메일 (유입경로를 눌러 연다) */
+    mailLogId?: number | null;
+    onMailChange?: (logId: number | null) => void;
 }
 
 /** 표에서 리드를 누르면 오른쪽에서 열리는 상세 (genius-hub-erp 사이드 피크 구조) */
@@ -53,10 +57,12 @@ export function LeadDetailPanel({
     onCloseRelated,
     onSecondaryFieldChange,
     onRecordUpdate,
+    mailLogId = null,
+    onMailChange,
 }: LeadDetailPanelProps) {
     // 오른쪽 절반: 같은 기업 담당자 또는 미팅 상세 (둘 중 하나)
     const [meetingDetail, setMeetingDetail] = useState<{ recordId: number; meetingId: number; leadData: Record<string, unknown> } | null>(null);
-    const split = mode === "sales" && (!!secondary || !!meetingDetail);
+    const split = (mode === "sales" && (!!secondary || !!meetingDetail)) || (mode !== "sales" && !!mailLogId);
     const openMeeting = (from: LeadRecord) => (recordId: number, meetingId: number) => {
         onCloseRelated?.();
         setMeetingDetail({ recordId, meetingId, leadData: (from.data ?? {}) as Record<string, unknown> });
@@ -181,7 +187,7 @@ export function LeadDetailPanel({
 
                                     <PropRow icon={Route} label="유입경로">
                                         <div className="space-y-1 pt-0.5">
-                                            <InflowBadge inflow={record.inflow} />
+                                            <InflowBadge inflow={record.inflow} onOpenMail={onMailChange} />
                                             {attribution.length > 0 && (
                                                 <div className="text-xs text-muted-foreground">
                                                     {attribution.map((a) => `${a.label} ${a.value}`).join(" · ")}
@@ -223,6 +229,8 @@ export function LeadDetailPanel({
                     )}
                 </div>
 
+                {/* 오른쪽: 이 리드가 받은 콜드메일 */}
+                {split && !sales && mailLogId && <InflowMailColumn key={mailLogId} logId={mailLogId} onClose={() => onMailChange?.(null)} />}
                 {/* 오른쪽: 연관 리드 (genius-hub-erp 과거 리드 상세처럼 나란히) */}
                 {split && meetingDetail && (
                     <MeetingDetailColumn

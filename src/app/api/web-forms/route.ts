@@ -63,6 +63,10 @@ export async function POST(req: NextRequest) {
         if (!access.ok) {
             return NextResponse.json({ success: false, error: access.error }, { status: access.status });
         }
+        // 제출이 리드관리에 보이도록 — 레코드(콜드메일) 파티션에는 연결하지 않는다 (수정 때와 같은 규칙)
+        if (access.partition.category !== "lead") {
+            return NextResponse.json({ success: false, error: "웹 폼은 리드관리 파티션으로만 연결할 수 있습니다." }, { status: 400 });
+        }
 
         const slug = nanoid(8);
 

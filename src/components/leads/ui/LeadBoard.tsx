@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, Link2Off, Plus, Search, Trash2 } from "lucide-react";
+import { Link2, Link2Off, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 import { Button } from "@/components/ui/button";
@@ -42,6 +48,12 @@ interface LeadBoardProps {
     initialSelected?: LeadRecord | null;
     /** 리드관리: 이 사업부의 리드함 — 주면 모두 한 목록으로 보이고 리드함별로 골라 본다 */
     inboxes?: Array<{ id: number; name: string }>;
+    /** 리드관리: 리드함 추가·이름 바꾸기·삭제 (관리자만) */
+    inboxActions?: {
+        create: () => void;
+        rename: (id: number, name: string) => void;
+        remove: (id: number, name: string) => void;
+    };
 }
 
 const ALL = "__all__";
@@ -49,11 +61,12 @@ const IMPORTANT = "__important__";
 const MINE = "__mine__";
 
 /** 리드 관리 오른쪽 영역 — 상태 탭 · 검색 · 표 · 오른쪽 상세 패널. 파티션이 바뀌면 key로 새로 그린다 */
-export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", initialSelected = null, inboxes }: LeadBoardProps) {
+export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", initialSelected = null, inboxes, inboxActions }: LeadBoardProps) {
     const sales = mode === "sales";
     // 리드관리: 사업부 리드함 전체를 한 목록으로. inbox를 고르면 그 리드함만
     const merged = !sales && !!inboxes;
     const [inbox, setInbox] = useState<number | null>(null);
+    const [inboxMenu, setInboxMenu] = useState<{ id: number; name: string; x: number; y: number } | null>(null);
     const scope = { workspaceScope: merged, inbox: merged ? inbox : null };
     const inboxNames = useMemo(
         () => (merged && inboxes && inboxes.length > 1 ? new Map(inboxes.map((p) => [p.id, p.name])) : undefined),
@@ -78,6 +91,8 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [selected, setSelected] = useState<LeadRecord | null>(initialSelected);
+    // 리드 상세 오른쪽 절반에 연 콜드메일
+    const [mailLogId, setMailLogId] = useState<number | null>(null);
     const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
     const [deleteIds, setDeleteIds] = useState<number[] | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
@@ -127,7 +142,7 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
     const allCount = useRecords({ partitionId: sales ? null : partitionId, page: 1, pageSize: 1, search: search || undefined, ...scope });
     // 리드함별 건수 (검색 반영, 리드함 선택과 상관없이)
     const inboxCount = useRecords({
-        partitionId: inboxNames ? partitionId : null,
+        partitionId: merged && (inboxes?.length ?? 0) > 0 ? partitionId : null,
         page: 1,
         pageSize: 1,
         search: search || undefined,
@@ -206,7 +221,15 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
         onSelect: (r: LeadRecord) => {
             setSelected(r);
             setSecondary(null);
+            setMailLogId(null);
         },
+        onOpenMail: sales
+            ? undefined
+            : (r: LeadRecord, logId: number) => {
+                  setSelected(r);
+                  setSecondary(null);
+                  setMailLogId(logId);
+              },
         checkedIds,
         onCheckedChange: setCheckedIds,
         inboxNames,
@@ -314,24 +337,35 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                 </div>
             </div>
 
-            {inboxNames && inboxes && (
+            {merged && inboxes && (inboxNames || inboxActions) && (
                 <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
-                    {[{ id: null as number | null, name: "전체 리드함" }, ...inboxes].map((p) => {
+                    {/* 리드함이 하나면 그 리드함만 (오른쪽 클릭으로 이름 바꾸기·삭제) */}
+                    {(inboxes.length > 1 ? [{ id: null as number | null, name: "전체 리드함" }, ...inboxes] : inboxes).map((p) => {
                         const n = p.id === null
                             ? Object.values(inboxCount.inboxCounts ?? {}).reduce((a, b) => a + b, 0)
                             : (inboxCount.inboxCounts?.[p.id] ?? 0);
-                        const active = inbox === p.id;
+                        const single = inboxes.length === 1;
+                        const active = single || inbox === p.id;
                         // 리드가 없는 리드함은 칩을 감춘다
-                        if (p.id !== null && n === 0 && !active) return null;
+                        if (!single && p.id !== null && n === 0 && !active) return null;
                         return (
                             <button
                                 key={p.id ?? "all"}
                                 type="button"
                                 onClick={() => {
+                                    if (single) return;
                                     setInbox(p.id);
                                     setPage(1);
                                     setCheckedIds(new Set());
                                 }}
+                                onContextMenu={
+                                    inboxActions && p.id !== null
+                                        ? (e) => {
+                                              e.preventDefault();
+                                              setInboxMenu({ id: p.id!, name: p.name, x: e.clientX, y: e.clientY });
+                                          }
+                                        : undefined
+                                }
                                 className={cn(
                                     "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm",
                                     active ? "bg-foreground text-background" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -342,6 +376,28 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                             </button>
                         );
                     })}
+                    {inboxActions && (
+                        <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={inboxActions.create}>
+                            <Plus className="h-3.5 w-3.5" />
+                            리드함 추가
+                        </Button>
+                    )}
+                    {/* 리드함 칩 오른쪽 클릭 — 이름 바꾸기·삭제 (사업부 탭과 같은 방식) */}
+                    <DropdownMenu open={!!inboxMenu} onOpenChange={(v) => !v && setInboxMenu(null)}>
+                        <DropdownMenuTrigger asChild>
+                            <span className="pointer-events-none fixed size-0" style={{ left: inboxMenu?.x ?? 0, top: inboxMenu?.y ?? 0 }} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-32">
+                            <DropdownMenuItem onClick={() => inboxMenu && inboxActions?.rename(inboxMenu.id, inboxMenu.name)}>
+                                <Pencil className="h-4 w-4" />
+                                이름 바꾸기
+                            </DropdownMenuItem>
+                            <DropdownMenuItem variant="destructive" onClick={() => inboxMenu && inboxActions?.remove(inboxMenu.id, inboxMenu.name)}>
+                                <Trash2 className="h-4 w-4" />
+                                삭제
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             )}
 
@@ -412,7 +468,10 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                     onClose={() => {
                         setSelected(null);
                         setSecondary(null);
+                        setMailLogId(null);
                     }}
+                    mailLogId={mailLogId}
+                    onMailChange={setMailLogId}
                     secondary={secondary}
                     onOpenRelated={setSecondary}
                     onCloseRelated={() => setSecondary(null)}

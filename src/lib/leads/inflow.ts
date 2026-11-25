@@ -3,7 +3,7 @@ import { db, emailSendLogs, partitions } from "@/lib/db";
 
 /** 리드 유입경로 — 콜드메일이면 어느 파티션 발송에서 왔는지까지 */
 export type LeadInflow =
-    | { type: "cold_mail"; partitionId: number; partitionName: string }
+    | { type: "cold_mail"; partitionId: number; partitionName: string; logId: number }
     | { type: "homepage" }
     | { type: "other"; label: string };
 
@@ -30,7 +30,7 @@ export async function resolveLeadInflows(
     const result = new Map<number, LeadInflow>();
     const emails = [...new Set(leads.map((l) => normalizeEmail(l.data.email)).filter((e): e is string => !!e))];
 
-    const sends = new Map<string, Array<{ sentAt: Date; partitionId: number; partitionName: string }>>();
+    const sends = new Map<string, Array<{ sentAt: Date; partitionId: number; partitionName: string; logId: number }>>();
     if (emails.length > 0) {
         const latest = new Date(Math.max(...leads.map((l) => new Date(l.registeredAt).getTime())));
         const earliest = new Date(Math.min(...leads.map((l) => new Date(l.registeredAt).getTime())) - LOOKBACK_MS);
@@ -38,6 +38,7 @@ export async function resolveLeadInflows(
             .select({
                 email: sql<string>`lower(${emailSendLogs.recipientEmail})`,
                 sentAt: emailSendLogs.sentAt,
+                logId: emailSendLogs.id,
                 partitionId: partitions.id,
                 partitionName: partitions.name,
             })
@@ -59,7 +60,7 @@ export async function resolveLeadInflows(
         for (const r of rows) {
             if (!r.sentAt) continue;
             const list = sends.get(r.email) ?? [];
-            list.push({ sentAt: r.sentAt, partitionId: r.partitionId, partitionName: r.partitionName });
+            list.push({ sentAt: r.sentAt, partitionId: r.partitionId, partitionName: r.partitionName, logId: r.logId });
             sends.set(r.email, list);
         }
     }
@@ -72,7 +73,7 @@ export async function resolveLeadInflows(
             ? sends.get(email)?.find((s) => s.sentAt.getTime() <= at && s.sentAt.getTime() >= at - LOOKBACK_MS)
             : undefined;
         if (send) {
-            result.set(lead.id, { type: "cold_mail", partitionId: send.partitionId, partitionName: send.partitionName });
+            result.set(lead.id, { type: "cold_mail", partitionId: send.partitionId, partitionName: send.partitionName, logId: send.logId });
             continue;
         }
         const source = typeof lead.data.source === "string" ? lead.data.source.trim() : "";

@@ -669,6 +669,15 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
                             fields={fields}
                             mode={category === "sales" ? "sales" : "lead"}
                             inboxes={category === "lead" ? leadInboxes : undefined}
+                            inboxActions={
+                                category === "lead" && user?.role !== "member"
+                                    ? {
+                                          create: () => setCreatePartitionOpen(true),
+                                          rename: (id, name) => setRenameTarget({ type: "partition", id, name }),
+                                          remove: (id, name) => setDeletePartitionTarget({ id, name }),
+                                      }
+                                    : undefined
+                            }
                             initialSelected={
                                 openLead && (category === "lead" ? openLead.workspaceId === workspaceId : openLead.partitionId === partitionId) ? openLead : null
                             }

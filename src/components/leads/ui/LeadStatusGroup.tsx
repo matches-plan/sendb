@@ -28,6 +28,7 @@ interface LeadStatusGroupProps {
     onCheckedChange: (ids: Set<number>) => void;
     mode?: "lead" | "sales";
     inboxNames?: Map<number, string>;
+    onOpenMail?: (record: LeadRecord, logId: number) => void;
     /** 리드관리: 사업부 리드함 전체 (inbox를 주면 그 리드함만) */
     workspaceScope?: boolean;
     inbox?: number | null;

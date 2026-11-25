@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, partitions, records, folders, chatSpaces } from "@/lib/db";
+import { db, partitions, records, folders, chatSpaces, webForms } from "@/lib/db";
 import { eq, and, count } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { requirePartitionAccess } from "@/lib/partition-access";
@@ -168,6 +168,16 @@ export async function PATCH(
             }
             if (!isPartitionCategory(category)) {
                 return NextResponse.json({ success: false, error: "잘못된 구분입니다." }, { status: 400 });
+            }
+            // 웹 폼이 연결된 리드함을 레코드로 옮기면 제출이 리드관리에서 안 보인다
+            if (category !== "lead" && access.partition.category === "lead") {
+                const [form] = await db.select({ name: webForms.name }).from(webForms).where(eq(webForms.partitionId, partitionId)).limit(1);
+                if (form) {
+                    return NextResponse.json(
+                        { success: false, error: `웹 폼이 연결된 리드함이라 옮길 수 없습니다. 웹 폼 「${form.name}」의 연결 파티션을 먼저 바꿔 주세요.` },
+                        { status: 400 },
+                    );
+                }
             }
             updateData.category = category;
             // 리드 관리로 옮기면 대응상태·연락처·이메일·요청사항·유입경로 칸이 없을 때 채운다
