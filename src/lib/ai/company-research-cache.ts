@@ -1,10 +1,10 @@
-import { db, records } from "@/lib/db";
+import { db, records, companyResearchCache } from "@/lib/db";
 import { and, eq, sql } from "drizzle-orm";
 import { normalizeCompanyName } from "./company-name";
 import type { CompanyResearchResult } from "./search";
 
 /** 조사 실패 시 search.ts가 채워 넣는 문구 — 캐시로 재사용하면 안 된다. */
-const NOT_FOUND_MARK = "정보를 찾을 수 없습니다";
+export const NOT_FOUND_MARK = "정보를 찾을 수 없습니다";
 
 type CachedResearch = Omit<CompanyResearchResult, "usage">;
 
@@ -13,6 +13,9 @@ type CachedResearch = Omit<CompanyResearchResult, "usage">;
  *
  * 웹서치 1건이 약 19,000 input tokens + 검색요청 1.6회이므로, 대량 발송에서
  * 같은 회사가 여러 레코드에 걸쳐 있으면 그만큼 그대로 중복 과금된다.
+ *
+ * 미리 조사해 가져온 회사 조사 보관함(company_research_cache)을 먼저 보고,
+ * 없으면 레코드에 붙은 지난 조사 결과를 찾는다.
  *
  * 조사에 실패한("정보를 찾을 수 없습니다") 결과는 재사용하지 않는다 —
  * 다음 기회에 다시 시도할 수 있어야 한다.
@@ -26,6 +29,13 @@ export async function findCachedCompanyResearch(
 ): Promise<CachedResearch | null> {
     const key = normalizeCompanyName(companyName);
     if (!key) return null;
+
+    const [stored] = await db
+        .select({ research: companyResearchCache.research })
+        .from(companyResearchCache)
+        .where(and(eq(companyResearchCache.orgId, orgId), eq(companyResearchCache.nameKey, key)))
+        .limit(1);
+    if (stored && !(stored.research.description ?? "").includes(NOT_FOUND_MARK)) return stored.research;
 
     const [row] = await db
         .select({ research: sql<CachedResearch>`${records.data} -> '_companyResearch'` })

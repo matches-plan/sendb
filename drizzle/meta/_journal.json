@@ -1135,6 +1135,13 @@
       "when": 1795651200000,
       "tag": "0160_haiku_5_5_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1795651260000,
+      "tag": "0161_company_research_cache",
+      "breakpoints": true
     }
   ]
 }

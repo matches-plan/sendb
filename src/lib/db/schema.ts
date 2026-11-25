@@ -1,6 +1,7 @@
 import { recordEmailIndexKeySql } from "./records-email-index";
 import type { MachineOpenReason } from "@/lib/email-open-rules";
 import type { BotReason } from "@/lib/email-click-bot-rules";
+import type { CompanyResearchResult } from "@/lib/ai/search";
 import {
     pgTable,
     serial,
@@ -1279,6 +1280,27 @@ export const aiUsageLogs = pgTable("ai_usage_logs", {
     purpose: varchar("purpose", { length: 50 }).notNull(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
 });
+
+// ============================================
+// 회사 조사 보관함 — 미리 조사해 가져온 결과. 같은 조직·같은 회사명이면 자동 메일이 웹검색 대신 쓴다
+// ============================================
+export const companyResearchCache = pgTable(
+    "company_research_cache",
+    {
+        id: serial("id").primaryKey(),
+        orgId: uuid("org_id")
+            .references(() => organizations.id, { onDelete: "cascade" })
+            .notNull(),
+        // normalizeCompanyName(회사명) — 공백·법인 표기·대소문자만 다른 이름은 같은 키
+        nameKey: varchar("name_key", { length: 300 }).notNull(),
+        research: jsonb("research").$type<Omit<CompanyResearchResult, "usage">>().notNull(),
+        source: varchar("source", { length: 30 }).default("import").notNull(),
+        researchedAt: timestamptz("researched_at").notNull(),
+        createdAt: timestamptz("created_at").defaultNow().notNull(),
+        updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+    },
+    (table) => [uniqueIndex("company_research_cache_org_name_key").on(table.orgId, table.nameKey)]
+);
 
 // ============================================
 // AI 사용량 쿼터 (조직별 월간)
