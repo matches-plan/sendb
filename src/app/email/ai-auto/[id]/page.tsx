@@ -328,7 +328,7 @@ function EditAiAutoPageContent() {
             return;
         }
         if (!asDraft && abTest.invalid) {
-            toast.error("추가한 AB 테스트의 B안 지시를 입력해주세요.");
+            toast.error(abTest.draft?.dihaRound === "DH02" ? "업무가 확인된 회사 목록을 입력해 주세요." : "추가한 AB 테스트의 B안 지시를 입력해주세요.");
             return;
         }
         // 초안을 정식으로 저장하면 자동 발송이 켜진다 — 상태가 바뀌는 저장만 확인을 받는다 (UX-139)
@@ -595,6 +595,7 @@ function EditAiAutoPageContent() {
                                     </div>
                                     <AbTestField
                                         abTest={abTest}
+                                        dihaMaterials={linkId === 61 && currentPartitionId === 77}
                                         fields={fields.map((f) => ({ key: f.key, label: f.label }))}
                                         prompt={prompt}
                                         onApplied={(applied) => applied !== null && setPrompt(applied)}

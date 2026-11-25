@@ -58,6 +58,7 @@ export const GET = (req: NextRequest) =>
                 rulePartitionId: e.rule_partition_id,
                 workspaceName: e.workspace_name,
                 kind,
+                dihaRound: e.config.dihaMaterial?.round,
                 state: e.state,
                 startedAt: e.started_at,
                 closedAt: e.closed_at ?? e.enrollment_closed_at,
@@ -72,7 +73,7 @@ export const GET = (req: NextRequest) =>
                 /** 자동 판정으로 B안이 규칙에 들어갔는지 */
                 applied: e.last_action === "ab_test_decided" ? e.last_detail?.applied === true : null,
                 /** 지금 숫자로 본 95% 기준 우세 안 — 없으면 아직 확실한 차이 없음 */
-                significantLeader: promptTestVerdict(arms, metric).winner,
+                significantLeader: e.config.dihaMaterial ? null : promptTestVerdict(arms, metric).winner,
                 minEnrollmentDays: e.config.minEnrollmentDays ?? 14,
                 maxEnrollmentDays: e.config.maxEnrollmentDays ?? 42,
                 observationDays: e.config.observationDays ?? 14,

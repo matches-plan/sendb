@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { applyAbTestArm, stopAbTest } from "../api/abTests";
+import { DihaBusinessResults } from "./DihaBusinessResults";
 import type { AbTestRow } from "../types";
 import {
     METRIC_LABELS, RESULT_LABELS, SCOPE_LABELS, SCOPE_PROMPT_LABELS, decisionRuleText, leaderOf, pct, resultBadgeClass, shortDay, winnerOf,
@@ -50,7 +51,7 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
     const { confirm, confirmationDialog } = useAsyncConfirm();
     const { A, B } = test.arms;
     const active = test.result === "running";
-    const leader = active ? leaderOf(test) : winnerOf(test);
+    const leader = test.dihaRound ? null : active ? leaderOf(test) : winnerOf(test);
     const scope = test.scope ?? "all";
     const apply = (arm: "A" | "B") =>
         confirm({
@@ -84,8 +85,8 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
     const meta = [
         !compact && test.workspaceName,
         `${shortDay(test.startedAt)} ~ ${active ? "진행 중" : shortDay(test.closedAt)}`,
-        test.kind === "prompt" && SCOPE_LABELS[scope],
-        `평가 기준 ${METRIC_LABELS[test.metric]}`,
+        test.kind === "prompt" && !test.dihaRound && SCOPE_LABELS[scope],
+        test.dihaRound ? "실제 방문·가입 관찰" : `평가 기준 ${METRIC_LABELS[test.metric]}`,
     ].filter(Boolean).join(" · ");
     return (
         <div className={cn("space-y-3", !compact && "rounded-lg border border-border/40 bg-card p-4")}>
@@ -122,9 +123,9 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs tabular-nums text-muted-foreground">{decisionRuleText(test)}</span>
                     <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" disabled={!leader} onClick={() => leader && apply(leader)}>
+                        {!test.dihaRound && <Button size="sm" variant="outline" disabled={!leader} onClick={() => leader && apply(leader)}>
                             {leader ? `${leader}안 바로 적용` : "바로 적용"}
-                        </Button>
+                        </Button>}
                         {test.kind === "prompt" && (
                             <Button size="sm" variant="outline" onClick={stop}>중단</Button>
                         )}
@@ -140,7 +141,8 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
                 <p className="text-xs text-muted-foreground">테스트 중 지시사항이 바뀌어 B안을 규칙에 넣지 않았습니다.</p>
             )}
 
-            {test.kind === "prompt" && (
+            {test.ruleId === 61 && test.rulePartitionId === 77 && <DihaBusinessResults id={test.id} />}
+            {test.kind === "prompt" && !test.dihaRound && (
                 <details className="text-sm">
                     <summary className="cursor-pointer text-muted-foreground">지시사항 보기</summary>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">

@@ -4,6 +4,7 @@ import { EMAIL_TRIM_CHARS, normalizeEmail } from "./deep-visitor-alert-rules";
 import { evaluateJourney } from "./customer-journey-card";
 import { loadCandidates, enrichedInput } from "./customer-journey-source";
 import { journeyCustomerKey } from "./customer-journey-priority";
+import { captureDihaVisit } from "./email-experiments/diha-visit";
 import {
     measuredVisitSeconds,
     visitAckConfig,
@@ -28,6 +29,8 @@ export interface VisitAckRow {
     send_log_id: number | null;
     scheduled_at: Date | string;
     observed_at: Date | string;
+    experiment_assignment_id?: number | null;
+    experiment_send_before?: Date | string | null;
 }
 const CAPTURE_LOCK = 0x5c4edf17;
 
@@ -80,7 +83,7 @@ export async function registerVisitAck(
             ON CONFLICT (org_id,workspace_id,customer_key) DO UPDATE SET
                 source_log_id=EXCLUDED.source_log_id,record_id=EXCLUDED.record_id,session_id=EXCLUDED.session_id,
                 status=EXCLUDED.status,reason=EXCLUDED.reason,scheduled_at=EXCLUDED.scheduled_at,observed_at=EXCLUDED.observed_at,updated_at=EXCLUDED.updated_at
-            WHERE email_visit_acknowledgements.status='ignored'
+            WHERE email_visit_acknowledgements.status='ignored' AND email_visit_acknowledgements.experiment_assignment_id IS NULL
             RETURNING *
         ), queued AS (
             INSERT INTO email_followup_queue (parent_log_id,source_type,source_id,org_id,step_index,check_at,status,stop_reason,created_at)
@@ -103,6 +106,14 @@ export async function registerVisitAck(
         FROM email_followup_queue q WHERE a.org_id=${target.orgId} AND a.workspace_id=${target.workspaceId}
           AND a.customer_key=${journeyCustomerKey(target.email)} AND q.source_type='visit_ack' AND q.source_id=a.id AND q.org_id=a.org_id
         RETURNING a.*`;
+    if (saved?.experiment_assignment_id) return saved;
+    // 대조군에는 queue_id가 없다. 같은 방문을 다시 읽어도 일반 후속을 취소하지 않는다.
+    if (!saved) {
+        const [control] = await conn<VisitAckRow[]>`SELECT * FROM email_visit_acknowledgements
+            WHERE org_id=${target.orgId} AND workspace_id=${target.workspaceId} AND customer_key=${journeyCustomerKey(target.email)}
+              AND experiment_assignment_id IS NOT NULL LIMIT 1`;
+        if (control) return control;
+    }
     await stopVisitFollowups(
         conn,
         target.orgId,
@@ -197,6 +208,18 @@ export async function captureVisitAcknowledgements(
                 stats.ignored++;
                 continue;
             }
+            const due = visitAckScheduledAt(now, options.random);
+            const clickTime = new Date(source.clicked_at).getTime(), visitTime = new Date(source.started_at).getTime();
+            if (source.site_id === 1 && source.click_is_bot === false && new Date(source.sent_at).getTime() <= clickTime &&
+                clickTime >= visitTime - 30 * 60_000 && clickTime <= visitTime + 30_000 &&
+                !input.audience?.unsubscribed && !input.audience?.alreadyConverted &&
+                await captureDihaVisit(conn, { orgId: source.org_id, workspaceId, email: source.recipient_email,
+                    recordId: source.record_id, logId: source.send_log_id, sessionId: source.session_id,
+                    company: input.fields.find(f => f.key === "companyname")?.value,
+                    visitedAt: new Date(source.started_at), now, due })) {
+                stats.captured++;
+                continue;
+            }
             await registerVisitAck(
                 conn,
                 {
@@ -208,7 +231,7 @@ export async function captureVisitAcknowledgements(
                     sessionId: source.session_id,
                 },
                 now,
-                visitAckScheduledAt(now, options.random),
+                due,
                 input.audience?.unsubscribed
                     ? "unsubscribed"
                     : input.audience?.alreadyConverted
@@ -273,7 +296,7 @@ export async function findVisitFollowupStopWithConnection(
             await conn<
                 { id: number }[]
             >`SELECT id FROM email_visit_acknowledgements WHERE org_id=${orgId} AND workspace_id=${workspaceId}
-        AND customer_key=${journeyCustomerKey(email)} AND status<>'ignored' LIMIT 1`
+        AND customer_key=${journeyCustomerKey(email)} AND status<>'ignored' AND experiment_assignment_id IS NULL LIMIT 1`
         )[0];
     if (await lookup()) {
         await stopVisitFollowups(conn, orgId, workspaceId, email, now);

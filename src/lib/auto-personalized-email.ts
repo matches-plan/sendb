@@ -7,6 +7,7 @@ import { buildEmailSystemPrompt } from "@/lib/ai/email";
 import { prepareManagedEmail, attachManagedEmail } from "@/lib/ai-copy/runtime";
 import { CopyDeferredError } from "@/lib/ai-copy/generation";
 import { prepareEmailExperiment, recordExperimentDelivery } from "@/lib/email-experiments/runtime";
+import { dihaMail } from "@/lib/email-experiments/diha-material";
 import { findCachedCompanyResearch } from "@/lib/ai/company-research-cache";
 import { evaluateCondition } from "@/lib/alimtalk-automation";
 import { resolveSignature } from "@/lib/email-sender-resolver";
@@ -443,6 +444,10 @@ export async function processAutoPersonalizedEmail(
                 // AB 테스트 배정이면 그 집단(A·B)의 지시사항으로 쓴다
                 const rawPrompt = promptArm?.armPrompt || link.prompt || "이 회사에 적합한 제품 소개 이메일을 작성해주세요.";
                 const prompt = substitutePromptVariables(rawPrompt, recordData);
+                const frozen = experimentEnrollment.kind === "assigned" && experimentEnrollment.experiment.config.dihaMaterial
+                    ? dihaMail(experimentEnrollment.experiment.config.dihaMaterial, experimentEnrollment.assignment.arm, experimentEnrollment.assignment.tier)
+                    : undefined;
+                const fixedContext = frozen ? { fixedSubject: frozen.subject, fixedInitialBody: frozen.htmlBody, allowedUrls: [frozen.url] } : {};
                 const emailInput = {
                     prompt,
                     product,
@@ -457,12 +462,12 @@ export async function processAutoPersonalizedEmail(
                     orgId, workspaceId, purpose: "initial_email", ruleId: link.id,
                     key: experimentEnrollment.kind === "assigned" ? `experiment-assignment:${experimentEnrollment.assignment.id}` : generationKey,
                     model: link.model ?? undefined,
-                    legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt },
+                    legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt, ...fixedContext },
                     approvedContext: { system: buildEmailSystemPrompt({ ...emailInput, product: null, format: "plain",
                         ctaUrl: pinnedExperiment ? String(pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl ?? "") || undefined : emailInput.ctaUrl }), user: prompt,
                         fixedSubject: pinnedExperiment ? pinnedExperiment.experiment.config.subject : undefined,
                         allowedUrls: pinnedExperiment ? [pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl, ...assetUrls].filter((url): url is string => typeof url === "string" && !!url)
-                            : [link.ctaUrl, product?.url, ...assetUrls].filter((url): url is string => !!url) },
+                            : [link.ctaUrl, product?.url, ...assetUrls].filter((url): url is string => !!url), ...fixedContext },
                     pinned: pinnedExperiment ? { policy: pinnedExperiment.policy!, knowledge: pinnedExperiment.knowledge!, assignmentId: pinnedExperiment.assignment.id } : undefined,
                     assignmentId: promptArm?.assignment.id,
                 });

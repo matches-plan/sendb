@@ -10,7 +10,7 @@ export type PromptTestMetric = "reply" | "click" | "open";
  * running: 집계 중, A·B: 자동 판정 승, none: 차이 없음, insufficient: 42일 안에 필요한 발송을 못 채움(판정 안 함·A안 유지),
  * applied_A·applied_B: 사람이 고른 안, stopped: 중단, ended: 자동 준비 실험 종료
  */
-export type PromptTestResult = "running" | "A" | "B" | "none" | "insufficient" | "applied_A" | "applied_B" | "stopped" | "ended";
+export type PromptTestResult = "running" | "A" | "B" | "none" | "review" | "insufficient" | "applied_A" | "applied_B" | "stopped" | "ended";
 
 export interface ArmCounts {
     sent: number;
@@ -42,7 +42,7 @@ export function promptTestResult(input: {
     if (input.kind === "policy") return input.adopted ? "applied_B" : "ended";
     if (input.lastAction === "ab_test_decided") {
         const r = input.lastDetail?.result;
-        if (r === "A" || r === "B" || r === "insufficient") return r;
+        if (r === "A" || r === "B" || r === "insufficient" || r === "review") return r;
         // 예전 판정은 표본 부족도 'none'으로 남겼다 — 모집이 표본 부족으로 끝났으면 표본 부족으로 본다
         return input.lastDetail?.from === "insufficient_sample" ? "insufficient" : "none";
     }

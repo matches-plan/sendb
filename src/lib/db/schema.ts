@@ -21,6 +21,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { FormulaConfig } from "@/types";
+import { emailCopyAssignments } from "./email-experiment-schema";
 
 /** 사업부 탭 내 설정 — 순서, 숨긴 탭, 기본 목록 밖에서 꺼낸 탭 (사업부 id) */
 export interface TabPrefs {
@@ -1153,6 +1154,8 @@ export const emailVisitAcknowledgements = pgTable("email_visit_acknowledgements"
     reason: text("reason"),
     body: text("body"),
     queueId: integer("queue_id").references(() => emailFollowupQueue.id, { onDelete: "set null" }),
+    experimentAssignmentId: integer("experiment_assignment_id").references(() => emailCopyAssignments.id),
+    experimentSendBefore: timestamptz("experiment_send_before"),
     sendLogId: integer("send_log_id").references(() => emailSendLogs.id, { onDelete: "set null" }),
     scheduledAt: timestamptz("scheduled_at").notNull(),
     observedAt: timestamptz("observed_at").notNull(),
@@ -1161,6 +1164,7 @@ export const emailVisitAcknowledgements = pgTable("email_visit_acknowledgements"
     updatedAt: timestamptz("updated_at").defaultNow().notNull(),
 }, table => [
     uniqueIndex("eva_customer_idx").on(table.orgId, table.workspaceId, table.customerKey),
+    uniqueIndex("eva_study_assignment_idx").on(table.experimentAssignmentId).where(sql`${table.experimentAssignmentId} IS NOT NULL`),
     index("eva_status_check_idx").on(table.status, table.nextCheckAt),
 ]);
 

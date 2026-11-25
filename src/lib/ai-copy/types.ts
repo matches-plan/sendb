@@ -51,6 +51,8 @@ export interface GenerationContext {
     system: string;
     user: string;
     fixedSubject?: string;
+    /** 시작 시 고정한 실험 원고. 동일한 검증·저장·발송 절차를 거친다. */
+    fixedInitialBody?: string;
     allowedUrls?: string[];
     /** 감사 메일 수신자 이름은 기존 인사말 생성에만 사용한다. LLM 입력에 넣지 않는다. */
     greeting?: string;

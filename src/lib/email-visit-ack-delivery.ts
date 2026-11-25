@@ -15,6 +15,7 @@ import type { VisitAckConnection, VisitAckRow } from "./email-visit-ack";
 import type { JourneyCardInput } from "./customer-journey-card";
 import { ensureVisitAckCopy } from "./email-visit-ack-copy";
 import { CopyDeferredError } from "./ai-copy/generation";
+import { otherDihaContact } from "./email-experiments/diha-visit";
 
 type Env = Record<string, string | undefined>;
 export interface VisitAckParent extends VisitAckRow {
@@ -78,6 +79,8 @@ export async function deliverVisitAcknowledgement(
         };
     const now = deps.now();
     const config = visitAckConfig(deps.env);
+    const deadline = parent.experiment_send_before ? new Date(parent.experiment_send_before).getTime() : null;
+    const expired = (at: Date) => parent.experiment_assignment_id != null && (deadline === null || at.getTime() >= deadline);
     const cancel = async (reason: string, logId?: number): Promise<Outcome> => {
         await conn`UPDATE email_visit_acknowledgements SET status='cancelled',reason=${reason},updated_at=${deps.now().toISOString()} WHERE id=${parent.id}`;
         if (logId)
@@ -86,6 +89,7 @@ export async function deliverVisitAcknowledgement(
     };
     const defer = async (retryAt: Date): Promise<Outcome> => {
         const due = nextVisitAckBusinessTime(retryAt);
+        if (expired(due)) return cancel("실제 방문 후 24시간 안에 보낼 수 없음");
         await conn`UPDATE email_visit_acknowledgements SET scheduled_at=${due.toISOString()},updated_at=${deps.now().toISOString()} WHERE id=${parent.id} AND status='pending'`;
         return { kind: "deferred", retryAt: due };
     };
@@ -100,6 +104,7 @@ export async function deliverVisitAcknowledgement(
         VISIT_ACK_MAX_AGE_MS
     )
         return cancel("방문 확인 후 7일 경과");
+    if (expired(now)) return cancel("실제 방문 후 24시간 경과");
     if (
         nextVisitAckBusinessTime(now).getTime() !== now.getTime() ||
         now.getTime() - new Date(parent.scheduled_at).getTime() > 5 * 60_000
@@ -107,6 +112,7 @@ export async function deliverVisitAcknowledgement(
         return defer(visitAckScheduledAt(now, deps.random));
     const load = async () => {
         const at = deps.now();
+        if (expired(at)) return null;
         const [source] = await loadCandidates(
             conn,
             parent.workspace_id,
@@ -216,6 +222,11 @@ export async function deliverVisitAcknowledgement(
         }
         logId = claimed.id;
         await conn`UPDATE email_visit_acknowledgements SET send_log_id=${logId} WHERE id=${parent.id}`;
+        if (parent.experiment_assignment_id) {
+            await conn`UPDATE email_copy_assignments SET send_log_id=${logId},actual_sender_id=${ready.senderProfileId},actual_sender_email=${ready.senderEmail}
+                WHERE id=${parent.experiment_assignment_id} AND org_id=${parent.org_id} AND arm='B'`;
+            parent.send_log_id = logId;
+        }
         await conn`UPDATE email_followup_queue SET status='uncertain' WHERE id=${item.id} AND status='processing'`;
         const finalStop = await deps.checkStop(parent);
         if (finalStop || !(await load())) {
@@ -226,6 +237,7 @@ export async function deliverVisitAcknowledgement(
             await release();
             return cancel("동일 감사 문구 작업의 발송 이력 존재", logId);
         }
+        if (expired(deps.now())) { await release(); return cancel("실제 방문 후 24시간 경과", logId); }
         attempted = true;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const result = await Promise.race([
@@ -245,6 +257,10 @@ export async function deliverVisitAcknowledgement(
         await conn`UPDATE email_send_logs SET status=${status},request_id=${result.requestId ?? null},result_code=${result.code ?? null},result_message=${result.message ?? null}
             WHERE id=${logId} AND org_id=${item.orgId}`;
         await conn`UPDATE email_visit_acknowledgements SET status=${status},reason=${result.message ?? null},updated_at=${deps.now().toISOString()} WHERE id=${parent.id}`;
+        if (result.kind === "accepted" && parent.experiment_assignment_id) {
+            await conn`UPDATE email_copy_assignments SET actual_sent_at=COALESCE(actual_sent_at,${freshNow.toISOString()})
+                WHERE id=${parent.experiment_assignment_id} AND org_id=${parent.org_id} AND send_log_id=${logId}`;
+        }
         return { kind: result.kind === "accepted" ? "sent" : "skipped" };
     } catch (error) {
         if (!attempted) {
@@ -299,6 +315,14 @@ export async function handleVisitAcknowledgement(item: {
             env: process.env,
             now: () => new Date(),
             checkStop: async (p) => {
+                if (p.experiment_assignment_id) {
+                    const [current] = await conn`SELECT a.id FROM email_copy_assignments a JOIN email_copy_experiments e
+                        ON e.id=a.experiment_id AND e.org_id=a.org_id WHERE a.id=${p.experiment_assignment_id} AND a.org_id=${p.org_id}
+                        AND a.workspace_id=8 AND a.arm='B' AND e.rule_id=61 AND e.config->'dihaMaterial'->>'round'='DH05'
+                        AND e.state IN ('running','observing','enrollment_closed','decision_ready')`;
+                    if (!current) return "실험 후속 중단";
+                    if (await otherDihaContact(conn, p.org_id, p.recipient_email, p.source_log_id, p.send_log_id)) return "기존 안내 또는 미확정 발송";
+                }
                 if (
                     await unsub.isUnsubscribed(
                         p.workspace_id,
