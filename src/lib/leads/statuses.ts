@@ -3,6 +3,9 @@
 /** 기본 순서. 워크스페이스 설정에서 켜고 끈다 */
 export const LEAD_STATUS_DEFAULTS = ["신규", "부재", "연락 중", "핵심", "테스트", "전환", "종료"] as const;
 
+/** 새로 들어온 리드의 기본 대응상태 */
+export const LEAD_NEW_STATUS = "신규";
+
 export const LEAD_STATUS_COLORS: Record<string, string> = {
     신규: "#3b82f6",
     부재: "#9ca3af",

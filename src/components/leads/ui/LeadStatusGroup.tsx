@@ -27,10 +27,14 @@ interface LeadStatusGroupProps {
     checkedIds: Set<number>;
     onCheckedChange: (ids: Set<number>) => void;
     mode?: "lead" | "sales";
+    inboxNames?: Map<number, string>;
+    /** 리드관리: 사업부 리드함 전체 (inbox를 주면 그 리드함만) */
+    workspaceScope?: boolean;
+    inbox?: number | null;
 }
 
 /** "전체" 탭의 대응상태별 묶음 하나 — 접고 펼 수 있고 20건씩 더 본다 */
-export function LeadStatusGroup({ partitionId, status, exclude, search, ...tableProps }: LeadStatusGroupProps) {
+export function LeadStatusGroup({ partitionId, status, exclude, search, workspaceScope, inbox, ...tableProps }: LeadStatusGroupProps) {
     const [open, setOpen] = useState(true);
     const [limit, setLimit] = useState(STEP);
     const filters: FilterCondition[] = exclude
@@ -48,6 +52,8 @@ export function LeadStatusGroup({ partitionId, status, exclude, search, ...table
         sortField: "registeredAt",
         sortOrder: "desc",
         leadExtras: true,
+        workspaceScope,
+        inbox,
     });
 
     // 비어 있는 묶음은 감춘다 (불러오는 중엔 자리만 비워 둔다)

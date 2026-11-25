@@ -8,6 +8,23 @@ import { uploadToR2 } from "@/lib/r2";
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 // 실행 파일 등은 막는다
 const BLOCKED_EXT = new Set(["exe", "bat", "cmd", "sh", "js", "msi", "dll", "app", "html", "htm", "svg"]);
+const TEXT_EXT = new Set(["txt", "csv", "tsv", "log", "md"]);
+
+/**
+ * 글 파일은 UTF-8로 맞춰 저장한다 — 윈도우 메모장·통화 녹음 요약처럼 EUC-KR(CP949)로 저장된 파일이
+ * 브라우저에서 열 때 글자가 깨지지 않게. 엑셀이 CSV 한글을 읽도록 맨 앞에 BOM을 붙인다.
+ */
+function toUtf8Text(buf: Buffer): Buffer {
+    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+    if (buf.subarray(0, 3).equals(BOM)) return buf;
+    let text: string;
+    try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    } catch {
+        text = new TextDecoder("euc-kr").decode(buf);
+    }
+    return Buffer.concat([BOM, Buffer.from(text, "utf-8")]);
+}
 
 /**
  * POST: 리드 댓글 첨부파일 올리기 — 저장한 주소를 돌려주고, 댓글 등록 때 함께 보낸다.
@@ -41,10 +58,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const safeExt = /^[a-z0-9]{1,8}$/.test(ext) ? `.${ext}` : "";
     const key = `memo-attachments/${user.orgId}/${randomBytes(16).toString("hex")}${safeExt}`;
-    const url = await uploadToR2(Buffer.from(await file.arrayBuffer()), key, file.type || "application/octet-stream");
+    const isText = TEXT_EXT.has(ext) || file.type.startsWith("text/");
+    const raw = Buffer.from(await file.arrayBuffer());
+    const body = isText ? toUtf8Text(raw) : raw;
+    const contentType = isText ? `${file.type && file.type.startsWith("text/") ? file.type.split(";")[0] : "text/plain"}; charset=utf-8` : file.type || "application/octet-stream";
+    const url = await uploadToR2(body, key, contentType);
 
     return NextResponse.json({
         success: true,
-        data: { url, name: file.name, type: file.type || "application/octet-stream", size: file.size },
+        data: { url, name: file.name, type: contentType, size: body.length },
     });
 }

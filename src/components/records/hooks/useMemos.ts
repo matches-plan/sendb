@@ -62,11 +62,15 @@ export function useMemos(recordId: number | null) {
         mutate();
     };
 
-    const updateMemo = async (memoId: number, content: string, kind?: string | null) => {
+    const updateMemo = async (memoId: number, content: string, kind?: string | null, nextContactAt?: string | null) => {
         const res = await fetch(`/api/records/${recordId}/memos/${memoId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(kind === undefined ? { content } : { content, kind }),
+            body: JSON.stringify({
+                content,
+                ...(kind !== undefined ? { kind } : {}),
+                ...(nextContactAt !== undefined ? { nextContactAt } : {}),
+            }),
         });
         const json = await res.json();
         if (!json.success) throw new Error(json.error);

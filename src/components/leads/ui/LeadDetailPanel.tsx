@@ -208,7 +208,7 @@ export function LeadDetailPanel({
 
                                     <LeadActivitySection recordId={record.id} />
 
-                                    <LeadCommentList recordId={record.id} />
+                                    <LeadCommentList recordId={record.id} onChanged={onCommentAdded} />
                                 </>
                             )}
                         </div>

@@ -15,6 +15,13 @@ import { canEditMemo } from "@/lib/memo-permissions";
 import { formatDate, formatDateTime } from "../utils/lead-fields";
 import { MEMO_KIND_OPTIONS, memoKindOf, NextContactIcon, type MemoKindValue } from "../utils/memo-kinds";
 
+/** 저장된 시각 → 한국 날짜(YYYY-MM-DD). 없으면 빈 값 */
+function kstDay(v: string | Date | null | undefined) {
+    if (!v) return "";
+    const t = new Date(v).getTime();
+    return Number.isNaN(t) ? "" : new Date(t + 9 * 3_600_000).toISOString().slice(0, 10);
+}
+
 function Avatar({ name }: { name: string | null }) {
     return (
         <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -91,18 +98,20 @@ function CommentItem({
 }: {
     memo: MemoItem;
     canEdit: boolean;
-    onUpdate: (content: string, kind: string | null) => Promise<void>;
+    onUpdate: (content: string, kind: string | null, nextContactAt: string | null) => Promise<void>;
     onDelete: () => Promise<void>;
 }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(memo.content);
     const [draftKind, setDraftKind] = useState<string | null>(memo.kind ?? null);
+    const [draftNext, setDraftNext] = useState(kstDay(memo.nextContactAt));
     const kind = memoKindOf(memo.kind);
 
     const save = async () => {
         if (!draft.trim()) return;
         try {
-            await onUpdate(draft, draftKind);
+            // 날짜만 고르므로 한국 시간 오전 9시로 저장 (입력창과 같게)
+            await onUpdate(draft, draftKind, draftNext ? `${draftNext}T09:00:00+09:00` : null);
             setEditing(false);
         } catch (e) {
             toast.error((e as Error).message || "수정에 실패했습니다.");
@@ -140,6 +149,14 @@ function CommentItem({
                         />
                         <div className="flex items-center justify-end gap-1">
                             <KindPicker value={draftKind} onChange={setDraftKind} />
+                            <DatePicker
+                                value={draftNext}
+                                onChange={setDraftNext}
+                                placeholder="다음 연락 지정"
+                                clearable
+                                compact
+                                triggerClassName="h-7 w-auto gap-1.5 border-0 px-2 text-xs shadow-none hover:bg-accent"
+                            />
                             <span className="flex-1" />
                             <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditing(false)} aria-label="취소">
                                 <X className="h-3.5 w-3.5" />
@@ -164,6 +181,7 @@ function CommentItem({
                         onClick={() => {
                             setDraft(memo.content);
                             setDraftKind(memo.kind ?? null);
+                            setDraftNext(kstDay(memo.nextContactAt));
                             setEditing(true);
                         }}
                     >
@@ -185,7 +203,7 @@ function CommentItem({
 }
 
 /** 댓글(메모) 목록 — 최신순. 수정·삭제는 쓴 사람만 */
-export function LeadCommentList({ recordId }: { recordId: number }) {
+export function LeadCommentList({ recordId, onChanged }: { recordId: number; onChanged?: () => void }) {
     const { user } = useSession();
     const { memos, isLoading, updateMemo, deleteMemo } = useMemos(recordId);
     const counts = MEMO_KIND_OPTIONS.map((k) => ({ ...k, n: memos.filter((m) => m.kind === k.value).length })).filter((k) => k.n > 0);
@@ -209,7 +227,11 @@ export function LeadCommentList({ recordId }: { recordId: number }) {
                             key={memo.id}
                             memo={memo}
                             canEdit={!!user && canEditMemo(memo, { userId: user.id, role: user.role })}
-                            onUpdate={(content, kind) => updateMemo(memo.id, content, kind)}
+                            onUpdate={async (content, kind, next) => {
+                                await updateMemo(memo.id, content, kind, next);
+                                // 다음 연락일이 바뀌면 리드 쪽(중요 탭·다음연락일 칸)도 새로
+                                if ((memo.nextContactAt ? kstDay(memo.nextContactAt) : "") !== (next ? next.slice(0, 10) : "")) onChanged?.();
+                            }}
                             onDelete={() => deleteMemo(memo.id)}
                         />
                     ))}

@@ -513,6 +513,11 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
     }, [partitionId, currentPartition, fields, mutatePartitions]);
 
     // 폴더 목록 (CreatePartitionDialog용)
+    // 리드관리: 이 사업부의 리드함 (한 목록 안에서 리드함별로 골라 본다)
+    const leadInboxes = useMemo(
+        () => (partitionTree ? [...partitionTree.folders.flatMap((f) => f.partitions), ...partitionTree.ungrouped].map((p) => ({ id: p.id, name: p.name })) : []),
+        [partitionTree],
+    );
     const folderList = partitionTree?.folders.map((f) => ({ id: f.id, name: f.name })) ?? [];
 
     // 중복 레코드 하이라이트 — 서버가 파티션 전체 기준으로 표시한 isDuplicate를 쓴다(UX-081)
@@ -609,7 +614,7 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
     return (
         <WorkspaceLayout>
             <MobileBreadcrumbBridge
-                partitionNav={mobilePartitionNav}
+                partitionNav={category === "lead" ? null : mobilePartitionNav}
                 subtitle={currentPartition?.name ?? null}
                 closeOnChange={partitionId}
             />
@@ -627,7 +632,8 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
             />
             <div className="flex h-[calc(100vh-3.5rem-3rem)] overflow-hidden">
                 {/* 좌측: 파티션 네비게이션 (데스크톱 전용) */}
-                <div className={allMode ? "hidden" : "hidden md:flex"}>
+                {/* 리드관리는 사업부의 리드함을 한 목록으로 보여서 왼쪽 리드함 목록이 없다 */}
+                <div className={allMode || category === "lead" ? "hidden" : "hidden md:flex"}>
                     <PartitionNav
                         workspaceId={workspaceId}
                         selectedPartitionId={partitionId}
@@ -657,12 +663,15 @@ export function RecordsPageInner({ category = "cold" }: { category?: "cold" | "l
                     ) : partitionId && category !== "cold" ? (
                         // 리드관리·영업관리: 내보내기·가져오기·예약등록 없는 전용 화면
                         <LeadBoard
-                            key={partitionId}
+                            key={category === "lead" ? `ws:${workspaceId}` : partitionId}
                             workspaceId={workspaceId}
                             partitionId={partitionId}
                             fields={fields}
                             mode={category === "sales" ? "sales" : "lead"}
-                            initialSelected={openLead?.partitionId === partitionId ? openLead : null}
+                            inboxes={category === "lead" ? leadInboxes : undefined}
+                            initialSelected={
+                                openLead && (category === "lead" ? openLead.workspaceId === workspaceId : openLead.partitionId === partitionId) ? openLead : null
+                            }
                         />
                     ) : category === "sales" && workspaceId && partitionTree && partitionTree.folders.every((f) => f.partitions.length === 0) && partitionTree.ungrouped.length === 0 ? (
                         // 이 사업에 아직 영업 리드함이 없으면 바로 만들 수 있게

@@ -77,6 +77,8 @@ interface LeadTableProps {
     embedded?: boolean;
     /** sales: 요청사항·최근 댓글·유입경로 대신 우리 담당·다음 할 일·최근 미팅 */
     mode?: "lead" | "sales";
+    /** 리드관리: 여러 리드함을 한 목록으로 볼 때 — 유입경로 아래에 들어온 리드함 이름 */
+    inboxNames?: Map<number, string>;
 }
 
 const HEAD_BASE = "sticky top-0 z-10 bg-background px-3 py-2 text-left text-xs font-medium text-muted-foreground border-b";
@@ -98,6 +100,7 @@ export function LeadTable({
     hideStatus,
     embedded,
     mode = "lead",
+    inboxNames,
 }: LeadTableProps) {
     const sales = mode === "sales";
     // 영업관리는 기업별, 나머지는 등록일별로 첫 칸을 묶는다
@@ -289,6 +292,11 @@ export function LeadTable({
                                         </td>
                                         <td className={CELL}>
                                             <InflowBadge inflow={record.inflow} />
+                                            {inboxNames?.get(record.partitionId) && (
+                                                <p className="mt-1 truncate text-xs text-muted-foreground" title={inboxNames.get(record.partitionId)}>
+                                                    {inboxNames.get(record.partitionId)}
+                                                </p>
+                                            )}
                                         </td>
                                             </>
                                         )}

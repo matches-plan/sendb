@@ -30,6 +30,7 @@ import { UnlinkCompanyDialog } from "@/components/sales/ui/UnlinkCompanyDialog";
 import { companyKey } from "../utils/lead-fields";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { workspaceLabel } from "@/lib/workspace-label";
+import { cn } from "@/lib/utils";
 
 interface LeadBoardProps {
     workspaceId: number | null;
@@ -39,6 +40,8 @@ interface LeadBoardProps {
     mode?: "lead" | "sales";
     /** 처음부터 열어 둘 리드 (리드관리 전체 탭에서 누른 리드) */
     initialSelected?: LeadRecord | null;
+    /** 리드관리: 이 사업부의 리드함 — 주면 모두 한 목록으로 보이고 리드함별로 골라 본다 */
+    inboxes?: Array<{ id: number; name: string }>;
 }
 
 const ALL = "__all__";
@@ -46,8 +49,16 @@ const IMPORTANT = "__important__";
 const MINE = "__mine__";
 
 /** 리드 관리 오른쪽 영역 — 상태 탭 · 검색 · 표 · 오른쪽 상세 패널. 파티션이 바뀌면 key로 새로 그린다 */
-export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", initialSelected = null }: LeadBoardProps) {
+export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", initialSelected = null, inboxes }: LeadBoardProps) {
     const sales = mode === "sales";
+    // 리드관리: 사업부 리드함 전체를 한 목록으로. inbox를 고르면 그 리드함만
+    const merged = !sales && !!inboxes;
+    const [inbox, setInbox] = useState<number | null>(null);
+    const scope = { workspaceScope: merged, inbox: merged ? inbox : null };
+    const inboxNames = useMemo(
+        () => (merged && inboxes && inboxes.length > 1 ? new Map(inboxes.map((p) => [p.id, p.name])) : undefined),
+        [merged, inboxes],
+    );
     const { user } = useSession();
     const [cardPrefill, setCardPrefill] = useState<CardFields | null>(null);
     // 명함 여러 장을 한꺼번에 고른 경우
@@ -109,10 +120,20 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
         sortOrder: "desc",
         leadExtras: true,
         important: tab === IMPORTANT,
+        ...scope,
     });
     // 중요 탭 숫자 칩 — 오늘 연락할 리드 + 연락일 지났는데 댓글 없는 리드
-    const importantCount = useRecords({ partitionId: sales ? null : partitionId, page: 1, pageSize: 1, important: true });
-    const allCount = useRecords({ partitionId: sales ? null : partitionId, page: 1, pageSize: 1, search: search || undefined });
+    const importantCount = useRecords({ partitionId: sales ? null : partitionId, page: 1, pageSize: 1, important: true, ...scope });
+    const allCount = useRecords({ partitionId: sales ? null : partitionId, page: 1, pageSize: 1, search: search || undefined, ...scope });
+    // 리드함별 건수 (검색 반영, 리드함 선택과 상관없이)
+    const inboxCount = useRecords({
+        partitionId: inboxNames ? partitionId : null,
+        page: 1,
+        pageSize: 1,
+        search: search || undefined,
+        workspaceScope: true,
+        inboxCounts: true,
+    });
     // 영업관리: 모든 사업부를 가로지르는 목록 (사업부 탭이면 그 사업부만)
     // 영업관리 '전체'는 사업부별로 묶어 보여줘서 한 번에 넉넉히 불러온다
     const salesAll = sales && workspaceId === null;
@@ -188,6 +209,7 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
         },
         checkedIds,
         onCheckedChange: setCheckedIds,
+        inboxNames,
     };
     // 켜진 상태들 → 목록에 없는 상태(기타) → 미지정
     const groups: Array<{ key: string; status: string; exclude?: string[] }> = [
@@ -292,12 +314,44 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                 </div>
             </div>
 
+            {inboxNames && inboxes && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
+                    {[{ id: null as number | null, name: "전체 리드함" }, ...inboxes].map((p) => {
+                        const n = p.id === null
+                            ? Object.values(inboxCount.inboxCounts ?? {}).reduce((a, b) => a + b, 0)
+                            : (inboxCount.inboxCounts?.[p.id] ?? 0);
+                        const active = inbox === p.id;
+                        // 리드가 없는 리드함은 칩을 감춘다
+                        if (p.id !== null && n === 0 && !active) return null;
+                        return (
+                            <button
+                                key={p.id ?? "all"}
+                                type="button"
+                                onClick={() => {
+                                    setInbox(p.id);
+                                    setPage(1);
+                                    setCheckedIds(new Set());
+                                }}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm",
+                                    active ? "bg-foreground text-background" : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                            >
+                                {p.name}
+                                <span className={cn("tabular-nums text-xs", active ? "text-background/70" : "")}>{n.toLocaleString()}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             {tab === ALL && !sales ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {groups.map((g) => (
                         <LeadStatusGroup
                             key={g.key}
                             partitionId={partitionId}
+                            {...scope}
                             status={g.status}
                             exclude={g.exclude}
                             search={search}
@@ -385,7 +439,7 @@ export function LeadBoard({ workspaceId, partitionId, fields, mode = "lead", ini
                 key={cardPrefill ? "card" : "manual"}
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                partitionId={partitionId}
+                partitionId={merged && inbox ? inbox : partitionId}
                 fields={fields}
                 mode={mode}
                 prefill={cardPrefill}

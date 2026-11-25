@@ -1,6 +1,7 @@
 import { fieldDefinitions, partitions, workspaces } from "@/lib/db/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
 import type { RecordDb as Executor } from "@/lib/record-create";
+import { LEAD_NEW_STATUS } from "@/lib/leads/statuses";
 
 /** 파티션이 쓰는 필드 타입 — 파티션 fieldTypeId → 워크스페이스 defaultFieldTypeId (resolved-fields API와 같은 기준) */
 async function resolvePartitionFieldType(exec: Executor, partitionId: number) {
@@ -9,12 +10,13 @@ async function resolvePartitionFieldType(exec: Executor, partitionId: number) {
             fieldTypeId: partitions.fieldTypeId,
             wsFieldTypeId: workspaces.defaultFieldTypeId,
             workspaceId: partitions.workspaceId,
+            category: partitions.category,
         })
         .from(partitions)
         .innerJoin(workspaces, eq(workspaces.id, partitions.workspaceId))
         .where(eq(partitions.id, partitionId));
     if (!partition) return null;
-    return { typeId: partition.fieldTypeId || partition.wsFieldTypeId, workspaceId: partition.workspaceId };
+    return { typeId: partition.fieldTypeId || partition.wsFieldTypeId, workspaceId: partition.workspaceId, category: partition.category };
 }
 
 /**
@@ -23,7 +25,9 @@ async function resolvePartitionFieldType(exec: Executor, partitionId: number) {
  */
 export async function loadFieldDefaults(exec: Executor, partitionId: number): Promise<Record<string, string>> {
     const resolved = await resolvePartitionFieldType(exec, partitionId);
-    if (!resolved?.typeId) return {};
+    // 리드관리 리드함은 대응상태를 따로 정하지 않았으면 「신규」로 들어온다
+    const leadDefaults: Record<string, string> = resolved?.category === "lead" ? { status: LEAD_NEW_STATUS } : {};
+    if (!resolved?.typeId) return leadDefaults;
 
     const fieldsWithDefaults = await exec
         .select({ key: fieldDefinitions.key, defaultValue: fieldDefinitions.defaultValue })
@@ -33,7 +37,7 @@ export async function loadFieldDefaults(exec: Executor, partitionId: number): Pr
             isNotNull(fieldDefinitions.defaultValue)
         ));
 
-    const defaults: Record<string, string> = {};
+    const defaults: Record<string, string> = { ...leadDefaults };
     for (const field of fieldsWithDefaults) {
         if (field.defaultValue) defaults[field.key] = field.defaultValue;
     }

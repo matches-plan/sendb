@@ -11,6 +11,7 @@ import { duplicateKeyOf, findDuplicateValues } from "@/lib/record-duplicates";
 import { resolveLeadInflows, type LeadInflow } from "@/lib/leads/inflow";
 import { importantLeadCondition, importantSalesCondition } from "@/lib/leads/important";
 import { salesExtrasFor, type SalesExtras } from "@/lib/sales/extras";
+import { accessibleLeadPartitions } from "@/lib/leads/stats";
 
 export async function GET(
     req: NextRequest,
@@ -57,6 +58,23 @@ export async function GET(
 
         // WHERE 조건 구성 (목록/조건삭제 공용 빌더)
         const conditions = buildRecordConditions(partitionId, { orgId: user.orgId, search, distributionOrder, groupBy, groupValue, filters });
+        // 리드관리: 이 사업부의 리드함을 한 목록으로 (?scope=workspace, ?inbox=리드함 하나만)
+        let inboxCounts: Record<number, number> | undefined;
+        if (searchParams.get("scope") === "workspace" && access.partition.category === "lead") {
+            const inboxIds = (await accessibleLeadPartitions(user, access.partition.workspaceId)).map((p) => p.id);
+            const inbox = Number(searchParams.get("inbox"));
+            conditions[0] = inArray(records.partitionId, inbox && inboxIds.includes(inbox) ? [inbox] : inboxIds.length ? inboxIds : [partitionId]);
+            if (searchParams.get("inboxCounts") === "1") {
+                const countConds = [...conditions];
+                countConds[0] = inArray(records.partitionId, inboxIds.length ? inboxIds : [partitionId]);
+                const rows = await db
+                    .select({ partitionId: records.partitionId, n: count() })
+                    .from(records)
+                    .where(and(...countConds))
+                    .groupBy(records.partitionId);
+                inboxCounts = Object.fromEntries(rows.map((r) => [r.partitionId, r.n]));
+            }
+        }
         // 리드 관리 "중요" 탭 — 오늘 연락할 리드 + 연락일이 지났는데 그 뒤 댓글이 없는 리드
         if (searchParams.get("important") === "1") {
             conditions.push(access.partition.category === "sales" ? importantSalesCondition() : importantLeadCondition());
@@ -181,6 +199,7 @@ export async function GET(
             page,
             pageSize,
             totalPages: Math.ceil(total / pageSize),
+            ...(inboxCounts ? { inboxCounts } : {}),
         });
     } catch (error) {
         console.error("Records fetch error:", error);

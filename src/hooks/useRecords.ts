@@ -18,6 +18,11 @@ interface UseRecordsParams {
     leadExtras?: boolean;
     /** 리드 관리 "중요" 탭 조건 */
     important?: boolean;
+    /** 리드 관리 — 이 사업부의 모든 리드함을 한 목록으로. inbox를 주면 그 리드함만 */
+    workspaceScope?: boolean;
+    inbox?: number | null;
+    /** 리드함별 건수(inboxCounts)도 같이 받는다 */
+    inboxCounts?: boolean;
 }
 
 interface RecordsResponse {
@@ -27,6 +32,7 @@ interface RecordsResponse {
     page: number;
     pageSize: number;
     totalPages: number;
+    inboxCounts?: Record<number, number>;
 }
 
 function buildQueryString(params: UseRecordsParams): string {
@@ -42,6 +48,9 @@ function buildQueryString(params: UseRecordsParams): string {
         qs.set("filters", JSON.stringify(params.filters));
     if (params.leadExtras) qs.set("leadExtras", "1");
     if (params.important) qs.set("important", "1");
+    if (params.workspaceScope) qs.set("scope", "workspace");
+    if (params.workspaceScope && params.inbox) qs.set("inbox", String(params.inbox));
+    if (params.inboxCounts) qs.set("inboxCounts", "1");
     return qs.toString();
 }
 
@@ -191,6 +200,7 @@ export function useRecords(params: UseRecordsParams) {
         page: data?.page ?? 1,
         pageSize: data?.pageSize ?? 50,
         totalPages: data?.totalPages ?? 0,
+        inboxCounts: data?.inboxCounts,
         isLoading,
         error,
         loadError: blockingError(data, error),

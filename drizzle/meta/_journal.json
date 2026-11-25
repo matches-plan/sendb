@@ -1121,6 +1121,13 @@
       "when": 1795392000000,
       "tag": "0158_inbox_message_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1795478400000,
+      "tag": "0159_lead_status_default_new",
+      "breakpoints": true
     }
   ]
 }
