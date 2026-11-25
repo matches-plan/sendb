@@ -1085,6 +1085,7 @@ export const emailAutoPersonalizedLinks = pgTable("email_auto_personalized_links
     isDraft: integer("is_draft").default(0).notNull(),
     // 콜드메일 고정 본문(템플릿) 규칙에서 옮겨 온 규칙 — 원래 템플릿 규칙 id. 이 규칙을 켜면 원래 규칙은 꺼진다
     sourceTemplateLinkId: integer("source_template_link_id"),
+    weekdayMorningOnly: boolean("weekday_morning_only").default(false).notNull(),
     // 보내던 문구를 프롬프트에 그대로 넣어 둔 규칙 — 사람이 프롬프트를 고치면 0 ('수정 필요' 배지)
     needsReview: integer("needs_review").default(0).notNull(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),

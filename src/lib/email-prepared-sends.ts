@@ -1,4 +1,6 @@
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { aiCopyGenerationJobs } from "./db/ai-copy-schema";
+import { emailCopyAssignments } from "./db/email-experiment-schema";
 import { db, emailPreparedSends, emailSenderDailyPlans, emailSenderDailyUsage, emailSenderProfiles, emailSendLogs } from "./db";
 import type { PreparedEmailPayload, PreparedSend } from "./db";
 import { kstParts, kstToDate } from "./kst";
@@ -9,6 +11,7 @@ import { toOrgSenderProfile } from "./email-sender-resolver";
 import type { LegacyEmailConfig, OrgSenderProfile } from "./email-sender-resolver";
 import { DELIVERY_GRACE_MS, nextPreparationAt, nextRandomDailySlot, PREPARATION_LEAD_MS } from "./email-random-schedule-rules";
 import { acceptedOrPendingCondition } from "./email-send-log-status";
+import { isInitialEmailMorning, nextInitialEmailMorning } from "./initial-email-window";
 
 const PLAN_LOCK = 0x5c4edf12;
 const RECIPIENT_LOCK = 0x5c4edf13;
@@ -29,7 +32,7 @@ export async function loadPreparedSend(queueId: number, linkId: number): Promise
 /** 실제 사용량과 아직 발송 전인 예약을 함께 세고, 조직 단위 트랜잭션 잠금으로 중복 배정을 막는다. */
 export async function reservePreparedSend(input: {
     queueId: number; linkId: number; orgId: string; ids: number[];
-    config: LegacyEmailConfig | null; sourceHash: string; now?: Date; forceReplan?: boolean;
+    config: LegacyEmailConfig | null; sourceHash: string; now?: Date; forceReplan?: boolean; weekdayMorningOnly?: boolean;
 }, database: Pick<typeof db, "transaction"> = db): Promise<PreparationReservation> {
     const now = input.now ?? new Date();
     const today = kstParts(now).date;
@@ -60,6 +63,7 @@ export async function reservePreparedSend(input: {
         const validReservation = !input.forceReplan && existing && sameSource && current && !current.limits.isPaused &&
             existing.status !== "cancelled" && existing.usageDate === today && cap !== null &&
             existing.ordinal < cap && isSendableNow(current.limits, existing.scheduledAt) &&
+            (!input.weekdayMorningOnly || isInitialEmailMorning(existing.scheduledAt)) &&
             (existing.scheduledAt.getTime() > now.getTime() || isSendableNow(current.limits, now)) &&
             existing.scheduledAt.getTime() >= now.getTime() - DELIVERY_GRACE_MS;
         if (validReservation) return { kind: "reserved", row: existing, sender: current };
@@ -86,6 +90,9 @@ export async function reservePreparedSend(input: {
             inArray(emailPreparedSends.senderProfileId, ids), eq(emailPreparedSends.usageDate, today),
             ne(emailPreparedSends.status, "cancelled"),
         )) : [];
+        const leadAt = new Date(now.getTime() + PREPARATION_LEAD_MS);
+        const earliest = input.weekdayMorningOnly ? nextInitialEmailMorning(leadAt) : leadAt;
+        let outsideRuleWindow = input.weekdayMorningOnly === true && !isInitialEmailMorning(leadAt);
         const available = candidates.flatMap((sender) => {
             const dailyCap = capForDate(sender.limits, today) ?? 0;
             const allocated = reservations.filter((r) => r.senderProfileId === sender.id);
@@ -94,8 +101,12 @@ export async function reservePreparedSend(input: {
             if (sent + pending >= dailyCap) return [];
             const occupied = new Set(allocated.map((r) => r.ordinal));
             const plan = plans.find((p) => p.senderProfileId === sender.id);
-            const slot = plan ? nextRandomDailySlot(sender.id, sender.limits, today, plan.startAt,
-                new Date(now.getTime() + PREPARATION_LEAD_MS), occupied) : null;
+            const slot = plan ? nextRandomDailySlot(sender.id, sender.limits, today, plan.startAt, earliest, occupied) : null;
+            // 주소의 공용 예약표에서 이 규칙에 허용된 자리만 사용한다. 뒤 순번일수록 늦은 시각이다.
+            if (slot && input.weekdayMorningOnly && !isInitialEmailMorning(slot.scheduledAt)) {
+                outsideRuleWindow = true;
+                return [];
+            }
             return slot ? [{ sender, ...slot, load: (sent + pending) / dailyCap }] : [];
         }).sort((a, b) => a.load - b.load || a.scheduledAt.getTime() - b.scheduledAt.getTime());
         const next = available[0];
@@ -103,7 +114,8 @@ export async function reservePreparedSend(input: {
             if (unlimited.length) return { kind: "legacy", ids: unlimited.map((p) => p.id) };
             const retryAt = candidates.map((p) => nextPreparationAt(p.limits, now))
                 .sort((a, b) => a.getTime() - b.getTime())[0] ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
-            return { kind: "deferred", retryAt, reason: candidates.every((p) => p.limits.isPaused) ? "paused" : "daily_limit" };
+            const reason = candidates.every((p) => p.limits.isPaused) ? "paused" : outsideRuleWindow ? "rule_window" : "daily_limit";
+            return { kind: "deferred", retryAt: input.weekdayMorningOnly ? nextInitialEmailMorning(retryAt) : retryAt, reason };
         }
         const payload = sameSource ? existing?.payload ?? null : null;
         const values = {
@@ -124,10 +136,11 @@ export async function savePreparedContent(id: number, payload: PreparedEmailPayl
         .where(and(eq(emailPreparedSends.id, id), inArray(emailPreparedSends.status, ["reserved", "ready"])));
 }
 
-export async function cancelPreparedSend(queueId: number, linkId: number) {
+export async function cancelPreparedSend(queueId: number, linkId: number, before?: Date) {
     await db.update(emailPreparedSends).set({ status: "cancelled", updatedAt: new Date() }).where(and(
         eq(emailPreparedSends.queueId, queueId), eq(emailPreparedSends.linkId, linkId),
         inArray(emailPreparedSends.status, ["reserved", "ready"]),
+        before ? lt(emailPreparedSends.scheduledAt, before) : undefined,
     ));
 }
 
@@ -156,4 +169,29 @@ export async function beginPreparedDelivery(id: number, log: typeof emailSendLog
 
 export async function finishPreparedDelivery(id: number, status: "sent" | "ready" | "uncertain") {
     await db.update(emailPreparedSends).set({ status, updatedAt: new Date() }).where(eq(emailPreparedSends.id, id));
+}
+
+/** 업체 요청 전 시간 창이 닫힌 경우에만 호출한다. 같은 문구와 실험 배정으로 다시 준비할 수 있게 한다. */
+export async function deferUnsubmittedInitialLog(
+    { orgId, logId, jobId, preparedId }: { orgId: string; logId: number; jobId?: number; preparedId?: number },
+    database: Pick<typeof db, "transaction"> = db,
+) {
+    await database.transaction(async (tx) => {
+        const [cancelled] = await tx.update(emailSendLogs)
+            .set({ status: "cancelled", resultMessage: "첫 안내 발송 시간 경과로 대기" })
+            .where(and(eq(emailSendLogs.orgId, orgId), eq(emailSendLogs.id, logId), eq(emailSendLogs.status, "pending")))
+            .returning({ id: emailSendLogs.id });
+        if (!cancelled) throw new Error("첫 안내의 미전송 로그 상태를 확인할 수 없습니다.");
+        if (jobId !== undefined) {
+            const [job] = await tx.update(aiCopyGenerationJobs).set({ sendLogId: null, updatedAt: new Date() })
+                .where(and(eq(aiCopyGenerationJobs.id, jobId), eq(aiCopyGenerationJobs.orgId, orgId), eq(aiCopyGenerationJobs.sendLogId, logId)))
+                .returning({ assignmentId: aiCopyGenerationJobs.assignmentId });
+            if (job?.assignmentId) await tx.update(emailCopyAssignments)
+                .set({ sendLogId: null, actualSenderId: null, actualSenderEmail: null })
+                .where(and(eq(emailCopyAssignments.id, job.assignmentId), eq(emailCopyAssignments.orgId, orgId),
+                    eq(emailCopyAssignments.sendLogId, logId), isNull(emailCopyAssignments.actualSentAt)));
+        }
+        if (preparedId !== undefined) await tx.update(emailPreparedSends).set({ status: "cancelled", logId: null, updatedAt: new Date() })
+            .where(and(eq(emailPreparedSends.id, preparedId), eq(emailPreparedSends.logId, logId), eq(emailPreparedSends.status, "sending")));
+    });
 }

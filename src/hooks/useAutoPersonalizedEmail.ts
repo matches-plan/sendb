@@ -26,6 +26,7 @@ export interface AutoPersonalizedLink {
     useSignaturePersona: number;
     useUnsubscribe: number;
     preventDuplicate: number;
+    weekdayMorningOnly: boolean;
     followupConfig: {
         delayDays: number;
         onClicked?: { prompt: string };
@@ -73,6 +74,7 @@ interface CreateInput {
     isActive?: number;
     isDraft?: number;
     preventDuplicate?: number;
+    weekdayMorningOnly?: boolean;
     senderProfileId?: number | null;
     /** 보내면 서버가 senderProfileId를 첫 원소로 맞춘다. 빈 배열 = 기본 발신 프로필 */
     senderProfileIds?: number[] | null;
@@ -105,6 +107,7 @@ interface UpdateInput {
     isActive?: number;
     isDraft?: number;
     preventDuplicate?: number;
+    weekdayMorningOnly?: boolean;
     senderProfileId?: number | null;
     /** 보내면 서버가 senderProfileId를 첫 원소로 맞춘다. 빈 배열 = 기본 발신 프로필 */
     senderProfileIds?: number[] | null;

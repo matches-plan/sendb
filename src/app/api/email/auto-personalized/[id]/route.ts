@@ -54,6 +54,7 @@ export async function PUT(
             isDraft,
             followupConfig,
             preventDuplicate,
+            weekdayMorningOnly,
             senderProfileId,
             senderProfileIds,
             signatureId,
@@ -92,6 +93,11 @@ export async function PUT(
         }
 
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
+        if (weekdayMorningOnly !== undefined && typeof weekdayMorningOnly !== "boolean") {
+            return NextResponse.json({ success: false, error: "오전 발송 설정을 확인해 주세요." }, { status: 400 });
+        }
+        if (triggerType === "on_update") updateData.weekdayMorningOnly = false;
+        else if (weekdayMorningOnly !== undefined) updateData.weekdayMorningOnly = (triggerType ?? existing.triggerType) === "on_create" && weekdayMorningOnly;
         if (name !== undefined) updateData.name = name || null;
         if (partitionId !== undefined) updateData.partitionId = Number(partitionId);
         if (productId !== undefined) updateData.productId = productId;

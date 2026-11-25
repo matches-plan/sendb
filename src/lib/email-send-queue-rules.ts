@@ -472,6 +472,8 @@ export function drainGroupKey(row: {
 /** walkQueueRow가 보는 AI 규칙 칸 (email_auto_personalized_links의 일부) */
 export interface QueueWalkLink {
     id: number;
+    weekdayMorningOnly?: boolean;
+    triggerType?: string;
     recipientField: string;
     preventDuplicate: number;
     model: string | null;
@@ -604,6 +606,8 @@ export function walkQueueRow(
             outcomes.push({ kind: "skipped", linkId: link.id, reason: replyStop });
             continue;
         }
+        // 예약과 미확정 전송도 보는 첫 안내 경로에서 이 규칙의 재시각을 결정한다.
+        if (link.weekdayMorningOnly && link.triggerType === "on_create") return { kind: "process", why: "initial_send_window" };
         if (!lookups.aiClientReady(link.model || undefined)) {
             outcomes.push({ kind: "skipped", linkId: link.id, reason: "no_ai_client" });
             continue;
