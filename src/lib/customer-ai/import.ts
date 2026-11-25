@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { InboxError } from "@/lib/inbox/errors";
 import { getAiClient } from "@/lib/ai";
+import { claudeSampling } from "@/lib/ai/models";
 import { callCopyProvider } from "@/lib/ai-copy/provider";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -91,7 +92,7 @@ export async function tidyKnowledge(text: string, model: string) {
         if (client.provider === "claude") {
             const api = new Anthropic({ apiKey: client.apiKey, maxRetries: 1, timeout: 180_000 });
             const message = await api.messages
-                .stream({ model: client.model, max_tokens: 16000, temperature: 0, system: TIDY_SYSTEM, messages: [{ role: "user", content: user }] })
+                .stream({ model: client.model, max_tokens: 16000, ...claudeSampling(client.model, 0), system: TIDY_SYSTEM, messages: [{ role: "user", content: user }] })
                 .finalMessage();
             return message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();
         }

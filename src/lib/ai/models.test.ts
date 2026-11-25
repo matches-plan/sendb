@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { AI_MODELS, DEFAULT_MODEL_ID, SEARCH_MODEL_ID, resolveModel } from "./models";
+import { AI_MODELS, DEFAULT_MODEL_ID, SEARCH_MODEL_ID, claudeSampling, resolveModel } from "./models";
 
 test("claude-haiku-4-5를 지정하면 provider claude 항목을 반환한다 (B1)", () => {
     const m = resolveModel("claude-haiku-4-5");
@@ -46,4 +46,17 @@ test("DEFAULT_MODEL_ID와 SEARCH_MODEL_ID는 AI_MODELS에 실재한다", () => {
 
 test("드롭다운 첫 항목이 Claude다 (B17)", () => {
     assert.equal(AI_MODELS[0].provider, "claude");
+});
+
+test("기본 모델과 회사 조사 모델은 Haiku 5.5다", () => {
+    assert.equal(DEFAULT_MODEL_ID, "claude-haiku-5-5");
+    assert.equal(SEARCH_MODEL_ID, "claude-haiku-5-5");
+    assert.equal(resolveModel(undefined).adaptiveThinking, true);
+});
+
+test("Haiku 5.5는 생각을 끄고 temperature를 보내지 않는다, 그 밖의 모델은 temperature를 그대로 보낸다", () => {
+    assert.deepEqual(claudeSampling("claude-haiku-5-5", 0.3), { thinking: { type: "disabled" } });
+    assert.deepEqual(claudeSampling("claude-haiku-5-5"), { thinking: { type: "disabled" } });
+    assert.deepEqual(claudeSampling("claude-haiku-4-5", 0.3), { temperature: 0.3 });
+    assert.deepEqual(claudeSampling("claude-haiku-4-5"), {});
 });

@@ -193,7 +193,7 @@ export async function createAutomationCycle(
                 purpose: setting.purpose,
                 provider: model.provider,
                 model: model.id,
-                parameters: { maxOutputTokens: 4096, temperature: 1 },
+                parameters: { maxOutputTokens: model.adaptiveThinking ? 8192 : 4096, temperature: 1 },
                 instructions,
                 requiredMeanings:
                     setting.purpose === "visit_ack"

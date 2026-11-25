@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAiClient } from "../ai/client";
+import { claudeSampling } from "../ai/models";
 import type { PolicySnapshot } from "./types";
 
 export interface CopyProviderResponse {
@@ -35,7 +36,8 @@ export async function callCopyProvider(
                 {
                     model: policy.model,
                     max_tokens: policy.parameters.maxOutputTokens,
-                    temperature: policy.parameters.temperature,
+                    // Haiku 5.5는 temperature를 받지 않고(400) 생각을 꺼야 maxOutputTokens 안에 답이 들어간다.
+                    ...claudeSampling(policy.model, policy.parameters.temperature),
                     system: prompt.system,
                     messages: [{ role: "user", content: prompt.user }],
                 },

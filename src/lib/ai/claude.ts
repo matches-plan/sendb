@@ -1,11 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlock, MessageParam, WebSearchTool20260209 } from "@anthropic-ai/sdk/resources/messages";
 import type { AiClient } from "./client";
+import { claudeSampling } from "./models";
 import { extractJson } from "./json-utils";
 import { extractText, extractSearchSources, toUsage, stripCitationTags } from "./claude-parse";
 import type { GenerateEmailResult, WebSearchResult } from "./gemini";
 
-const MAX_TOKENS = 4096;
+// Haiku 5.5는 같은 글도 토큰이 약 30% 더 나와 4096이면 긴 디자인 메일이 잘린다.
+// 검색 경로는 생각 토큰도 이 한도를 같이 쓴다. 한도는 상한일 뿐 쓴 만큼만 과금된다.
+const MAX_TOKENS = 8192;
 
 // 타임아웃이 없으면 응답이 오지 않는 호출이 영원히 매달린다.
 // 그 호출이 Promise.allSettled 배치에 섞이면 배치 전체가 resolve되지 않아
@@ -82,6 +85,7 @@ async function callClaudeMessage(
     const message = await requestWithRetry(anthropic, {
         model: client.model,
         max_tokens: MAX_TOKENS,
+        ...claudeSampling(client.model),
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
     }, signal);
@@ -112,6 +116,7 @@ async function runSearchLoop(
     let pausedOut = false;
 
     for (let attempt = 0; attempt <= MAX_SEARCH_CONTINUATIONS; attempt++) {
+        // 검색 경로는 Haiku 5.5의 기본 생각을 끄지 않는다 — 끄면 JSON을 요구할 때 필요한 검색을 건너뛸 수 있다.
         const message = await requestWithRetry(anthropic, {
             model: client.model,
             max_tokens: MAX_TOKENS,
@@ -200,6 +205,7 @@ export async function callClaudeVision(
     const message = await requestWithRetry(anthropic, {
         model: client.model,
         max_tokens: 1024,
+        ...claudeSampling(client.model),
         system: systemPrompt,
         messages: [
             {
