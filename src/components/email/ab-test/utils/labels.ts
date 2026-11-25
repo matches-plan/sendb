@@ -49,6 +49,7 @@ export const RESULT_LABELS: Record<AbTestResult, string> = {
     A: "A 승",
     B: "B 승",
     none: "차이 없음",
+    review: "사업 성과 확인",
     insufficient: "표본 부족",
     applied_A: "A 적용",
     applied_B: "B 적용",
@@ -93,6 +94,7 @@ export const abTestDisplayName = (test: Pick<AbTestRow, "name">, index: number) 
  * 모집이 끝나 회신을 기다리는 중: "발송 마감 · 회신 14일 기다린 뒤 자동 판정"
  */
 export function decisionRuleText(test: AbTestRow) {
+    if (test.dihaRound) return `안별 배정 A ${test.arms.A.assigned.toLocaleString()}명 · B ${test.arms.B.assigned.toLocaleString()}명 · 실제 방문·가입 ${test.observationDays}일 관찰`;
     if (test.state !== "running" && test.state !== "paused") return `발송 마감 · 회신 ${test.observationDays}일 기다린 뒤 자동 판정`;
     // 모집은 두 안 모두 필요한 수를 채워야 끝난다 — 덜 보낸 쪽 기준
     const progress = Math.min(test.arms.A.assigned, test.arms.B.assigned);

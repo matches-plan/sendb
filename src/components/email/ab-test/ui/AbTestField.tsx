@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,8 +40,8 @@ function Choice<T extends string>({ label, value, options, labels, onChange }: {
 function testMeta(test: AbTestRow) {
     const running = test.result === "running";
     return [
-        SCOPE_LABELS[test.scope ?? "all"],
-        `평가 기준 ${METRIC_LABELS[test.metric]}`,
+        test.dihaRound ?? SCOPE_LABELS[test.scope ?? "all"],
+        test.dihaRound ? "실제 방문·가입 관찰" : `평가 기준 ${METRIC_LABELS[test.metric]}`,
         `${shortDay(test.startedAt)} ~ ${running ? "" : shortDay(test.closedAt)}`.trim(),
     ].join(" · ");
 }
@@ -82,6 +83,7 @@ export function AbTestField({
     fields,
     prompt,
     onApplied,
+    dihaMaterials = false,
 }: {
     abTest: ReturnType<typeof useRuleAbTest>;
     fields: { key: string; label: string }[];
@@ -89,6 +91,7 @@ export function AbTestField({
     prompt?: string;
     /** 바로 적용한 뒤 — 규칙에 들어간 지시사항 */
     onApplied?: (prompt: string | null) => void;
+    dihaMaterials?: boolean;
 }) {
     const { tests, draft, runningTest } = abTest;
     const promptChanged = !!runningTest && prompt !== undefined && prompt.trim() !== (runningTest.promptA ?? "").trim();
@@ -102,7 +105,7 @@ export function AbTestField({
         <div className="space-y-2">
             <div className="flex items-center gap-1">
                 <Label>AB 테스트</Label>
-                <InfoTip text={DECISION_TIP} />
+                <InfoTip text={draft?.dihaRound || runningTest?.dihaRound ? "고정 소재는 실제 방문과 가입을 확인한 뒤 적용합니다." : DECISION_TIP} />
             </div>
 
             {finished.length > 0 && (
@@ -151,6 +154,19 @@ export function AbTestField({
                             onChange={(e) => abTest.setName(e.target.value)}
                         />
                     </div>
+                    {dihaMaterials && <Choice<"prompt" | "DH02" | "DH03" | "DH04" | "DH05">
+                        label="비교할 항목" value={draft.dihaRound ?? "prompt"}
+                        options={["prompt", "DH04", "DH02", "DH03", "DH05"]}
+                        labels={{ prompt: "AI 지시사항", DH04: "채용 부담 제목과 맡길 업무 제목", DH02: "일반 사례와 확인된 업무별 사례", DH03: "홈페이지와 체험 가입 화면", DH05: "실제 방문 뒤 안내 없음과 한 번 안내" }}
+                        onChange={value => abTest.setDihaRound(value === "prompt" ? undefined : value)}
+                    />}
+                    {draft.dihaRound === "DH02" && <div className="space-y-2">
+                        <Label htmlFor="diha-case-companies">업무가 확인된 회사</Label>
+                        <Textarea id="diha-case-companies" value={draft.verifiedCompanies ?? ""}
+                            placeholder="업무(식품, SNS, 배너)와 명단의 회사명을 탭으로 나눠 한 줄씩 붙여 넣으세요."
+                            onChange={e => abTest.setVerifiedCompanies(e.target.value)} />
+                    </div>}
+                    {draft.dihaRound ? <p className="text-sm text-muted-foreground">이 회차의 제목·본문·주소를 고정합니다. 결과를 확인한 뒤 적용합니다.</p> : <>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Choice<AbTestScope>
                             label={SCOPE_FIELD_LABEL}
@@ -177,6 +193,7 @@ export function AbTestField({
                             rows={draft.scope === "all" ? 5 : 3}
                         />
                     </div>
+                    </>}
                 </div>
             )}
 

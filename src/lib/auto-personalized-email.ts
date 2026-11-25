@@ -7,6 +7,7 @@ import { buildEmailSystemPrompt } from "@/lib/ai/email";
 import { prepareManagedEmail, attachManagedEmail } from "@/lib/ai-copy/runtime";
 import { CopyDeferredError } from "@/lib/ai-copy/generation";
 import { prepareEmailExperiment, recordExperimentDelivery } from "@/lib/email-experiments/runtime";
+import { dihaMail } from "@/lib/email-experiments/diha-material";
 import { findCachedCompanyResearch } from "@/lib/ai/company-research-cache";
 import { evaluateCondition } from "@/lib/alimtalk-automation";
 import { resolveSignature } from "@/lib/email-sender-resolver";
@@ -31,7 +32,8 @@ import type { LinkOutcome, QueueWaitReason, RecordOutcome } from "@/lib/auto-per
 import { findReplyStop } from "@/lib/email-reply-guard";
 import { acceptedOrPendingCondition, acceptedSendCondition } from "@/lib/email-send-log-status";
 import { getActiveHold } from "@/lib/partition-hold";
-import { beginPreparedDelivery, cancelPreparedSend, finishPreparedDelivery, loadPreparedSend, reservePreparedSend, savePreparedContent } from "./email-prepared-sends";
+import { beginPreparedDelivery, cancelPreparedSend, deferUnsubmittedInitialLog, finishPreparedDelivery, loadPreparedSend, reservePreparedSend, savePreparedContent } from "./email-prepared-sends";
+import { InitialEmailWindowClosed, nextInitialEmailMorning, requireInitialEmailMorning } from "./initial-email-window";
 import type { PreparationReservation } from "./email-prepared-sends";
 import { isDeliveryDue, preparedSourceHash, PREPARATION_LEAD_MS } from "./email-random-schedule-rules";
 import type { PreparedEmailPayload } from "./db";
@@ -183,6 +185,7 @@ export async function processAutoPersonalizedEmail(
         let submissionStatus: "sent" | "failed" | "unknown" | null = null;
         let preparedLogId: number | null = null;
         let createdLogId: number | null = null;
+        let content: PreparedEmailPayload | null = null;
         let planned: Extract<PreparationReservation, { kind: "reserved" }> | null = null;
         try {
             // 2. 조건 평가
@@ -248,9 +251,13 @@ export async function processAutoPersonalizedEmail(
                 continue;
             }
 
-            const sourceHash = preparedSourceHash(data, link);
+            // 시간 설정은 이미 작성한 문구의 원본 해시와 실험 배정을 바꾸지 않는다.
+            const { weekdayMorningOnly, ...contentRule } = link;
+            const morningOnly = weekdayMorningOnly && triggerType === "on_create";
+            if (morningOnly) requireInitialEmailMorning();
+            const sourceHash = preparedSourceHash(data, contentRule);
             const cached = purpose === "bulk" && params.queueId ? await loadPreparedSend(params.queueId, link.id) : undefined;
-            let content: PreparedEmailPayload | null = cached?.sourceHash === sourceHash ? cached.payload : null;
+            content = cached?.sourceHash === sourceHash ? cached.payload : null;
 
             // 이미 생성한 작업은 쿼터와 관계없이 본문을 재사용한다. 새 호출의 한도는 생성 계층에서 확인한다.
             const generationKey = `initial:${link.id}:${record.id}:${triggerType}:${(triggerType === "on_create" ? record.createdAt : record.updatedAt).toISOString()}`;
@@ -266,7 +273,7 @@ export async function processAutoPersonalizedEmail(
 
             const reserve = (forceReplan = false) => reservePreparedSend({
                 queueId: params.queueId!, linkId: link.id, orgId, ids: linkSenderPool(link),
-                config: emailConfig, sourceHash, forceReplan,
+                config: emailConfig, sourceHash, forceReplan, weekdayMorningOnly: morningOnly,
             });
             let immediateIds = linkSenderPool(link);
             if (purpose === "bulk" && params.queueId) {
@@ -306,10 +313,11 @@ export async function processAutoPersonalizedEmail(
                     });
                 const claim = params.claimTurn ? await params.claimTurn.run(claimNow) : await claimNow();
                 if (!claim.ok) {
+                    const retryAt = morningOnly ? nextInitialEmailMorning(claim.retryAt) : claim.retryAt;
                     console.log(
-                        `[AutoEmail] Rule ${link.id}: deferred (${claim.reason}) until ${claim.retryAt.toISOString()}`
+                        `[AutoEmail] Rule ${link.id}: deferred (${claim.reason}) until ${retryAt.toISOString()}`
                     );
-                    outcomes.push({ kind: "deferred", linkId: link.id, retryAt: claim.retryAt, reason: claim.reason });
+                    outcomes.push({ kind: "deferred", linkId: link.id, retryAt, reason: claim.reason });
                     // 뒤 규칙은 보지 않는다 — 이 규칙의 로그가 없어 뒤 규칙이 쿨다운을 통과해 먼저 나가 버린다.
                     // 레코드를 통째로 미루고, 다시 꺼낼 때 이 규칙부터 본다
                     break;
@@ -443,6 +451,10 @@ export async function processAutoPersonalizedEmail(
                 // AB 테스트 배정이면 그 집단(A·B)의 지시사항으로 쓴다
                 const rawPrompt = promptArm?.armPrompt || link.prompt || "이 회사에 적합한 제품 소개 이메일을 작성해주세요.";
                 const prompt = substitutePromptVariables(rawPrompt, recordData);
+                const frozen = experimentEnrollment.kind === "assigned" && experimentEnrollment.experiment.config.dihaMaterial
+                    ? dihaMail(experimentEnrollment.experiment.config.dihaMaterial, experimentEnrollment.assignment.arm, experimentEnrollment.assignment.tier)
+                    : undefined;
+                const fixedContext = frozen ? { fixedSubject: frozen.subject, fixedInitialBody: frozen.htmlBody, allowedUrls: [frozen.url] } : {};
                 const emailInput = {
                     prompt,
                     product,
@@ -457,12 +469,12 @@ export async function processAutoPersonalizedEmail(
                     orgId, workspaceId, purpose: "initial_email", ruleId: link.id,
                     key: experimentEnrollment.kind === "assigned" ? `experiment-assignment:${experimentEnrollment.assignment.id}` : generationKey,
                     model: link.model ?? undefined,
-                    legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt },
+                    legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt, ...fixedContext },
                     approvedContext: { system: buildEmailSystemPrompt({ ...emailInput, product: null, format: "plain",
                         ctaUrl: pinnedExperiment ? String(pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl ?? "") || undefined : emailInput.ctaUrl }), user: prompt,
                         fixedSubject: pinnedExperiment ? pinnedExperiment.experiment.config.subject : undefined,
                         allowedUrls: pinnedExperiment ? [pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl, ...assetUrls].filter((url): url is string => typeof url === "string" && !!url)
-                            : [link.ctaUrl, product?.url, ...assetUrls].filter((url): url is string => !!url) },
+                            : [link.ctaUrl, product?.url, ...assetUrls].filter((url): url is string => !!url), ...fixedContext },
                     pinned: pinnedExperiment ? { policy: pinnedExperiment.policy!, knowledge: pinnedExperiment.knowledge!, assignmentId: pinnedExperiment.assignment.id } : undefined,
                     assignmentId: promptArm?.assignment.id,
                 });
@@ -483,6 +495,7 @@ export async function processAutoPersonalizedEmail(
                 if (planned) await savePreparedContent(planned.row.id, content);
             }
 
+            if (morningOnly) requireInitialEmailMorning();
             if (planned) {
                 // 준비가 오래 걸리거나 서버가 늦게 깨어났으면 즉시 몰아서 보내지 않고 미래 구간에 다시 배정한다.
                 if (newlyPrepared && planned.row.scheduledAt.getTime() < Date.now() + PREPARATION_LEAD_MS) {
@@ -502,7 +515,8 @@ export async function processAutoPersonalizedEmail(
                 });
                 const claim = params.claimTurn ? await params.claimTurn.run(claimNow) : await claimNow();
                 if (!claim.ok) {
-                    outcomes.push({ kind: "deferred", linkId: link.id, retryAt: claim.retryAt, reason: claim.reason });
+                    const retryAt = morningOnly ? nextInitialEmailMorning(claim.retryAt) : claim.retryAt;
+                    outcomes.push({ kind: "deferred", linkId: link.id, retryAt, reason: claim.reason });
                     break;
                 }
                 slot = claim.slot;
@@ -565,7 +579,7 @@ export async function processAutoPersonalizedEmail(
                 ...(unsubscribeToken
                     ? { customHeaders: buildListUnsubscribeHeaders(unsubscribeToken) }
                     : {}),
-            }, { workspaceId });
+            }, { workspaceId, beforeSubmit: morningOnly ? requireInitialEmailMorning : undefined });
 
             const sendResult = nhnResult.data?.results?.[0];
             submissionStatus = classifyEmailSubmission(nhnResult);
@@ -613,6 +627,17 @@ export async function processAutoPersonalizedEmail(
                 }
             }
         } catch (err) {
+            if (err instanceof InitialEmailWindowClosed) {
+                await releaseSenderSlot(slot);
+                if (createdLogId !== null) {
+                    await deferUnsubmittedInitialLog({ orgId, logId: createdLogId, jobId: content?.aiCopyJobId, preparedId: planned?.row.id });
+                } else if (purpose === "bulk" && params.queueId) {
+                    // 지난 오후 자리는 같은 주소의 다른 규칙이 쓸 수 있게 풀고 작성한 본문은 보존한다.
+                    await cancelPreparedSend(params.queueId, link.id, err.retryAt);
+                }
+                outcomes.push({ kind: "deferred", linkId: link.id, retryAt: err.retryAt, reason: "rule_window" });
+                break;
+            }
             // 회사 조사·AI·로그 insert에서 던졌으면 메일이 나가지 않았다 → 자리를 돌려준다.
             // sendEachMail이 던졌거나 발송 뒤 DB 갱신이 던졌으면 나갔을 수 있다 → 돌려주지 않는다 (한도를 넘지 않는 쪽)
             if (!sendAttempted) await releaseSenderSlot(slot);

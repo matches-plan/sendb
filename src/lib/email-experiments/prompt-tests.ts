@@ -13,6 +13,8 @@ import { plannedSamplePerArm } from "./sample-size";
 import type { Experiment, ExperimentConfig } from "./types";
 import { normalizeScope, scopedPrompt, type PromptTestScope } from "./prompt-scope";
 import { promptTestVerdict, type PromptTestMetric } from "./prompt-decision";
+import { createDihaMaterial, type DihaRound } from "./diha-material";
+import { visitAckConfig } from "../email-visit-ack-rules";
 
 export type { PromptTestMetric } from "./prompt-decision";
 
@@ -54,7 +56,8 @@ export async function syncPromptTest(
     conn: CopyConnection,
     input: {
         orgId: string; userId: string; ruleId: number;
-        start?: { promptB: string; metric?: PromptTestMetric; scope?: PromptTestScope; name?: string | null } | null;
+        start?: { promptB: string; metric?: PromptTestMetric; scope?: PromptTestScope; name?: string | null;
+            dihaRound?: DihaRound; verifiedCompanies?: string } | null;
         now: Date;
     },
 ) {
@@ -79,19 +82,32 @@ export async function syncPromptTest(
         }
         if (!input.start) return { experimentId: active?.config.kind === "prompt" ? active.id : null, stopped };
         if (active?.config.kind === "prompt") throw new CopyActionError("진행 중인 AB 테스트가 끝난 뒤 추가할 수 있습니다.");
-        const promptB = (input.start.promptB ?? "").trim();
-        const metric: PromptTestMetric = input.start.metric === "click" || input.start.metric === "open" ? input.start.metric : "reply";
+        const round = input.start.dihaRound;
+        if (round && active) throw new CopyActionError("기존 실험이 정상 종료된 뒤 고정 소재 실험을 시작해 주세요.");
+        const promptB = round ? promptA : (input.start.promptB ?? "").trim();
+        const metric: PromptTestMetric = round ? "click" : input.start.metric === "click" || input.start.metric === "open" ? input.start.metric : "reply";
         const scope = normalizeScope(input.start.scope);
         if (!promptA || !promptB) throw new CopyActionError("A안과 B안 AI 지시사항을 모두 입력해 주세요.");
-        if (scope === "all" && promptA === promptB) throw new CopyActionError("B안 지시사항이 A안과 같습니다.");
+        if (!round && scope === "all" && promptA === promptB) throw new CopyActionError("B안 지시사항이 A안과 같습니다.");
         if (active) await closeExperiment(conn, active, actor, "replaced_by_ab_test", input.now);
 
         const rule = await loadExperimentRule(conn, input.orgId, ruleRow.workspace_id, input.ruleId);
         const snapshot = ruleSnapshotOf(rule);
+        if (round && (input.ruleId !== 61 || ruleRow.workspace_id !== 8 || Number(rule.partition_id) !== 77)) {
+            throw new CopyActionError("디하 콜드메일 명단의 기존 첫 안내 규칙에서 시작해 주세요.");
+        }
+        if (round === "DH05") {
+            const visits = visitAckConfig(process.env);
+            if (visits.mode !== "live" || !visits.ids.includes(ruleRow.workspace_id) || visits.startAt > input.now) {
+                throw new CopyActionError("디하의 실제 방문 확인과 후속 발송이 운영 중인지 먼저 확인해 주세요.");
+            }
+        }
+        const dihaMaterial = round ? createDihaMaterial(round, input.start.verifiedCompanies ?? "", String(snapshot.resolvedCtaUrl ?? "")) : undefined;
         const baseline = await baselineRate(conn, input.orgId, input.ruleId, metric);
         const mde = Math.max(baseline * 0.5, 0.01);
         const config: ExperimentConfig = {
             kind: "prompt",
+            ...(dihaMaterial ? { dihaMaterial } : {}),
             promptA,
             promptB,
             metric,
@@ -183,7 +199,7 @@ export async function decidePromptTests(conn: CopyConnection, now: Date, orgId?:
         const arms = (await armMetrics(conn, experiment.org_id, [experiment.id])).get(experiment.id)!;
         const metric = experiment.config.metric ?? "reply";
         const insufficient = experiment.state === "insufficient_sample";
-        const { winner, effect } = insufficient ? { winner: null, effect: null } : promptTestVerdict(arms, metric);
+        const { winner, effect } = insufficient || experiment.config.dihaMaterial ? { winner: null, effect: null } : promptTestVerdict(arms, metric);
         let applied = false;
         if (winner === "B") {
             const prompt = winnerPrompt(experiment, "B");
@@ -198,7 +214,7 @@ export async function decidePromptTests(conn: CopyConnection, now: Date, orgId?:
         await experimentEvent(conn, {
             orgId: experiment.org_id, experimentId: experiment.id, action: "ab_test_decided",
             detail: {
-                result: insufficient ? "insufficient" : winner ?? "none",
+                  result: insufficient ? "insufficient" : experiment.config.dihaMaterial ? "review" : winner ?? "none",
                 applied, metric, arms, effect, plannedPerArm: experiment.config.plannedPerArm, from: experiment.state,
             },
         });
@@ -217,6 +233,7 @@ export async function applyPromptTestArm(
         if (!experiment || experiment.config.kind !== "prompt") throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
         if (experiment.state === "closed" || experiment.state === "invalidated") throw new CopyActionError("이미 끝난 AB 테스트입니다.");
         const prompt = winnerPrompt(experiment, input.arm);
+        if (experiment.config.dihaMaterial) throw new CopyActionError("고정 소재는 실제 방문·가입 집계 후 운영자가 적용합니다.");
         await conn`UPDATE email_auto_personalized_links SET prompt = ${prompt ?? null}, needs_review = 0, updated_at = now()
             WHERE id = ${experiment.rule_id} AND org_id = ${input.orgId}`;
         await closeExperiment(conn, experiment, { orgId: input.orgId, userId: input.userId }, `applied_${input.arm.toLowerCase()}`, input.now);

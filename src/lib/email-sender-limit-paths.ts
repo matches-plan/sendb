@@ -106,6 +106,8 @@ export function describeLimitedSend(reason: SlotDeferReason, retryAt: Date): str
             return "발신 프로필이 일시 정지되어 있어 보내지 않았습니다.";
         case "outside_window":
             return `발신 프로필의 발송 시간대가 아니라 보내지 않았습니다 (${at}부터 보낼 수 있음).`;
+        case "rule_window":
+            return `첫 안내 발송 시간까지 대기합니다 (${at}부터 발송).`;
         case "daily_limit":
             return `발신 프로필의 오늘 발송 한도를 다 써서 보내지 않았습니다 (${at}부터 보낼 수 있음).`;
         case "spacing":

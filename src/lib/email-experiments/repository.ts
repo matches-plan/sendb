@@ -10,6 +10,7 @@ import { CopyActionError } from "../ai-copy/errors";
 import { normalizeEmail } from "../deep-visitor-alert-rules";
 import { kstParts } from "../kst";
 import { scopedPrompt } from "./prompt-scope";
+import { dihaCompanyGroup } from "./diha-material";
 import { chooseBalancedArm, DAY_MS, experimentInputSchema, plannedSamplePerArm } from "./rules";
 import type { Assignment, Experiment, ExperimentConfig, ExperimentState } from "./types";
 
@@ -324,6 +325,7 @@ export async function enrollForPreparation(
         ruleId: number;
         recordId: number;
         email: string;
+        company?: unknown;
         plannedAt: Date;
         senderId: number | null;
         senderEmail?: string | null;
@@ -348,6 +350,7 @@ export async function enrollForPreparation(
               >`SELECT * FROM email_copy_experiments WHERE org_id=${input.orgId} AND workspace_id=${input.workspaceId} AND rule_id=${input.ruleId}
                 AND state IN('running','paused','enrollment_closed','observing','decision_ready','data_check','insufficient_sample') ORDER BY id DESC LIMIT 1 FOR UPDATE`;
         if (!experiment) return { kind: "none" };
+        if (experiment.config.dihaMaterial?.round === "DH05") return { kind: "none" };
         if (previous && experiment.state === "closed" && experiment.pending_mode === "hold")
             throw new CopyDeferredError(
                 new Date(input.now.getTime() + 3600_000),
@@ -418,14 +421,21 @@ export async function enrollForPreparation(
                   { company_key: string | null; company_verified: boolean; tier: string }[]
               >`SELECT * FROM email_copy_experiment_contacts WHERE org_id=${input.orgId} AND workspace_id=${input.workspaceId} AND normalized_email=${email}`;
         const customerKey = fingerprint([input.orgId, input.workspaceId, email]);
-        // 기존 비교 표본 제약을 유지하며 새 실험은 이메일별 표본 키를 저장한다.
-        const companyKey = recipientAnalysis
+        // 디하의 고정 소재 회차는 회사당 한 명만 모집한다.
+        const material = experiment.config.dihaMaterial;
+        const verifiedGroup = material?.round === "DH02" ? dihaCompanyGroup(material, input.company) : undefined;
+        if (material?.round === "DH02" && !verifiedGroup) return { kind: "none" };
+        const company = typeof input.company === "string" ? input.company.trim().normalize("NFC").toLowerCase() : "";
+        if (material && !company) return { kind: "none" };
+        const companyKey = material
+            ? fingerprint([input.orgId, input.workspaceId, company])
+            : recipientAnalysis
             ? `recipient:${customerKey}`
             : contact?.company_verified
               ? contact.company_key
               : null;
         const cohort = recipientAnalysis || companyKey ? "primary" : "exploratory";
-        if (!recipientAnalysis && companyKey) {
+        if ((!recipientAnalysis || material) && companyKey) {
             const [company] =
                 await conn`SELECT id FROM email_copy_assignments WHERE experiment_id=${experiment.id} AND company_key=${companyKey} AND cohort='primary' LIMIT 1`;
             if (company) return skip("company_representative_exists");
@@ -456,10 +466,12 @@ export async function enrollForPreparation(
             return { kind: "none" };
         }
         const [priorSend] =
-            await conn`SELECT l.id FROM email_send_logs l JOIN partitions p ON p.id=l.partition_id WHERE l.org_id=${input.orgId} AND p.workspace_id=${input.workspaceId}
-            AND lower(trim(l.recipient_email))=${email} AND (l.status IN('pending','sent','delivered','uncertain') OR l.status='failed' AND l.request_id IS NOT NULL AND (l.nhn_status_code IS NOT NULL OR l.delivery_fail_source IS NOT NULL)) LIMIT 1`;
+            await conn`SELECT l.id FROM email_send_logs l LEFT JOIN partitions p ON p.id=l.partition_id WHERE l.org_id=${input.orgId}
+            AND (p.workspace_id=${input.workspaceId} OR ${Boolean(material)}) AND lower(trim(l.recipient_email))=${email}
+            AND (l.status IN('pending','sent','delivered','uncertain') OR (${Boolean(material)} AND l.status='unknown') OR
+                 l.status='failed' AND l.request_id IS NOT NULL AND (l.nhn_status_code IS NOT NULL OR l.delivery_fail_source IS NOT NULL)) LIMIT 1`;
         if (priorSend) return skip("already_contacted");
-        const tier = contact?.tier ?? "unclassified";
+        const tier = verifiedGroup ?? contact?.tier ?? "unclassified";
         const stratum = fingerprint([
             input.workspaceId,
             input.senderId,

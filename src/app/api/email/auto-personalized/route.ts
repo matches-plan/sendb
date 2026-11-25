@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
             signatureId: emailAutoPersonalizedLinks.signatureId,
             assetIds: emailAutoPersonalizedLinks.assetIds,
             preventDuplicate: emailAutoPersonalizedLinks.preventDuplicate,
+            weekdayMorningOnly: emailAutoPersonalizedLinks.weekdayMorningOnly,
             isActive: emailAutoPersonalizedLinks.isActive,
             isDraft: emailAutoPersonalizedLinks.isDraft,
             needsReview: emailAutoPersonalizedLinks.needsReview,
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
             isActive,
             isDraft,
             preventDuplicate = 0,
+            weekdayMorningOnly = false,
             senderProfileId,
             senderProfileIds,
             signatureId,
@@ -123,6 +125,9 @@ export async function POST(req: NextRequest) {
         } = await req.json();
 
         const isDraftFlag = isDraft ? 1 : 0;
+        if (typeof weekdayMorningOnly !== "boolean") {
+            return NextResponse.json({ success: false, error: "오전 발송 설정을 확인해 주세요." }, { status: 400 });
+        }
 
         if (!partitionId) {
             return NextResponse.json({
@@ -193,6 +198,7 @@ export async function POST(req: NextRequest) {
                 isActive: isDraftFlag ? 0 : (isActive ?? 1),
                 isDraft: isDraftFlag,
                 preventDuplicate: preventDuplicate ? 1 : 0,
+                weekdayMorningOnly: triggerType === "on_create" && weekdayMorningOnly,
                 senderProfileId: senderPool.value?.senderProfileId ?? null,
                 senderProfileIds: senderPool.value?.senderProfileIds ?? null,
                 signatureId: signatureId || null,

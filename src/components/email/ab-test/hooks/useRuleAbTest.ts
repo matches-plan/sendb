@@ -39,11 +39,13 @@ export function useRuleAbTest(ruleId: number | null) {
             }
         },
         setPromptB: (promptB: string) => update({ promptB }),
+        setDihaRound: (dihaRound: AbTestDraft["dihaRound"]) => update({ dihaRound, verifiedCompanies: "", metric: "click", scope: "all" }),
+        setVerifiedCompanies: (verifiedCompanies: string) => update({ verifiedCompanies }),
         setMetric: (metric: AbTestMetric) => update({ metric }),
         /** 테스트 선택을 바꾸면 기준도 그 곳의 기본값으로 (제목만 → 오픈률) */
         setScope: (scope: AbTestScope) => update({ scope, metric: SCOPE_METRICS[scope][0] }),
         /** 추가 중인데 B안이 비었으면 저장 전에 막는다 */
-        invalid: !!draft && !draft.promptB.trim(),
+        invalid: !!draft && (draft.dihaRound ? draft.dihaRound === "DH02" && !draft.verifiedCompanies?.trim() : !draft.promptB.trim()),
         /** 규칙 저장 뒤 — 지시사항이 바뀌었으면 진행 중 테스트 중단, 추가한 테스트가 있으면 시작 */
         save: async (id: number) => {
             if (!draft && !runningTest) return { experimentId: null, stopped: null };

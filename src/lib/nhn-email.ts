@@ -121,10 +121,11 @@ export class NhnEmailClient {
     private async request<T = unknown>(
         method: string,
         path: string,
-        body?: unknown
+        body?: unknown,
+        beforeSubmit?: () => void,
     ): Promise<{ header: NhnEmailApiHeader; data: T | null }> {
         const url = `${this.baseUrl}${path.replace("{appKey}", this.appKey)}`;
-        const res = await fetch(url, {
+        const init: RequestInit = {
             method,
             signal: this.timeoutSignal(),
             headers: {
@@ -132,7 +133,9 @@ export class NhnEmailClient {
                 "X-Secret-Key": this.secretKey,
             },
             body: body ? JSON.stringify(body) : undefined,
-        });
+        };
+        beforeSubmit?.();
+        const res = await fetch(url, init);
         if (!res.ok) {
             return {
                 header: {
@@ -157,7 +160,7 @@ export class NhnEmailClient {
      * 보내기 직전 수신거부 확인은 발송한 사업부 기준 (그 사업부 거부 + 사업부 없는 예전 거부).
      * workspaceId를 넘기지 않은 발송(사업부가 없는 메일)은 조직 안 어느 사업부의 거부든 막는다.
      */
-    async sendEachMail(data: NhnEmailSendRequest, scope: { workspaceId?: number | null } = {}): Promise<{
+    async sendEachMail(data: NhnEmailSendRequest, scope: { workspaceId?: number | null; beforeSubmit?: () => void } = {}): Promise<{
         header: NhnEmailApiHeader;
         data: NhnEmailSendResult | null;
     }> {
@@ -175,6 +178,7 @@ export class NhnEmailClient {
                         receiveMailAddr: recipients[index],
                     })),
                 }, warnDroppedHeaders),
+                scope.beforeSubmit,
             ),
         );
     }

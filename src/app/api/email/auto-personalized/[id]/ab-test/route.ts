@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { copyAdminApi } from "@/lib/ai-copy/api";
+import { copyAdminApi, CopyActionError } from "@/lib/ai-copy/api";
 import { syncPromptTest } from "@/lib/email-experiments/prompt-tests";
 
 const idFrom = async (context: { params: Promise<{ id: string }> }) =>
@@ -19,7 +19,12 @@ export const PUT = (req: NextRequest, context: { params: Promise<{ id: string }>
                 metric: z.enum(["reply", "click", "open"]).default("reply"),
                 scope: z.enum(["subject", "opening", "all"]).default("all"),
                 name: z.string().max(100).nullish(),
+                dihaRound: z.enum(["DH02", "DH03", "DH04", "DH05"]).optional(),
+                verifiedCompanies: z.string().max(100000).optional(),
             }).nullish(),
         }).parse(await req.json());
+        if (body.start?.dihaRound && user.role !== "admin" && user.role !== "owner") {
+            throw new CopyActionError("고정 소재 실험을 시작하려면 관리자 권한이 필요합니다.");
+        }
         return syncPromptTest(conn, { orgId: user.orgId, userId: user.userId, ruleId: id, start: body.start ?? null, now: new Date() });
     }, { allowMembers: true });

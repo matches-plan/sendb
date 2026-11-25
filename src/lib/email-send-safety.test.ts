@@ -45,6 +45,14 @@ test("UX-154: 접수 뒤 로그 갱신 실패도 전체 500으로 되돌리지 �
     const f = await fixture(t, { logFailure: true }), response = await f.run(), result = await response.json();
     assert.equal(response.status, 200); assert.equal(result.data.successCount, 2); assert.equal(result.data.unknownCount, 1); assert.equal(f.posts(), 3);
 });
+test("직원 수동 발송은 평일 오후에도 첫 안내 시간 설정을 읽지 않고 처리한다", async t => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-11-25T15:00:00+09:00") });
+    const f = await fixture(t);
+    const response = await f.run();
+    assert.equal((await response.json()).data.successCount, 3);
+    assert.equal(f.posts(), 3);
+    assert(!f.calls.some(c => c.table === "email_auto_personalized_links"));
+});
 test("이메일도 연결 파티션 외 대상 혼합 시 전체 발송 0회", async t => {
     const f = await fixture(t, { foreign: true }), response = await f.run();
     assert.equal(response.status, 404); assert.equal(f.posts(), 0);
@@ -101,6 +109,41 @@ test("UX-139: 활성/중지/초안 수정 상태 전이", async t => {
         const update = calls.find(c => c.op === "update")!.set as { isActive?: number };
         assert.equal(update.isActive, expected);
     });
+});
+
+test("규칙 편집에서 첫 안내 오전 설정을 저장·조회하고 이전 요청이 생략한 값은 유지한다", async t => {
+    isolateEnv(t);
+    const { db } = await import("./db"), { generateToken } = await import("./auth");
+    const { GET, POST } = await import("../app/api/email/auto-personalized/route");
+    const { PUT } = await import("../app/api/email/auto-personalized/[id]/route");
+    const rule = { id: 61, orgId, partitionId: 77, triggerType: "on_create", isActive: 1, weekdayMorningOnly: false };
+    const { calls } = installFakeDb(t, db, c => {
+        if (isMembershipLookup(c)) return [{ role: "admin", membershipId: 71, tokenVersion: 0, isSuperAdmin: 0 }];
+        if (c.table === "partitions") return [{ id: 77 }];
+        if (c.table === "email_auto_personalized_links") {
+            if (c.op === "update") Object.assign(rule, c.set);
+            if (c.op === "insert") Object.assign(rule, c.values);
+            return [rule];
+        }
+        return [];
+    });
+    const token = generateToken({ userId, orgId, name: "가상", email: "staff@example.test", role: "admin", membershipId: 71, tokenVersion: 0 });
+    const endpoint = "https://example.test/api/email/auto-personalized";
+    const request = (path: string, method: string, body?: object) => new NextRequest(endpoint + path, {
+        method, headers: { authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const update = (body: object) => PUT(request("/61","PUT",body), { params: Promise.resolve({ id: "61" }) });
+    assert.equal((await POST(request("","POST",{ partitionId: 77, recipientField: "email", companyField: "company" }))).status, 201);
+    assert.equal(rule.weekdayMorningOnly, false);
+    assert.equal((await update({ weekdayMorningOnly: true })).status, 200);
+    const response = await GET(request("?partitionId=77","GET"));
+    assert.equal((await response.json()).data[0].weekdayMorningOnly, true);
+    assert.equal((await update({ name: "이름 수정" })).status, 200);
+    assert.equal(rule.weekdayMorningOnly, true);
+    assert.equal((await update({ weekdayMorningOnly: "false" })).status, 400);
+    assert.equal((await update({ triggerType: "on_update" })).status, 200);
+    assert.equal(rule.weekdayMorningOnly, false);
+    assert(!calls.some(c => c.op === "update" && c.table === "email_sender_profiles"));
 });
 
 test("UX-194: 중단된 attempts 1/2/3과 접수 흔적 대조, 미확인 자동 재발송 0회", async t => {

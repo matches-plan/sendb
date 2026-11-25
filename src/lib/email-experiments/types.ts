@@ -1,3 +1,5 @@
+import type { DihaMaterial } from "./diha-material";
+
 export type ExperimentState =
     | "draft"
     | "evaluated"
@@ -23,6 +25,8 @@ export interface ExperimentConfig {
     kind?: "policy" | "prompt";
     promptA?: string;
     promptB?: string;
+    /** 운영자가 직접 선택한 고정 소재. 시작할 때 보관한 제목·본문·목적지만 사용한다. */
+    dihaMaterial?: DihaMaterial;
     /** 이긴 안을 가르는 기준 (prompt 실험) */
     metric?: "reply" | "click" | "open";
     /** B 지시사항을 적용할 곳 (prompt 실험). 없으면 all — B가 A를 대신한다 */
@@ -86,6 +90,7 @@ export interface Assignment {
     planned_sender_id: number | null;
     actual_sender_id: number | null;
     stratum: string;
+    tier: string;
     planned_sender_email: string | null;
     actual_sender_email: string | null;
     assigned_at: Date;

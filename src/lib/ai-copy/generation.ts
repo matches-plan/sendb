@@ -268,7 +268,12 @@ export async function generateStoredCopy(
     let result: "valid" | "validation_failed" | "provider_failed" | "timeout" = "provider_failed",
         reason: string | null = null,
         retryable = false;
-    const providerPromise = Promise.resolve().then(() =>
+    const fixedInitial = job.purpose === "initial_email" && job.assignment_id != null &&
+        typeof job.context.fixedInitialBody === "string" && typeof job.context.fixedSubject === "string";
+    const providerPromise: Promise<CopyProviderResponse> = fixedInitial
+        ? Promise.resolve({ content: JSON.stringify({ subject: job.context.fixedSubject, htmlBody: job.context.fixedInitialBody }),
+            promptTokens: 0, completionTokens: 0, truncated: false })
+        : Promise.resolve().then(() =>
         deps.call(
             job.policy_snapshot,
             buildCopyPrompt(
@@ -317,7 +322,11 @@ export async function generateStoredCopy(
         duration = Math.max(0, finished.getTime() - now.getTime());
     await conn`UPDATE ai_copy_generation_attempts SET result=${result},reason=${reason},raw_output=${response?.content.slice(0, 30_000) ?? null},
         finished_at=${finished.toISOString()},duration_ms=${duration},output_fingerprint=${output?.fingerprint ?? null} WHERE id=${attemptId} AND result='running'`;
-    if (response) await recordAttemptUsage(conn, attemptId, response);
+    if (fixedInitial) {
+        await conn`UPDATE ai_copy_generation_attempts SET prompt_tokens=0,completion_tokens=0,usage_known=true,cost=0,cost_krw=0 WHERE id=${attemptId}`;
+    } else if (response) {
+        await recordAttemptUsage(conn, attemptId, response);
+    }
     // 차단과 타임아웃 후에는 늦게 완성한 본문으로 상태를 되돌리지 않는다.
     const blocked = await policyBlocked(conn, job);
     const [failures] = await conn<

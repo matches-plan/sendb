@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { InitialEmailMorningSetting } from "@/components/email/InitialEmailMorningSetting";
 import { Badge } from "@/components/ui/badge";
 import { PromptWithVariableInsert } from "@/components/email/PromptWithVariableInsert";
 import { AbTestField } from "@/components/email/ab-test/ui/AbTestField";
@@ -153,6 +154,7 @@ function EditAiAutoPageContent() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [followupConfig, setFollowupConfig] = useState<any>(null);
     const [preventDuplicate, setPreventDuplicate] = useState(0);
+    const [weekdayMorningOnly, setWeekdayMorningOnly] = useState(false);
     // 발신 주소 묶음 (순서 있음). 비어 있으면 기본 발신 프로필로 보낸다
     const [senderProfileIds, setSenderProfileIds] = useState<number[]>([]);
     const [signatureId, setSignatureId] = useState<number | null>(null);
@@ -242,6 +244,7 @@ function EditAiAutoPageContent() {
             setUseUnsubscribe(link.useUnsubscribe === 1);
             setFollowupConfig(link.followupConfig ?? null);
             setPreventDuplicate(link.preventDuplicate ?? 0);
+            setWeekdayMorningOnly(link.weekdayMorningOnly === true);
             // 묶음 칸이 생기기 전 규칙은 senderProfileId 하나만 있다 — 그 하나를 묶음으로 읽는다
             setSenderProfileIds(linkSenderPool({
                 senderProfileId: link.senderProfileId ?? null,
@@ -291,6 +294,7 @@ function EditAiAutoPageContent() {
                 triggerCondition,
                 followupConfig: followupConfig || null,
                 preventDuplicate,
+                weekdayMorningOnly: triggerType === "on_create" && weekdayMorningOnly,
                 senderProfileIds,
                 signatureId,
                 assetIds,
@@ -328,7 +332,7 @@ function EditAiAutoPageContent() {
             return;
         }
         if (!asDraft && abTest.invalid) {
-            toast.error("추가한 AB 테스트의 B안 지시를 입력해주세요.");
+            toast.error(abTest.draft?.dihaRound === "DH02" ? "업무가 확인된 회사 목록을 입력해 주세요." : "추가한 AB 테스트의 B안 지시를 입력해주세요.");
             return;
         }
         // 초안을 정식으로 저장하면 자동 발송이 켜진다 — 상태가 바뀌는 저장만 확인을 받는다 (UX-139)
@@ -595,6 +599,7 @@ function EditAiAutoPageContent() {
                                     </div>
                                     <AbTestField
                                         abTest={abTest}
+                                        dihaMaterials={linkId === 61 && currentPartitionId === 77}
                                         fields={fields.map((f) => ({ key: f.key, label: f.label }))}
                                         prompt={prompt}
                                         onApplied={(applied) => applied !== null && setPrompt(applied)}
@@ -687,6 +692,10 @@ function EditAiAutoPageContent() {
                                         </div>
                                         <Switch checked={useUnsubscribe} onCheckedChange={setUseUnsubscribe} />
                                     </div>
+
+                                    {triggerType === "on_create" && (
+                                        <InitialEmailMorningSetting checked={weekdayMorningOnly} onChange={setWeekdayMorningOnly} />
+                                    )}
 
                                     <div className="flex items-center justify-between">
                                         <div>
