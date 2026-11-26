@@ -27,6 +27,22 @@ test("순위표: 오픈률 분모는 오픈 추적 발송, 표본이 충분한 �
     assert.equal(summarize({ sent: 0, open_tracked: 0, opened: 0, clicked: 0, replied: 0 }).open.rate, null);
 });
 
+test("순위표: 모델·규칙 쌍을 모델별로 더하고, 단가를 모르는 쌍이 섞이면 비용도 모른다", async (t) => {
+    isolateEnv(t);
+    const { rollUpByModel } = await import("./leaderboard");
+    const pair = (model: string, rule: number, sent: number, cost: number | null) => ({
+        model, rule_id: rule, rule_name: null, partition_id: null, sent, open_tracked: sent, opened: 1, clicked: 1, replied: 0,
+        latency_ms_sum: 1000 * sent, latency_count: sent, prompt_tokens: 10, completion_tokens: 2, cost_krw: cost, cost_known: cost != null,
+    });
+    const [haiku, qwen] = rollUpByModel([pair("claude-haiku-5-5", 1, 100, 50), pair("claude-haiku-5-5", 2, 50, null), pair("qwen3.7-flash", 1, 20, 3)]);
+    assert.equal(haiku.rules, 2);
+    assert.equal(haiku.sent, 150);
+    assert.equal(haiku.latency_ms_sum / haiku.latency_count, 1000);
+    assert.equal(haiku.cost_known, false);
+    assert.equal(haiku.cost_krw, null);
+    assert.equal(qwen.cost_krw, 3);
+});
+
 function fakeConn(handle: (sql: string) => Record<string, unknown>[] | undefined) {
     return Object.assign(async (strings: TemplateStringsArray) => handle(strings.join("?")) ?? [], { release() {} }) as unknown as CopyConnection;
 }
