@@ -1,4 +1,4 @@
-import { resolveModel } from "../ai/models";
+import { outputTokenLimit, resolveModel } from "../ai/models";
 import type {
     CopyConnection,
     CopyJob,
@@ -42,7 +42,7 @@ function legacySnapshot(input: CopyPreparationInput): PolicySnapshot {
         provider: model.provider,
         model: model.id,
         // Haiku 5.5는 같은 글도 토큰이 약 30% 더 나와 4096이면 긴 디자인 메일이 잘린다.
-        parameters: { maxOutputTokens: model.adaptiveThinking ? 8192 : 4096, temperature: 1 },
+        parameters: { maxOutputTokens: outputTokenLimit(model), temperature: 1 },
         instructions: "기존 작성 지침과 생성 동작의 계측용 스냅샷",
         requiredMeanings: ["기존 목적 유지"],
         forbiddenPhrases: [],

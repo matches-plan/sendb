@@ -8,8 +8,7 @@ import { cn } from "@/lib/utils";
 import { applyAbTestArm, stopAbTest } from "../api/abTests";
 import type { AbTestRow } from "../types";
 import {
-    METRIC_LABELS, RESULT_LABELS, SCOPE_LABELS, SCOPE_PROMPT_LABELS, decisionRuleText, leaderOf, pct, resultBadgeClass, shortDay, winnerOf,
-} from "../utils/labels";
+    METRIC_LABELS, RESULT_LABELS, SCOPE_LABELS, SCOPE_PROMPT_LABELS, decisionRuleText, leaderOf, pct, resultBadgeClass, shortDay, winnerOf, modelPairLabel } from "../utils/labels";
 
 function MetricRow({ label, a, b, aBase, bBase, highlight, muted }: {
     label: string; a: number; b: number; aBase?: number; bBase?: number; highlight?: "A" | "B" | null; muted?: boolean;
@@ -42,7 +41,7 @@ export function AbTestResultBadge({ test }: { test: Pick<AbTestRow, "result"> })
  */
 export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
     test: AbTestRow;
-    onApplied: (result: { arm: "A" | "B"; prompt: string | null }) => void;
+    onApplied: (result: { arm: "A" | "B"; prompt: string | null; model?: string | null }) => void;
     /** 중단한 뒤 */
     onChanged?: () => void;
     compact?: boolean;
@@ -56,7 +55,8 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
         confirm({
             title: `${arm}안을 바로 적용할까요?`,
             description: [
-                test.kind === "prompt" ? `${arm}안 지시사항을 규칙에 넣고 테스트를 끝냅니다.` : arm === "B"
+                test.kind === "prompt" ? `${arm}안 지시사항을 규칙에 넣고 테스트를 끝냅니다.`
+                    : test.kind === "model" ? `${arm}안 AI 모델을 규칙에 넣고 테스트를 끝냅니다.` : arm === "B"
                     ? "자동으로 만든 B안 작성 지침을 이 규칙에 연결하고 실험을 끝냅니다."
                     : "기존 방식을 유지하고 실험을 끝냅니다.",
                 test.significantLeader === arm ? "" : "아직 확실한 차이는 아닙니다 (95% 기준).",
@@ -66,7 +66,7 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
             onConfirm: async () => {
                 const result = await applyAbTestArm(test.id, arm);
                 toast.success(`${arm}안을 적용했습니다.`);
-                onApplied({ arm, prompt: result?.prompt ?? null });
+                onApplied({ arm, prompt: result?.prompt ?? null, model: result?.model ?? null });
             },
         });
     const stop = () =>
@@ -85,6 +85,7 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
         !compact && test.workspaceName,
         `${shortDay(test.startedAt)} ~ ${active ? "진행 중" : shortDay(test.closedAt)}`,
         test.kind === "prompt" && SCOPE_LABELS[scope],
+        test.kind === "model" && `모델 ${modelPairLabel(test.modelA, test.modelB)}`,
         `평가 기준 ${METRIC_LABELS[test.metric]}`,
     ].filter(Boolean).join(" · ");
     return (
@@ -125,7 +126,7 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
                         <Button size="sm" variant="outline" disabled={!leader} onClick={() => leader && apply(leader)}>
                             {leader ? `${leader}안 바로 적용` : "바로 적용"}
                         </Button>
-                        {test.kind === "prompt" && (
+                        {(test.kind === "prompt" || test.kind === "model") && (
                             <Button size="sm" variant="outline" onClick={stop}>중단</Button>
                         )}
                     </div>
@@ -137,7 +138,9 @@ export function AbTestCard({ test, onApplied, onChanged, compact = false }: {
                 </p>
             )}
             {test.result === "B" && test.applied === false && (
-                <p className="text-xs text-muted-foreground">테스트 중 지시사항이 바뀌어 B안을 규칙에 넣지 않았습니다.</p>
+                <p className="text-xs text-muted-foreground">
+                    {test.kind === "model" ? "테스트 중 규칙 모델이 바뀌었거나 B 모델 연결이 끊겨 B안을 규칙에 넣지 않았습니다." : "테스트 중 지시사항이 바뀌어 B안을 규칙에 넣지 않았습니다."}
+                </p>
             )}
 
             {test.kind === "prompt" && (

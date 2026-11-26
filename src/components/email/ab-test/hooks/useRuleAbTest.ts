@@ -5,7 +5,7 @@ import type { AbTestDraft, AbTestMetric, AbTestScope } from "../types";
 import { SCOPE_METRICS } from "../utils/labels";
 import { useAbTests } from "./useAbTests";
 
-const EMPTY_DRAFT: Omit<AbTestDraft, "name"> = { promptB: "", metric: "reply", scope: "all" };
+const EMPTY_DRAFT: Omit<AbTestDraft, "name"> = { kind: "prompt", promptB: "", modelB: "", metric: "reply", scope: "all" };
 
 /**
  * 규칙 화면의 AB 테스트 목록 — 이 규칙의 AB 테스트(테스트 1, 2…)와 새로 추가할 테스트(draft).
@@ -14,7 +14,7 @@ const EMPTY_DRAFT: Omit<AbTestDraft, "name"> = { promptB: "", metric: "reply", s
 export function useRuleAbTest(ruleId: number | null) {
     const { data, mutate } = useAbTests(ruleId ? { ruleId } : null);
     const tests = useMemo(
-        () => (data ?? []).filter((t) => t.kind === "prompt").sort((a, b) => a.id - b.id),
+        () => (data ?? []).filter((t) => t.kind === "prompt" || t.kind === "model").sort((a, b) => a.id - b.id),
         [data],
     );
     const runningTest = tests.find((t) => t.result === "running") ?? null;
@@ -39,16 +39,19 @@ export function useRuleAbTest(ruleId: number | null) {
             }
         },
         setPromptB: (promptB: string) => update({ promptB }),
+        /** 비교 대상 바꾸기 — 모델 비교는 메일 전체(all)를 같은 지시사항으로 쓰고, 평가 기준은 오픈률부터 */
+        setKind: (kind: "prompt" | "model") => update(kind === "model" ? { kind, scope: "all", metric: "open" } : { kind, metric: "reply" }),
+        setModelB: (modelB: string) => update({ modelB }),
         setMetric: (metric: AbTestMetric) => update({ metric }),
         /** 테스트 선택을 바꾸면 기준도 그 곳의 기본값으로 (제목만 → 오픈률) */
         setScope: (scope: AbTestScope) => update({ scope, metric: SCOPE_METRICS[scope][0] }),
         /** 추가 중인데 B안이 비었으면 저장 전에 막는다 */
-        invalid: !!draft && !draft.promptB.trim(),
+        invalid: !!draft && (draft.kind === "model" ? !draft.modelB : !draft.promptB.trim()),
         /** 규칙 저장 뒤 — 지시사항이 바뀌었으면 진행 중 테스트 중단, 추가한 테스트가 있으면 시작 */
         save: async (id: number) => {
             if (!draft && !runningTest) return { experimentId: null, stopped: null };
             const result = await syncRuleAbTest(id, draft);
-            if (result.stopped) toast.info("AI 지시사항이 바뀌어 진행 중이던 AB 테스트를 중단했습니다.");
+            if (result.stopped) toast.info("AI 지시사항이나 모델이 바뀌어 진행 중이던 AB 테스트를 중단했습니다.");
             setDraft(null);
             await mutate();
             return result;

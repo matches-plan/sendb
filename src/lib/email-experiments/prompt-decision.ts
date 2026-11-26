@@ -31,7 +31,7 @@ export function promptTestVerdict(arms: { A: ArmCounts; B: ArmCounts }, metric: 
 
 /** 이벤트 기록(마지막 종료 사유)과 상태로 목록에 보일 결과를 정한다 */
 export function promptTestResult(input: {
-    kind: "prompt" | "policy";
+    kind: "prompt" | "model" | "policy";
     state: string;
     lastAction: string | null;
     lastDetail: { result?: unknown; from?: unknown } | null;

@@ -1,8 +1,8 @@
 // Barrel re-export — all consumers keep `import { ... } from "@/lib/ai"`
 
 // Types & client
-export { getAiClient, getSearchAiClient, type AiClient } from "./client";
-export { AI_MODELS, DEFAULT_MODEL_ID, SEARCH_MODEL_ID, resolveModel, type AiModelOption, type AiProvider } from "./models";
+export { getAiClient, getSearchAiClient, getCompanyResearchClient, resolveRoute, listModelAvailability, modelUnavailableReason, type AiClient } from "./client";
+export { AI_MODELS, AI_MODEL_CATALOG, DEFAULT_MODEL_ID, SEARCH_MODEL_ID, findModel, resolveModel, type AiModelOption, type AiProvider, type AiRoute } from "./models";
 
 // JSON utilities (internal, but buildEmailSystemPrompt uses extractJson indirectly)
 export { extractJson } from "./json-utils";

@@ -1,6 +1,7 @@
 import type { AiClient } from "./client";
-import { generateCompactCompanyResearch, isCompactCompanyResearch } from "./company-research-compact";
-import { callGeminiWithSearch } from "./gemini";
+import { generateCompactCompanyResearch, isCompactCompanyResearch, readStoredCompanyFacts } from "./company-research-compact";
+import { callGeminiWithSearch, type WebSearchResult } from "./gemini";
+import { callSerperWithSearch } from "./serper";
 
 // ---- 제품 생성 (웹서칭) ----
 
@@ -82,8 +83,10 @@ export interface CompanyResearchResult {
     website: string;
     sources: Array<{ url: string; title: string }>;
     usage: { promptTokens: number; completionTokens: number; searchRequests?: number };
-    method?: "compact";
+    method?: "compact" | "serper";
 }
+
+const COMPANY_RESEARCH_PATTERN = /\{[\s\S]*"companyName"[\s\S]*"description"[\s\S]*\}/;
 
 function buildCompanyResearchSystemPrompt(): string {
     return `당신은 기업 정보 조사 전문가입니다.
@@ -119,8 +122,9 @@ export async function generateCompanyResearch(
 ): Promise<CompanyResearchResult> {
     if (isCompactCompanyResearch()) return generateCompactCompanyResearch(input);
     if (!client) throw new Error("회사 조사 검색 연결 확인 필요");
+    if (client.search) return generateSerperCompanyResearch(client, input);
     const systemPrompt = buildCompanyResearchSystemPrompt();
-    const pattern = /\{[\s\S]*"companyName"[\s\S]*"description"[\s\S]*\}/;
+    const pattern = COMPANY_RESEARCH_PATTERN;
 
     let userPrompt = `"${input.companyName}" 회사(기업)에 대해 웹 검색을 수행하고, 업종, 주요 서비스, 기업 규모, 공식 웹사이트 정보를 JSON으로 알려주세요.`;
 
@@ -149,6 +153,51 @@ export async function generateCompanyResearch(
         sources: result.sources,
         usage: result.usage,
     };
+}
+
+// 정리 모델에는 CRM의 회사 칸만 참고로 준다 — 담당자 이름·연락처는 바깥 회사(Qwen)에 보내지 않는다.
+const COMPANY_HINT_LABELS = { industry: "업종", description: "회사 소개", services: "주요 서비스", employees: "직원 수", website: "홈페이지" } as const;
+
+/**
+ * Serper 검색 1회 + 정리 모델 1회. 결과는 호출부가 rememberCompanyResearch로 보관함에 쌓아, 같은 회사는 다시 검색하지 않는다.
+ * 검색·정리가 실패하거나 회사를 확인하지 못하면 간단 조사(저장된 정보·홈페이지 소개문)로 대신한다 —
+ * Serper 크레딧이나 Qwen 잔액이 떨어져도 자동 메일은 나가야 한다.
+ */
+async function generateSerperCompanyResearch(client: AiClient, input: CompanyResearchInput): Promise<CompanyResearchResult> {
+    const facts = readStoredCompanyFacts(input.additionalContext);
+    const hints = (Object.keys(COMPANY_HINT_LABELS) as Array<keyof typeof COMPANY_HINT_LABELS>)
+        .filter((key) => facts[key])
+        .map((key) => `${COMPANY_HINT_LABELS[key]}: ${facts[key]}`);
+    let userPrompt = `"${input.companyName}" 회사(기업)에 대해 웹 검색을 수행하고, 업종, 주요 서비스, 기업 규모, 공식 웹사이트 정보를 JSON으로 알려주세요.`;
+    if (hints.length) userPrompt += `\n\n참고 정보 (검색 정확도를 높이는 데 활용하세요):\n${hints.join("\n")}`;
+
+    let result: WebSearchResult;
+    try {
+        result = await callSerperWithSearch(client, buildCompanyResearchSystemPrompt(), userPrompt, COMPANY_RESEARCH_PATTERN, `${input.companyName} 회사`);
+    } catch (error) {
+        console.error("[CompanyResearch] Serper 조사 실패, 간단 조사로 대신함:", error instanceof Error ? error.message : error);
+        return generateCompactCompanyResearch(input);
+    }
+    const text = (key: string, fallback = "정보 없음") => {
+        const value = result.parsed[key];
+        return typeof value === "string" && value.trim() ? value.trim() : fallback;
+    };
+    const research: CompanyResearchResult = {
+        companyName: text("companyName", input.companyName),
+        industry: text("industry"),
+        description: text("description"),
+        services: text("services"),
+        employees: text("employees"),
+        website: text("website"),
+        sources: result.sources,
+        usage: result.usage,
+        method: "serper",
+    };
+    // 검색 결과로 회사를 확인하지 못한 답(업종·소개·서비스가 모두 "정보 없음")은 쌓지 않는다. 쓴 토큰은 사용량에 남긴다.
+    if ([research.industry, research.description, research.services].every((value) => /^정보\s*없음$/.test(value))) {
+        return { ...(await generateCompactCompanyResearch(input)), usage: result.usage };
+    }
+    return research;
 }
 
 // ---- 레코드 자동 보강 (웹검색) ----

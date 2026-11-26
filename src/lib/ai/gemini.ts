@@ -1,6 +1,7 @@
-// provider dispatch 진입점 — gemini/deepseek/claude 세 경로가 여기서 갈린다.
+// provider dispatch 진입점 — gemini/deepseek/qwen/claude 경로가 여기서 갈린다.
 // (파일명은 히스토리상 gemini.ts지만 Gemini 전용이 아니다)
 import type { AiClient } from "./client";
+import { chatApiRequest, isChatApiClient } from "./chat-api";
 import { extractJson } from "./json-utils";
 import { callClaudeEmail, callClaudeJson, callClaudeWithSearch } from "./claude";
 
@@ -25,8 +26,8 @@ export async function callGeminiEmail(
         return callClaudeEmail(client, systemPrompt, userPrompt);
     }
 
-    if (client.provider === "deepseek") {
-        const { content, usage, truncated } = await callDeepseek(client, systemPrompt, userPrompt);
+    if (isChatApiClient(client)) {
+        const { content, usage, truncated } = await callChatCompletions(client, systemPrompt, userPrompt);
         const parsed = extractJson(content, /\{[\s\S]*"subject"[\s\S]*"htmlBody"[\s\S]*\}/, truncated);
         return {
             subject: (parsed.subject as string).replace(/<[^>]*>/g, ""),
@@ -93,8 +94,8 @@ export async function callGeminiJson(
         return callClaudeJson(client, systemPrompt, userPrompt);
     }
 
-    if (client.provider === "deepseek") {
-        const { content, usage } = await callDeepseek(client, systemPrompt, userPrompt);
+    if (isChatApiClient(client)) {
+        const { content, usage } = await callChatCompletions(client, systemPrompt, userPrompt);
         return { content, usage };
     }
 
@@ -206,32 +207,31 @@ export async function callGeminiWithSearch(
     };
 }
 
-// DeepSeek (OpenAI 호환) 호출. 검색 미지원 텍스트 생성용.
-async function callDeepseek(
+// OpenAI 호환 채팅 API (DeepSeek·Qwen 직접, OpenRouter). 검색 미지원 텍스트 생성용.
+async function callChatCompletions(
     client: AiClient,
     systemPrompt: string,
     userPrompt: string
 ): Promise<{ content: string; usage: { promptTokens: number; completionTokens: number }; truncated: boolean }> {
-    const url = "https://api.deepseek.com/chat/completions";
+    const api = chatApiRequest(client);
     const body = JSON.stringify({
-        model: client.model,
+        model: api.model,
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
         ],
         response_format: { type: "json_object" },
+        ...api.body,
     });
-    const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${client.apiKey}`,
-    };
+    const headers = api.headers;
+    const send = () => fetch(api.url, { method: "POST", headers, body, signal: api.timeoutMs ? AbortSignal.timeout(api.timeoutMs) : undefined });
 
-    let response = await fetch(url, { method: "POST", headers, body });
+    let response = await send();
 
     // 서버 에러(429/500/503) 시 1~2초 대기 후 1회 재시도
     if (!response.ok && [429, 500, 503].includes(response.status)) {
         await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
-        response = await fetch(url, { method: "POST", headers, body });
+        response = await send();
     }
 
     if (!response.ok) {

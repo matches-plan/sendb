@@ -15,9 +15,9 @@ export const syncRuleAbTest = (ruleId: number, start: AbTestDraft | null) =>
         body: JSON.stringify({ start }),
     });
 
-/** 고른 안 바로 적용 — AB 테스트(prompt)는 규칙에 넣은 지시사항을 돌려준다 */
+/** 고른 안 바로 적용 — AB 테스트(prompt)는 규칙에 넣은 지시사항을, 모델 AB 테스트는 넣은 모델을 돌려준다 */
 export const applyAbTestArm = (id: number, arm: "A" | "B") =>
-    request<{ prompt?: string | null } | null>(`/api/email/ab-tests/${id}`, {
+    request<{ prompt?: string | null; model?: string | null } | null>(`/api/email/ab-tests/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ arm }),

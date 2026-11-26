@@ -1,14 +1,14 @@
 import { classifyEmailSubmission, nhnEmailFailureMessage } from "@/lib/nhn-submit-result";
 import { NextRequest, NextResponse } from "next/server";
-import { db, emailAutoPersonalizedLinks, products, records } from "@/lib/db";
+import { db, emailAutoPersonalizedLinks, records } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { getEmailClient, getEmailConfig, appendSignature } from "@/lib/nhn-email";
-import { getAiClient, getSearchAiClient, generateEmail, generateCompanyResearch, isCompactCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { getAiClient, generateEmail, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { loadDraftContext } from "@/lib/auto-personalized-draft";
 import { resolveSender, resolveSignature } from "@/lib/email-sender-resolver";
 import { linkSenderPool } from "@/lib/email-sender-limit-rules";
 import { resolveWorkspaceId } from "@/lib/email-unsubscribe";
-import { substitutePromptVariables } from "@/lib/email-utils";
 
 // POST /api/email/auto-personalized/test-send
 // body: { linkId: number, testEmail: string, recordId?: number }
@@ -99,66 +99,25 @@ export async function POST(req: NextRequest) {
             workspaceId: await resolveWorkspaceId(link.partitionId),
         });
 
-        // 5. 회사 조사 (autoResearch ON && 레코드에 _companyResearch 없으면)
-        if (link.autoResearch === 1 && !recordData._companyResearch) {
-            const companyName = recordData[link.companyField] as string;
-            const compact = isCompactCompanyResearch();
-            const searchClient = compact ? null : getSearchAiClient();
-            if ((compact || searchClient) && companyName && typeof companyName === "string" && companyName.trim()) {
-                try {
-                    const research = await generateCompanyResearch(searchClient, { companyName, additionalContext: recordData });
-                    recordData._companyResearch = {
-                        ...research,
-                        sources: research.sources,
-                        researchedAt: new Date().toISOString(),
-                    };
-                    if (searchClient) {
-                        const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
-                        await updateTokenUsage(user.orgId, researchTokens);
-                        await logAiUsage({
-                            orgId: user.orgId,
-                            userId: user.userId,
-                            provider: searchClient.provider,
-                            model: searchClient.model,
-                            ...research.usage,
-                            purpose: "test_company_research",
-                        });
-                    }
-                } catch (err) {
-                    console.error("[TestSend] Company research error:", err);
-                }
-            }
-        }
-
-        // 6. 제품 조회
-        let product = null;
-        if (link.productId) {
-            const [p] = await db.select().from(products).where(eq(products.id, link.productId)).limit(1);
-            product = p ?? null;
-        }
-
-        // 7. 발신자 페르소나
-        let senderPersona: { name: string; title?: string; company?: string } | null = null;
-        if (link.useSignaturePersona === 1 && signatureJson) {
-            try {
-                const sig = JSON.parse(signatureJson);
-                if (sig && typeof sig === "object" && sig.name) {
-                    senderPersona = { name: sig.name, title: sig.title || undefined, company: sig.company || undefined };
-                }
-            } catch { /* skip */ }
-        }
-
-        // 8. AI 이메일 생성 — 프롬프트의 ##필드명## 변수를 레코드 값으로 치환
-        const rawPrompt = link.prompt || "이 회사에 적합한 제품 소개 이메일을 작성해주세요.";
-        const prompt = substitutePromptVariables(rawPrompt, recordData);
+        // 5~8. 회사 조사·제품·발신자 페르소나·지시사항 변수 치환 (모델 실험실 미리보기와 같은 입력)
+        const draft = await loadDraftContext({
+            orgId: user.orgId,
+            userId: user.userId,
+            link,
+            recordData,
+            signatureJson,
+            researchPurpose: "test_company_research",
+            logLabel: "TestSend",
+        });
+        const { product } = draft;
         const emailResult = await generateEmail(aiClient, {
-            prompt,
+            prompt: draft.prompt,
             product,
             recordData,
             tone: link.tone || undefined,
             ctaUrl: link.ctaUrl || product?.url || undefined,
             format: (link.format as "plain" | "designed") || "plain",
-            senderPersona,
+            senderPersona: draft.senderPersona,
         });
 
         const emailTokens = emailResult.usage.promptTokens + emailResult.usage.completionTokens;

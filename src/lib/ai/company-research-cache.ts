@@ -1,6 +1,8 @@
 import { db, records, companyResearchCache } from "@/lib/db";
 import { and, eq, sql } from "drizzle-orm";
 import { normalizeCompanyName } from "./company-name";
+import { companyResearchMode } from "./company-research-mode";
+import { logAiUsage } from "./quota";
 import type { CompanyResearchResult } from "./search";
 
 /** 조사 실패 시 search.ts가 채워 넣는 문구 — 캐시로 재사용하면 안 된다. */
@@ -57,4 +59,50 @@ export async function findCachedCompanyResearch(
         .limit(1);
 
     return row?.research ?? null;
+}
+
+/** 조사 결과를 조직 보관함에 넣는다. 이미 있는 회사는 새 결과로 바꾼다. */
+export async function saveCompanyResearch(
+    orgId: string,
+    items: Array<{ nameKey: string; research: CachedResearch; researchedAt: Date }>,
+    source: "import" | "serper"
+) {
+    if (!items.length) return 0;
+    await db
+        .insert(companyResearchCache)
+        .values(items.map((i) => ({ orgId, nameKey: i.nameKey, research: i.research, source, researchedAt: i.researchedAt })))
+        .onConflictDoUpdate({
+            target: [companyResearchCache.orgId, companyResearchCache.nameKey],
+            set: {
+                research: sql`excluded.research`,
+                source: sql`excluded.source`,
+                researchedAt: sql`excluded.researched_at`,
+                updatedAt: sql`now()`,
+            },
+        });
+    return items.length;
+}
+
+/**
+ * Serper로 새로 조사한 회사를 보관함에 쌓는다 — 같은 회사의 다음 레코드는 검색 없이 이 결과를 쓴다.
+ * 레코드에 적힌 회사명으로 넣어야 findCachedCompanyResearch가 같은 값으로 찾는다.
+ * 간단 조사(그 레코드의 CRM 정보)와 Claude 웹검색 결과는 넣지 않는다(후자는 레코드에서 찾는다).
+ * serper 방식인데 간단 조사로 끝났으면(검색·정리 실패, 회사 확인 못 함) 토큰 0인 사용 기록을 남긴다 — 실험실의 회사 조사 관찰이 센다.
+ * 넣다가 실패해도 메일은 그대로 진행한다.
+ */
+export async function rememberCompanyResearch(orgId: string, companyName: string, research: CompanyResearchResult) {
+    if (research.method === "compact" && companyResearchMode() === "serper") {
+        await logAiUsage({ orgId, userId: null, provider: "serper", model: "compact-fallback", promptTokens: 0, completionTokens: 0, purpose: "company_research_fallback" })
+            .catch((error) => console.error("[CompanyResearch] 대체 기록 실패:", error));
+        return;
+    }
+    const nameKey = normalizeCompanyName(companyName);
+    if (!nameKey || research.method !== "serper") return;
+    const { usage: _, ...stored } = research;
+    void _;
+    try {
+        await saveCompanyResearch(orgId, [{ nameKey, research: stored, researchedAt: new Date() }], "serper");
+    } catch (error) {
+        console.error("[CompanyResearch] 보관함 저장 실패:", error);
+    }
 }

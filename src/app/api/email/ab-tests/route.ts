@@ -32,7 +32,7 @@ export const GET = (req: NextRequest) =>
             LEFT JOIN LATERAL (
                 SELECT action, detail FROM email_copy_experiment_events v
                 WHERE v.experiment_id = e.id AND v.action IN ('ab_test_decided', 'applied_a', 'applied_b', 'ab_test_stopped', 'ab_test_off',
-                    'ab_test_changed', 'ab_test_prompt_changed', 'replaced_by_ab_test', 'close', 'adopted_b')
+                    'ab_test_changed', 'ab_test_prompt_changed', 'ab_test_model_changed', 'replaced_by_ab_test', 'close', 'adopted_b')
                 ORDER BY v.id DESC LIMIT 1
             ) ev ON true
             WHERE e.org_id = ${user.orgId} AND (${workspaceId} = 0 OR e.workspace_id = ${workspaceId})
@@ -45,7 +45,7 @@ export const GET = (req: NextRequest) =>
             ORDER BY (e.state = 'closed' OR e.state = 'invalidated'), e.id DESC LIMIT 100`;
         const metrics = await armMetrics(conn, user.orgId, rows.map((r) => r.id));
         return rows.map((e) => {
-            const kind = e.config.kind === "prompt" ? "prompt" as const : "policy" as const;
+            const kind = e.config.kind === "prompt" || e.config.kind === "model" ? e.config.kind : "policy" as const;
             const arms = metrics.get(e.id)!;
             const metric = e.config.metric ?? "reply";
             const result = promptTestResult({ kind, state: e.state, lastAction: e.last_action, lastDetail: e.last_detail, adopted: e.adopted_policy_id != null });
@@ -66,6 +66,9 @@ export const GET = (req: NextRequest) =>
                 plannedPerArm: e.config.plannedPerArm,
                 promptA: e.config.promptA ?? null,
                 promptB: e.config.promptB ?? null,
+                /** 모델 A/B: A는 시작 때 규칙 모델, B는 후보 모델 */
+                modelA: e.config.modelA ?? null,
+                modelB: e.config.modelB ?? null,
                 arms,
                 /** 집계중·A 승·B 승·차이 없음·중단 등 */
                 result,

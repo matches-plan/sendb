@@ -12,7 +12,8 @@ import {
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { NhnTemplateButton } from "@/lib/nhn-alimtalk";
-import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { ModelSelectItems } from "@/components/ai/ui/ModelSelectItems";
 import { Label } from "@/components/ui/label";
 
 const TONE_OPTIONS = [
@@ -119,11 +120,7 @@ export default function AiAlimtalkPanel({ onGenerated }: AiAlimtalkPanelProps) {
                         <SelectValue placeholder="모델 선택" />
                     </SelectTrigger>
                     <SelectContent>
-                        {AI_MODELS.map((m) => (
-                            <SelectItem key={m.id} value={m.id}>
-                                {m.label}
-                            </SelectItem>
-                        ))}
+                        <ModelSelectItems current={model} />
                     </SelectContent>
                 </Select>
             </div>

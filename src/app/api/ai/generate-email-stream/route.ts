@@ -6,6 +6,7 @@ import { requireRecordAccess } from "@/lib/partition-access";
 import { getAiClient, buildEmailSystemPrompt, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 import type { AiClient, GenerateEmailInput } from "@/lib/ai";
 import { callClaudeEmail, EmailResponseError } from "@/lib/ai/claude";
+import { chatApiRequest, isChatApiClient } from "@/lib/ai/chat-api";
 
 type Usage = { promptTokens: number; completionTokens: number };
 
@@ -105,8 +106,8 @@ export async function POST(req: NextRequest) {
                             if (error instanceof EmailResponseError) Object.assign(usage, error.usage);
                             throw error;
                         }
-                    } else if (client.provider === "deepseek") {
-                        await streamDeepseek(client, systemPrompt, input.prompt, sendEvent, usage, signal);
+                    } else if (isChatApiClient(client)) {
+                        await streamChatApi(client, systemPrompt, input.prompt, sendEvent, usage, signal);
                     } else {
                         await streamGemini(client, systemPrompt, input.prompt, sendEvent, usage, signal);
                     }
@@ -141,8 +142,8 @@ export async function POST(req: NextRequest) {
 
 type SendEvent = (event: string, data: unknown) => void;
 
-// DeepSeek (OpenAI 호환) SSE 스트리밍
-async function streamDeepseek(
+// OpenAI 호환 SSE 스트리밍 (DeepSeek·Qwen 직접, OpenRouter)
+async function streamChatApi(
     client: AiClient,
     systemPrompt: string,
     userPrompt: string,
@@ -150,14 +151,12 @@ async function streamDeepseek(
     usage: Usage,
     signal: AbortSignal
 ): Promise<Usage> {
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
+    const api = chatApiRequest(client);
+    const response = await fetch(api.url, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${client.apiKey}`,
-        },
+        headers: api.headers,
         body: JSON.stringify({
-            model: client.model,
+            model: api.model,
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt },
@@ -165,13 +164,14 @@ async function streamDeepseek(
             response_format: { type: "json_object" },
             stream: true,
             stream_options: { include_usage: true },
+            ...api.body,
         }),
         signal,
     });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error?.error?.message || "DeepSeek API 호출에 실패했습니다.");
+        throw new Error(error?.error?.message || "AI API 호출에 실패했습니다.");
     }
 
     const reader = response.body!.getReader();

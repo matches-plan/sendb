@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { AI_MODELS } from "../ai/models";
+import { AI_MODEL_CATALOG } from "../ai/models";
 import { extractJson } from "../ai/json-utils";
 import { renderVisitAckCopy } from "../email-visit-ack-copy";
 import type {
@@ -76,7 +76,7 @@ const targetsSchema = z.object({
 export const policySchema = z
     .object({
         purpose: purposeSchema,
-        provider: z.enum(["claude", "gemini", "deepseek"]),
+        provider: z.enum(["claude", "gemini", "deepseek", "qwen"]),
         model: z.string(),
         parameters: z.object({
             maxOutputTokens: z.number().int().min(256).max(8192),
@@ -90,7 +90,8 @@ export const policySchema = z
         targets: targetsSchema,
     })
     .superRefine((p, ctx) => {
-        if (!AI_MODELS.some((m) => m.id === p.model && m.provider === p.provider))
+        // 숨긴 예전 모델(retired)로 만든 스냅샷도 그대로 유효하다
+        if (!AI_MODEL_CATALOG.some((m) => m.id === p.model && m.provider === p.provider))
             ctx.addIssue({
                 code: "custom",
                 path: ["model"],

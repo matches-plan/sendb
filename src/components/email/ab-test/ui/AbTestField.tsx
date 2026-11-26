@@ -10,9 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PromptWithVariableInsert } from "@/components/email/PromptWithVariableInsert";
 import type { useRuleAbTest } from "../hooks/useRuleAbTest";
 import type { AbTestMetric, AbTestRow, AbTestScope } from "../types";
-import { METRIC_LABELS, SCOPE_FIELD_LABEL, SCOPE_LABELS, SCOPE_METRICS, SCOPE_PROMPT_LABELS, abTestDisplayName, shortDay, DECISION_TIP } from "../utils/labels";
+import { METRIC_LABELS, SCOPE_FIELD_LABEL, SCOPE_LABELS, SCOPE_METRICS, SCOPE_PROMPT_LABELS, abTestDisplayName, shortDay, DECISION_TIP, MODEL_METRICS, modelPairLabel } from "../utils/labels";
+import { ModelSelectItems } from "@/components/ai/ui/ModelSelectItems";
+import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
 import { AbTestCard, AbTestResultBadge } from "./AbTestCard";
 
+
+const KIND_LABELS: Record<"prompt" | "model", string> = { prompt: "AI 지시사항", model: "AI 모델" };
 
 const PLACEHOLDERS: Record<AbTestScope, string> = {
     subject: "B안 제목을 어떻게 쓸지 입력하세요. 본문은 A안 그대로 씁니다.",
@@ -39,7 +43,7 @@ function Choice<T extends string>({ label, value, options, labels, onChange }: {
 function testMeta(test: AbTestRow) {
     const running = test.result === "running";
     return [
-        SCOPE_LABELS[test.scope ?? "all"],
+        test.kind === "model" ? `모델 ${modelPairLabel(test.modelA, test.modelB)}` : SCOPE_LABELS[test.scope ?? "all"],
         `평가 기준 ${METRIC_LABELS[test.metric]}`,
         `${shortDay(test.startedAt)} ~ ${running ? "" : shortDay(test.closedAt)}`.trim(),
     ].join(" · ");
@@ -47,7 +51,7 @@ function testMeta(test: AbTestRow) {
 
 /** 끝난 테스트 한 줄 — 누르면 숫자 */
 function FinishedTest({ test, name, onApplied }: {
-    test: AbTestRow; name: string; onApplied: (prompt: string | null) => void;
+    test: AbTestRow; name: string; onApplied: (result: { prompt: string | null; model?: string | null }) => void;
 }) {
     const [open, setOpen] = useState(false);
     return (
@@ -66,7 +70,7 @@ function FinishedTest({ test, name, onApplied }: {
             </div>
             {open && (
                 <div className="pb-2 pl-6 pt-1">
-                    <AbTestCard test={test} compact onApplied={({ prompt }) => onApplied(prompt)} />
+                    <AbTestCard test={test} compact onApplied={onApplied} />
                 </div>
             )}
         </div>
@@ -81,20 +85,28 @@ export function AbTestField({
     abTest,
     fields,
     prompt,
+    model,
     onApplied,
+    onModelApplied,
 }: {
     abTest: ReturnType<typeof useRuleAbTest>;
     fields: { key: string; label: string }[];
     /** 지금 편집 중인 AI 지시사항 — 진행 중 테스트의 A안과 다르면 저장 때 중단된다고 알린다 */
     prompt?: string;
+    /** 지금 고른 규칙의 AI 모델 — 모델 AB 테스트의 A안. 바꾸면 저장 때 중단된다고 알린다 */
+    model?: string;
     /** 바로 적용한 뒤 — 규칙에 들어간 지시사항 */
     onApplied?: (prompt: string | null) => void;
+    /** 모델 AB 테스트를 바로 적용한 뒤 — 규칙에 들어간 모델 (화면의 선택값도 맞춘다) */
+    onModelApplied?: (model: string) => void;
 }) {
     const { tests, draft, runningTest } = abTest;
-    const promptChanged = !!runningTest && prompt !== undefined && prompt.trim() !== (runningTest.promptA ?? "").trim();
-    const applied = (value: string | null) => {
+    const promptChanged = runningTest?.kind === "prompt" && prompt !== undefined && prompt.trim() !== (runningTest.promptA ?? "").trim();
+    const modelChanged = runningTest?.kind === "model" && model !== undefined && (model || DEFAULT_MODEL_ID) !== runningTest.modelA;
+    const applied = (result: { prompt: string | null; model?: string | null }) => {
         void abTest.reload();
-        onApplied?.(value);
+        if (result.model) onModelApplied?.(result.model);
+        else onApplied?.(result.prompt);
     };
     const finished = tests.filter((t) => t.result !== "running");
     const runningIndex = runningTest ? tests.indexOf(runningTest) + 1 : 0;
@@ -126,7 +138,8 @@ export function AbTestField({
                         <span className="text-xs text-muted-foreground">{testMeta(runningTest)}</span>
                     </div>
                     {promptChanged && <p className="text-xs text-destructive">지시사항을 바꿔 저장하면 이 테스트는 중단됩니다.</p>}
-                    <AbTestCard test={runningTest} compact onApplied={({ prompt: p }) => applied(p)} onChanged={() => void abTest.reload()} />
+                    {modelChanged && <p className="text-xs text-destructive">AI 모델을 바꿔 저장하면 이 테스트는 중단됩니다.</p>}
+                    <AbTestCard test={runningTest} compact onApplied={applied} onChanged={() => void abTest.reload()} />
                 </div>
             )}
 
@@ -151,6 +164,35 @@ export function AbTestField({
                             onChange={(e) => abTest.setName(e.target.value)}
                         />
                     </div>
+                    <Choice<"prompt" | "model">
+                        label="비교 대상"
+                        value={draft.kind}
+                        options={["prompt", "model"]}
+                        labels={KIND_LABELS}
+                        onChange={abTest.setKind}
+                    />
+                    {draft.kind === "model" ? (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label>B안 AI 모델</Label>
+                                <Select value={draft.modelB} onValueChange={abTest.setModelB}>
+                                    <SelectTrigger className="w-full"><SelectValue placeholder="비교할 모델 선택" /></SelectTrigger>
+                                    <SelectContent>
+                                        <ModelSelectItems current={draft.modelB} exclude={model || DEFAULT_MODEL_ID} />
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">A안은 지금 규칙 모델이고, 지시사항은 두 안이 같습니다.</p>
+                            </div>
+                            <Choice<AbTestMetric>
+                                label="평가 기준"
+                                value={draft.metric}
+                                options={MODEL_METRICS}
+                                labels={METRIC_LABELS}
+                                onChange={abTest.setMetric}
+                            />
+                        </div>
+                    ) : (
+                    <>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Choice<AbTestScope>
                             label={SCOPE_FIELD_LABEL}
@@ -177,6 +219,8 @@ export function AbTestField({
                             rows={draft.scope === "all" ? 5 : 3}
                         />
                     </div>
+                    </>
+                    )}
                 </div>
             )}
 

@@ -43,7 +43,8 @@ import SenderPoolField from "@/components/email/sender-profiles/ui/SenderPoolFie
 import SenderPoolSummary from "@/components/email/sender-profiles/ui/SenderPoolSummary";
 import RuleQueueSummary from "@/components/email/sender-profiles/ui/RuleQueueSummary";
 import ReplyToSummaryRow from "@/components/email/reply-to/ui/ReplyToSummaryRow";
-import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { ModelSelectItems } from "@/components/ai/ui/ModelSelectItems";
 import useSWR from "swr";
 import { blockingError, defaultFetcher } from "@/lib/swr-fetcher";
 
@@ -428,7 +429,7 @@ function NewAiAutoPageContent() {
                                             rows={5}
                                         />
                                     </div>
-                                    <AbTestField abTest={abTest} fields={fields.map((f) => ({ key: f.key, label: f.label }))} />
+                                    <AbTestField abTest={abTest} fields={fields.map((f) => ({ key: f.key, label: f.label }))} model={model} />
 
                                     <>
                                             <div className="space-y-2">
@@ -474,15 +475,11 @@ function NewAiAutoPageContent() {
                                                 <SelectValue placeholder="모델 선택" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {AI_MODELS.map((m) => (
-                                                    <SelectItem key={m.id} value={m.id}>
-                                                        {m.label}
-                                                    </SelectItem>
-                                                ))}
+                                                <ModelSelectItems current={model} />
                                             </SelectContent>
                                         </Select>
                                         <p className="text-xs text-muted-foreground">
-                                            첫 메일과 후속 메일 모두 이 모델로 생성됩니다. (회사 리서치는 Gemini 고정)
+                                            첫 메일과 후속 메일 모두 이 모델로 생성됩니다.
                                         </p>
                                     </div>
 

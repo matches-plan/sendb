@@ -2,12 +2,12 @@ import { classifyEmailSubmission } from "./nhn-submit-result";
 import { db, emailAutoPersonalizedLinks, emailAssets, emailSendLogs, records, products } from "@/lib/db";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getEmailClient, getEmailConfig, appendSignature } from "@/lib/nhn-email";
-import { getSearchAiClient, generateCompanyResearch, isCompactCompanyResearch, hasCompactCompanyFacts, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { getCompanyResearchClient, generateCompanyResearch, isCompactCompanyResearch, hasCompactCompanyFacts, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 import { buildEmailSystemPrompt } from "@/lib/ai/email";
 import { prepareManagedEmail, attachManagedEmail } from "@/lib/ai-copy/runtime";
 import { CopyDeferredError } from "@/lib/ai-copy/generation";
 import { prepareEmailExperiment, recordExperimentDelivery } from "@/lib/email-experiments/runtime";
-import { findCachedCompanyResearch } from "@/lib/ai/company-research-cache";
+import { findCachedCompanyResearch, rememberCompanyResearch } from "@/lib/ai/company-research-cache";
 import { evaluateCondition } from "@/lib/alimtalk-automation";
 import { resolveSignature } from "@/lib/email-sender-resolver";
 import { claimSender, releaseSenderSlot } from "@/lib/email-sender-limit";
@@ -361,7 +361,7 @@ export async function processAutoPersonalizedEmail(
                             console.log(`[AutoEmail] Company research cache hit: ${companyName}`);
                         } else {
                             const compact = isCompactCompanyResearch();
-                            const searchClient = compact ? null : getSearchAiClient();
+                            const searchClient = compact ? null : getCompanyResearchClient();
                             if (!compact && !searchClient) throw new CopyDeferredError(new Date(Date.now() + 3600_000), "회사 조사 검색 연결 확인 필요", true);
                             if (!compact && !(await checkTokenQuota(orgId)).allowed) throw new CopyDeferredError(new Date(Date.now() + 3600_000), "회사 조사 사용량 한도", true, "token_quota");
                             const research = await generateCompanyResearch(searchClient, { companyName, additionalContext: data });
@@ -372,14 +372,17 @@ export async function processAutoPersonalizedEmail(
                             };
 
                             // 빈 간단 정보는 저장하지 않는다. 나중에 홈페이지/CRM 자료가 추가되면 다시 읽는다.
-                            if (!compact || hasCompactCompanyFacts(research)) {
+                            // (Serper 조사가 실패해 간단 조사로 대신한 결과도 같다 — 다음 메일 때 다시 검색한다)
+                            if (research.method !== "compact" || hasCompactCompanyFacts(research)) {
                                 await db
                                     .update(records)
                                     .set({ data: { ...data, _companyResearch: recordData._companyResearch } })
                                     .where(eq(records.id, record.id));
                             }
-                            if (searchClient) {
-                                const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
+                            // Serper로 새로 조사한 회사는 보관함에 쌓는다 — 같은 회사의 다음 레코드는 검색 없이 쓴다.
+                            await rememberCompanyResearch(orgId, companyName, research);
+                            const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
+                            if (searchClient && researchTokens > 0) {
                                 await updateTokenUsage(orgId, researchTokens);
                                 await logAiUsage({
                                     orgId,
@@ -422,7 +425,8 @@ export async function processAutoPersonalizedEmail(
                 // 작성 지침 비교 실험(policy)은 시작할 때의 규칙 그대로 비교한다. AB 테스트(prompt)는 지시사항만 다르다
                 const pinnedExperiment = experimentEnrollment.kind === "assigned" && !!experimentEnrollment.policy && !!experimentEnrollment.knowledge
                     ? experimentEnrollment : null;
-                const promptArm = experimentEnrollment.kind === "assigned" && experimentEnrollment.armPrompt
+                // AI 모델 A/B(model)는 지시사항은 규칙 그대로, 그 집단의 모델로 쓴다
+                const promptArm = experimentEnrollment.kind === "assigned" && (experimentEnrollment.armPrompt || experimentEnrollment.armModel)
                     ? experimentEnrollment : null;
                 if (pinnedExperiment) {
                     assetUrls = pinnedExperiment.experiment.config.ruleSnapshot.assetUrls as string[];
@@ -458,7 +462,7 @@ export async function processAutoPersonalizedEmail(
                 const emailResult = await prepareManagedEmail({
                     orgId, workspaceId, purpose: "initial_email", ruleId: link.id,
                     key: experimentEnrollment.kind === "assigned" ? `experiment-assignment:${experimentEnrollment.assignment.id}` : generationKey,
-                    model: link.model ?? undefined,
+                    model: promptArm?.armModel ?? link.model ?? undefined,
                     legacyContext: { system: buildEmailSystemPrompt(emailInput), user: prompt },
                     approvedContext: { system: buildEmailSystemPrompt({ ...emailInput, product: null, format: "plain",
                         ctaUrl: pinnedExperiment ? String(pinnedExperiment.experiment.config.ruleSnapshot.resolvedCtaUrl ?? "") || undefined : emailInput.ctaUrl }), user: prompt,

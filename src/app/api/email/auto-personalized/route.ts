@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, emailAutoPersonalizedLinks, emailTemplateLinks, partitions, workspaces, products } from "@/lib/db";
 import { eq, and, sql } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
+import { modelUnavailableReason } from "@/lib/ai/client";
 import { resolveRuleSenderPool } from "@/lib/email-sender-resolver";
 
 export async function GET(req: NextRequest) {
@@ -123,6 +124,12 @@ export async function POST(req: NextRequest) {
         } = await req.json();
 
         const isDraftFlag = isDraft ? 1 : 0;
+
+        // 연결되지 않은 AI 모델로는 규칙을 만들지 않는다 — 만들면 자동 메일이 작성 단계에서 멈춘다
+        if (typeof model === "string" && model) {
+            const reason = modelUnavailableReason(model);
+            if (reason) return NextResponse.json({ success: false, error: reason }, { status: 400 });
+        }
 
         if (!partitionId) {
             return NextResponse.json({

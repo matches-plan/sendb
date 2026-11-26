@@ -4,6 +4,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { reviveOrphanHeldRows } from "@/lib/partition-hold";
 import { wakeSendQueue } from "@/lib/email-send-queue";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
+import { modelUnavailableReason } from "@/lib/ai/client";
 import { resolveRuleSenderPool } from "@/lib/email-sender-resolver";
 import { fingerprint } from "@/lib/ai-copy/rules";
 import { ruleSnapshotOf } from "@/lib/email-experiments/repository";
@@ -83,6 +84,13 @@ export async function PUT(
             if (!access) {
                 return NextResponse.json({ success: false, error: "파티션을 찾을 수 없습니다." }, { status: 404 });
             }
+        }
+
+        // 새로 고른 AI 모델이 연결되지 않았으면 저장하지 않는다 — 저장되면 이 규칙의 자동 메일이 작성 단계에서 멈춘다.
+        // 이미 저장된 값은 그대로 둘 수 있다.
+        if (typeof model === "string" && model && model !== existing.model) {
+            const reason = modelUnavailableReason(model);
+            if (reason) return NextResponse.json({ success: false, error: reason }, { status: 400 });
         }
 
         // 발신 주소 묶음: 이 조직 주소인지 확인하고 두 칸을 같이 맞춘다. 둘 다 안 오면 건드리지 않는다

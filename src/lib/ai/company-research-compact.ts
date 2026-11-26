@@ -1,12 +1,11 @@
 import { createImportFileTransport } from "@/lib/customer-import-files/transport";
 import { webhookUrl } from "@/lib/customer-platform/webhook-rules";
+import { companyResearchMode } from "./company-research-mode";
 import type { CompanyResearchInput, CompanyResearchResult } from "./search";
 
 /** 회사 조사만 전환한다. 제품 검색·필드 보강과 작성 모델의 설정은 별개다. */
 export function isCompactCompanyResearch(): boolean {
-    const mode = process.env.AI_COMPANY_RESEARCH_MODE?.trim() || "compact";
-    if (mode !== "compact" && mode !== "search") throw new Error("회사 조사 방식 설정을 확인해주세요.");
-    return mode === "compact";
+    return companyResearchMode() === "compact";
 }
 
 const fields = {
@@ -78,18 +77,25 @@ export function hasCompactCompanyFacts(research: Pick<CompanyResearchResult, "in
     return !!(research.industry || research.description || research.services);
 }
 
-export async function generateCompactCompanyResearch(
-    input: CompanyResearchInput,
-    fetchPage: (url: string) => Promise<Buffer> = fetchHomepage,
-): Promise<CompanyResearchResult> {
-    const context = input.additionalContext && typeof input.additionalContext === "object" && !Array.isArray(input.additionalContext) ? input.additionalContext : {};
-    const result: CompanyResearchResult = {
-        companyName: plain(input.companyName, 200),
+/** CRM에 적힌 회사 칸(업종·소개·서비스·직원 수·홈페이지)만 읽는다. 담당자 이름·연락처 칸은 읽지 않는다. */
+export function readStoredCompanyFacts(additionalContext: CompanyResearchInput["additionalContext"]) {
+    const context = additionalContext && typeof additionalContext === "object" && !Array.isArray(additionalContext) ? additionalContext : {};
+    return {
         industry: readField(context, fields.industry, 80),
         description: readField(context, fields.description, 400),
         services: readField(context, fields.services, 240),
         employees: readField(context, fields.employees, 40),
         website: homepageUrl(readField(context, fields.website, 300)),
+    };
+}
+
+export async function generateCompactCompanyResearch(
+    input: CompanyResearchInput,
+    fetchPage: (url: string) => Promise<Buffer> = fetchHomepage,
+): Promise<CompanyResearchResult> {
+    const result: CompanyResearchResult = {
+        companyName: plain(input.companyName, 200),
+        ...readStoredCompanyFacts(input.additionalContext),
         sources: [],
         method: "compact",
         usage: { promptTokens: 0, completionTokens: 0, searchRequests: 0 },

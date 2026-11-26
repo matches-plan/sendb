@@ -1,4 +1,4 @@
-import { Home, Table2, MessageSquare, MessageCircle, Mail, Package, FileText, FileSignature, CreditCard, Layers, History, Activity, Users, BarChart3, TrendingUp, Briefcase, ListTodo, Contact, Settings, Store, UserSearch } from "lucide-react";
+import { Home, Table2, MessageSquare, MessageCircle, Mail, Package, FileText, FileSignature, CreditCard, Layers, History, Activity, Users, BarChart3, TrendingUp, Briefcase, ListTodo, Contact, Settings, Store, UserSearch, FlaskConical } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: typeof Home };
 
@@ -11,6 +11,7 @@ export const navGroups: Array<{ group?: string; items: NavItem[] }> = [
             { href: "/leadgen/stats", label: "콜드메일통계", icon: TrendingUp },
             { href: "/records", label: "레코드", icon: Table2 },
             { href: "/email", label: "콜드메일", icon: Mail },
+            { href: "/email/model-lab", label: "AI 모델 실험실", icon: FlaskConical },
             { href: "/web-forms", label: "웹 폼", icon: FileText },
             { href: "/leadgen/settings", label: "리드젠 설정", icon: Settings },
         ],
@@ -88,7 +89,7 @@ const routeLabels: Record<string, string> = {
 };
 
 const segmentLabels: Record<string, string> = {
-    profile: "프로필", templates: "템플릿", links: "연결", "ai-auto": "AI콜드메일 설정",
+    profile: "프로필", templates: "템플릿", links: "연결", "ai-auto": "AI콜드메일 설정", "model-lab": "AI 모델 실험실",
     new: "새로 만들기", visitors: "방문자", journey: "고객 여정", edit: "수정",
     users: "사용자", organizations: "조직", payments: "결제", plans: "요금제",
     contracts: "계약", settings: "설정", versions: "버전",

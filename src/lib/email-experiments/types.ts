@@ -20,9 +20,12 @@ export interface ExperimentConfig {
      * 작성 지침·지식 버전을 쓰지 않으므로 policyAId·policyBId·knowledgeVersionId는 0이다.
      * 없으면(policy) 작성 지침 버전을 비교하는 기존 실험(자동 준비가 만든 것 포함)이다.
      */
-    kind?: "policy" | "prompt";
+    kind?: "policy" | "prompt" | "model";
     promptA?: string;
     promptB?: string;
+    /** model: AI 모델 A/B — 지시사항은 규칙 그대로, A는 시작 때 규칙 모델, B는 후보 모델로 쓴다 */
+    modelA?: string;
+    modelB?: string;
     /** 이긴 안을 가르는 기준 (prompt 실험) */
     metric?: "reply" | "click" | "open";
     /** B 지시사항을 적용할 곳 (prompt 실험). 없으면 all — B가 A를 대신한다 */

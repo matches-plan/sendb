@@ -63,24 +63,6 @@ export function parseResearchItems(items: unknown[], now: Date) {
     return { valid: [...byKey.values()], skipped };
 }
 
-/** 조사 결과를 조직 보관함에 넣는다. 이미 있는 회사는 새 결과로 바꾼다. */
-export async function saveImportedCompanyResearch(orgId: string, items: ParsedResearchItem[]) {
-    if (!items.length) return 0;
-    await db
-        .insert(companyResearchCache)
-        .values(items.map((i) => ({ orgId, nameKey: i.nameKey, research: i.research, source: "import", researchedAt: i.researchedAt })))
-        .onConflictDoUpdate({
-            target: [companyResearchCache.orgId, companyResearchCache.nameKey],
-            set: {
-                research: sql`excluded.research`,
-                source: sql`excluded.source`,
-                researchedAt: sql`excluded.researched_at`,
-                updatedAt: sql`now()`,
-            },
-        });
-    return items.length;
-}
-
 // records의 0068 색인과 같은 식이어야 색인을 탄다 (normalizeCompanyName과 같은 규칙)
 const recordResearchKey = sql<string>`regexp_replace(
     lower(${records.data} -> '_companyResearch' ->> 'companyName'),

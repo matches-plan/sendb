@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getApiTokenFromNextRequest, resolveApiToken, checkTokenAccess } from "@/lib/auth";
-import {
-    MAX_IMPORT_ITEMS,
-    parseResearchItems,
-    saveImportedCompanyResearch,
-} from "@/lib/ai/company-research-import";
+import { MAX_IMPORT_ITEMS, parseResearchItems } from "@/lib/ai/company-research-import";
+import { saveCompanyResearch } from "@/lib/ai/company-research-cache";
 
 const bodySchema = z.object({
     partitionId: z.number().int().positive(),
@@ -34,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const { valid, skipped } = parseResearchItems(parsed.data.items, new Date());
     try {
-        const saved = await saveImportedCompanyResearch(token.orgId, valid);
+        const saved = await saveCompanyResearch(token.orgId, valid, "import");
         return NextResponse.json({ success: true, data: { saved, skipped } });
     } catch (error) {
         console.error("company research import error:", error);

@@ -13,11 +13,16 @@ import { plannedSamplePerArm } from "./sample-size";
 import type { Experiment, ExperimentConfig } from "./types";
 import { normalizeScope, scopedPrompt, type PromptTestScope } from "./prompt-scope";
 import { promptTestVerdict, type PromptTestMetric } from "./prompt-decision";
+import { AI_MODELS, DEFAULT_MODEL_ID } from "../ai/models";
+import { modelUnavailableReason } from "../ai/client";
 
 export type { PromptTestMetric } from "./prompt-decision";
 
 /** 안마다 최소 발송 수 — 계산값이 더 작아도(오픈률처럼 기준값이 높을 때) 이보다 적게 보고는 판정하지 않는다 */
 const MIN_PER_ARM = 100;
+
+/** 규칙 화면의 AB 테스트 — 지시사항 비교(prompt)와 AI 모델 비교(model) */
+const isAbTest = (experiment: Experiment | undefined) => experiment?.config.kind === "prompt" || experiment?.config.kind === "model";
 
 async function closeExperiment(conn: CopyConnection, experiment: Experiment, actor: { orgId: string; userId: string }, action: string, now: Date) {
     await conn`UPDATE email_copy_experiments SET state='closed',closed_at=${now.toISOString()},pending_mode='continue',
@@ -54,14 +59,14 @@ export async function syncPromptTest(
     conn: CopyConnection,
     input: {
         orgId: string; userId: string; ruleId: number;
-        start?: { promptB: string; metric?: PromptTestMetric; scope?: PromptTestScope; name?: string | null } | null;
+        start?: { kind?: "prompt" | "model"; promptB?: string; modelB?: string; metric?: PromptTestMetric; scope?: PromptTestScope; name?: string | null } | null;
         now: Date;
     },
 ) {
     return copyTransaction(conn, async () => {
         await conn`SELECT pg_advisory_xact_lock(1760824303,hashtext(${input.orgId}))`;
-        const [ruleRow] = await conn<{ workspace_id: number; prompt: string | null; name: string | null }[]>`
-            SELECT p.workspace_id, l.prompt, l.name FROM email_auto_personalized_links l JOIN partitions p ON p.id = l.partition_id
+        const [ruleRow] = await conn<{ workspace_id: number; prompt: string | null; name: string | null; model: string | null }[]>`
+            SELECT p.workspace_id, l.prompt, l.name, l.model FROM email_auto_personalized_links l JOIN partitions p ON p.id = l.partition_id
             WHERE l.id = ${input.ruleId} AND l.org_id = ${input.orgId}`;
         if (!ruleRow) throw new CopyActionError("규칙을 찾을 수 없습니다.");
         const found = await conn<Experiment[]>`SELECT * FROM email_copy_experiments
@@ -77,13 +82,32 @@ export async function syncPromptTest(
             stopped = active.id;
             active = undefined;
         }
-        if (!input.start) return { experimentId: active?.config.kind === "prompt" ? active.id : null, stopped };
-        if (active?.config.kind === "prompt") throw new CopyActionError("진행 중인 AB 테스트가 끝난 뒤 추가할 수 있습니다.");
+        // 모델 A/B 중 규칙의 AI 모델(A안)을 바꿔 저장해도 같은 비교가 아니다
+        const modelA = ruleRow.model || DEFAULT_MODEL_ID;
+        if (active?.config.kind === "model" && active.config.modelA !== modelA) {
+            await closeExperiment(conn, active, actor, "ab_test_model_changed", input.now);
+            stopped = active.id;
+            active = undefined;
+        }
+        if (!input.start) return { experimentId: isAbTest(active) ? active!.id : null, stopped };
+        if (isAbTest(active)) throw new CopyActionError("진행 중인 AB 테스트가 끝난 뒤 추가할 수 있습니다.");
+        const kind = input.start.kind === "model" ? "model" : "prompt";
         const promptB = (input.start.promptB ?? "").trim();
+        const modelB = (input.start.modelB ?? "").trim();
         const metric: PromptTestMetric = input.start.metric === "click" || input.start.metric === "open" ? input.start.metric : "reply";
-        const scope = normalizeScope(input.start.scope);
-        if (!promptA || !promptB) throw new CopyActionError("A안과 B안 AI 지시사항을 모두 입력해 주세요.");
-        if (scope === "all" && promptA === promptB) throw new CopyActionError("B안 지시사항이 A안과 같습니다.");
+        const scope = kind === "model" ? "all" : normalizeScope(input.start.scope);
+        if (kind === "prompt") {
+            if (!promptA || !promptB) throw new CopyActionError("A안과 B안 AI 지시사항을 모두 입력해 주세요.");
+            if (scope === "all" && promptA === promptB) throw new CopyActionError("B안 지시사항이 A안과 같습니다.");
+        } else {
+            if (!AI_MODELS.some((m) => m.id === modelB)) throw new CopyActionError("비교할 AI 모델을 골라 주세요.");
+            if (modelB === modelA) throw new CopyActionError("B안 모델이 지금 규칙의 AI 모델과 같습니다.");
+            const unavailable = modelUnavailableReason(modelB);
+            if (unavailable) throw new CopyActionError(unavailable);
+            // 승인된 작성 버전에 묶인 규칙은 버전의 모델로 쓰므로 규칙 모델을 나눠도 비교가 안 된다
+            const [bound] = await conn`SELECT 1 FROM ai_copy_bindings WHERE org_id = ${input.orgId} AND rule_id = ${input.ruleId} AND purpose = 'initial_email' LIMIT 1`;
+            if (bound) throw new CopyActionError("이 규칙은 승인된 작성 버전으로 써서 모델 A/B를 할 수 없습니다. 작성 버전에서 모델을 바꿔 비교해 주세요.");
+        }
         if (active) await closeExperiment(conn, active, actor, "replaced_by_ab_test", input.now);
 
         const rule = await loadExperimentRule(conn, input.orgId, ruleRow.workspace_id, input.ruleId);
@@ -91,9 +115,9 @@ export async function syncPromptTest(
         const baseline = await baselineRate(conn, input.orgId, input.ruleId, metric);
         const mde = Math.max(baseline * 0.5, 0.01);
         const config: ExperimentConfig = {
-            kind: "prompt",
+            kind,
             promptA,
-            promptB,
+            ...(kind === "prompt" ? { promptB } : { modelA, modelB }),
             metric,
             scope,
             analysisUnit: "recipient",
@@ -126,7 +150,10 @@ export async function syncPromptTest(
             INSERT INTO email_copy_experiments(org_id,workspace_id,rule_id,name,config,config_fingerprint,created_by,state,started_at)
             VALUES(${input.orgId},${ruleRow.workspace_id},${input.ruleId},${input.start.name?.trim() || `AB 테스트 · ${ruleRow.name ?? `규칙 ${input.ruleId}`}`},
                 ${JSON.stringify(config)}::jsonb,${fingerprint(config)},${input.userId},'running',${input.now.toISOString()}) RETURNING *`;
-        await experimentEvent(conn, { ...actor, experimentId: experiment.id, action: "ab_test_started", detail: { metric, scope, plannedPerArm: config.plannedPerArm } });
+        await experimentEvent(conn, {
+            ...actor, experimentId: experiment.id, action: "ab_test_started",
+            detail: { kind, metric, scope, plannedPerArm: config.plannedPerArm, ...(kind === "model" ? { modelA, modelB } : {}) },
+        });
         return { experimentId: experiment.id, stopped };
     });
 }
@@ -135,7 +162,7 @@ export async function syncPromptTest(
 export async function stopPromptTest(conn: CopyConnection, input: { orgId: string; userId: string; id: number; now: Date }) {
     return copyTransaction(conn, async () => {
         const [experiment] = await conn<Experiment[]>`SELECT * FROM email_copy_experiments WHERE id = ${input.id} AND org_id = ${input.orgId} FOR UPDATE`;
-        if (!experiment || experiment.config.kind !== "prompt") throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
+        if (!experiment || !isAbTest(experiment)) throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
         if (experiment.state === "closed" || experiment.state === "invalidated") throw new CopyActionError("이미 끝난 AB 테스트입니다.");
         await closeExperiment(conn, experiment, { orgId: input.orgId, userId: input.userId }, "ab_test_stopped", input.now);
         return { stopped: true };
@@ -148,7 +175,7 @@ export async function renamePromptTest(conn: CopyConnection, input: { orgId: str
     if (!name) throw new CopyActionError("이름을 입력해 주세요.");
     return copyTransaction(conn, async () => {
         const [experiment] = await conn<Experiment[]>`SELECT * FROM email_copy_experiments WHERE id = ${input.id} AND org_id = ${input.orgId} FOR UPDATE`;
-        if (!experiment || experiment.config.kind !== "prompt") throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
+        if (!experiment || !isAbTest(experiment)) throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
         if (experiment.name === name) return { name };
         await conn`UPDATE email_copy_experiments SET name = ${name} WHERE id = ${input.id}`;
         await experimentEvent(conn, { orgId: input.orgId, userId: input.userId, experimentId: input.id, action: "ab_test_renamed", detail: { from: experiment.name, to: name } });
@@ -170,7 +197,7 @@ const winnerPrompt = (experiment: Experiment, arm: "A" | "B") => {
  */
 export async function decidePromptTests(conn: CopyConnection, now: Date, orgId?: string) {
     const ready = await conn<Experiment[]>`SELECT e.* FROM email_copy_experiments e
-        WHERE e.config->>'kind' = 'prompt'
+        WHERE e.config->>'kind' IN ('prompt', 'model')
           AND (${orgId ?? null}::uuid IS NULL OR e.org_id = ${orgId ?? null}::uuid)
           AND e.enrollment_closed_at IS NOT NULL
           AND (e.state = 'insufficient_sample' OR e.state = 'decision_ready'
@@ -185,7 +212,16 @@ export async function decidePromptTests(conn: CopyConnection, now: Date, orgId?:
         const insufficient = experiment.state === "insufficient_sample";
         const { winner, effect } = insufficient ? { winner: null, effect: null } : promptTestVerdict(arms, metric);
         let applied = false;
-        if (winner === "B") {
+        if (winner === "B" && experiment.config.kind === "model") {
+            // B 모델이 확실히 나으면 규칙 모델을 B로. 그 사이 사람이 모델을 바꿨거나 B 연결이 끊겼으면 두지 않는다
+            const modelB = experiment.config.modelB ?? "";
+            if (!modelUnavailableReason(modelB)) {
+                const updated = await conn`UPDATE email_auto_personalized_links SET model = ${modelB}, updated_at = now()
+                    WHERE id = ${experiment.rule_id} AND org_id = ${experiment.org_id} AND coalesce(model, ${DEFAULT_MODEL_ID}) = ${experiment.config.modelA ?? DEFAULT_MODEL_ID}
+                    RETURNING id`;
+                applied = updated.length > 0;
+            }
+        } else if (winner === "B") {
             const prompt = winnerPrompt(experiment, "B");
             // 테스트 중에 사람이 지시사항을 바꿨다면 덮어쓰지 않는다 (보통은 저장 때 테스트가 먼저 중단된다)
             const updated = await conn`UPDATE email_auto_personalized_links SET prompt = ${prompt ?? null}, needs_review = 0, updated_at = now()
@@ -207,15 +243,24 @@ export async function decidePromptTests(conn: CopyConnection, now: Date, orgId?:
     return { decided };
 }
 
-/** 고른 안(A·B)의 지시사항을 규칙에 넣고 테스트를 닫는다 */
+/** 고른 안(A·B)의 지시사항(모델 A/B면 AI 모델)을 규칙에 넣고 테스트를 닫는다 */
 export async function applyPromptTestArm(
     conn: CopyConnection,
     input: { orgId: string; userId: string; id: number; arm: "A" | "B"; now: Date },
 ) {
     return copyTransaction(conn, async () => {
         const [experiment] = await conn<Experiment[]>`SELECT * FROM email_copy_experiments WHERE id = ${input.id} AND org_id = ${input.orgId} FOR UPDATE`;
-        if (!experiment || experiment.config.kind !== "prompt") throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
+        if (!experiment || !isAbTest(experiment)) throw new CopyActionError("AB 테스트를 찾을 수 없습니다.");
         if (experiment.state === "closed" || experiment.state === "invalidated") throw new CopyActionError("이미 끝난 AB 테스트입니다.");
+        if (experiment.config.kind === "model") {
+            const model = (input.arm === "A" ? experiment.config.modelA : experiment.config.modelB) ?? DEFAULT_MODEL_ID;
+            const unavailable = modelUnavailableReason(model);
+            if (unavailable) throw new CopyActionError(unavailable);
+            await conn`UPDATE email_auto_personalized_links SET model = ${model}, updated_at = now()
+                WHERE id = ${experiment.rule_id} AND org_id = ${input.orgId}`;
+            await closeExperiment(conn, experiment, { orgId: input.orgId, userId: input.userId }, `applied_${input.arm.toLowerCase()}`, input.now);
+            return { applied: input.arm, prompt: null, model };
+        }
         const prompt = winnerPrompt(experiment, input.arm);
         await conn`UPDATE email_auto_personalized_links SET prompt = ${prompt ?? null}, needs_review = 0, updated_at = now()
             WHERE id = ${experiment.rule_id} AND org_id = ${input.orgId}`;

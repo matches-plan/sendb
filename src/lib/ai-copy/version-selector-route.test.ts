@@ -90,12 +90,14 @@ test("UX-167 member는 선택기 조회도 403", async (t) => {
 });
 
 test("UX-244 관리 목록 조회는 모델별 서버 연결 여부를 내려준다", async (t) => {
-    const { get } = await setup(t, "owner", { ANTHROPIC_API_KEY: "fake-anthropic", DEEPSEEK_API_KEY: "" });
+    const { get } = await setup(t, "owner", { ANTHROPIC_API_KEY: "fake-anthropic", DEEPSEEK_API_KEY: "", OPENROUTER_API_KEY: "" });
     const { GET } = await import("../../app/api/ai/copy-policies/route");
     const body = await (await GET(get("/api/ai/copy-policies?cursor=0"))).json();
     const configured = Object.fromEntries(
         body.data.models.map((m: { id: string; configured: boolean }) => [m.id, m.configured]),
     );
     assert.equal(configured["claude-haiku-4-5"], true);
-    assert.equal(configured["deepseek-v4-flash"], false);
+    // 예전 DeepSeek V4 Flash는 목록에서 숨겼다. 새 V4.1 Flash는 OpenRouter 키가 없으면 연결 안 됨
+    assert.equal(configured["deepseek-v4-flash"], undefined);
+    assert.equal(configured["deepseek-v4-1-flash"], false);
 });

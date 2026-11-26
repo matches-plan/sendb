@@ -15,7 +15,7 @@ import {
 } from "./generation";
 import { createKnowledgeVersion, createPolicyVersion, bindCopyVersions } from "./versions";
 import { fingerprint, targetsFor } from "./rules";
-import { resolveModel } from "../ai/models";
+import { outputTokenLimit, resolveModel } from "../ai/models";
 import { CopyActionError } from "./errors";
 import { EVALUATION_SCENARIOS } from "./evaluation-rules";
 import {
@@ -193,7 +193,7 @@ export async function createAutomationCycle(
                 purpose: setting.purpose,
                 provider: model.provider,
                 model: model.id,
-                parameters: { maxOutputTokens: model.adaptiveThinking ? 8192 : 4096, temperature: 1 },
+                parameters: { maxOutputTokens: outputTokenLimit(model), temperature: 1 },
                 instructions,
                 requiredMeanings:
                     setting.purpose === "visit_ack"

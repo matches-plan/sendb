@@ -7,6 +7,7 @@ import type {
 import { fingerprint } from "../ai-copy/rules";
 import { copyTransaction, CopyDeferredError } from "../ai-copy/generation";
 import { CopyActionError } from "../ai-copy/errors";
+import { modelUnavailableReason } from "../ai/client";
 import { normalizeEmail } from "../deep-visitor-alert-rules";
 import { kstParts } from "../kst";
 import { scopedPrompt } from "./prompt-scope";
@@ -309,12 +310,19 @@ export type EnrollmentResult =
           knowledge?: CopyVersion<KnowledgeSnapshot>;
           /** prompt 실험: 이 수신자 집단(A·B)의 AI 지시사항 */
           armPrompt?: string;
+          /** model 실험: 이 수신자 집단(A·B)이 쓸 AI 모델 */
+          armModel?: string;
       };
 const armPromptOf = (experiment: Experiment, arm: "A" | "B") => {
     const { kind, promptA, promptB, scope } = experiment.config;
     if (kind !== "prompt") return undefined;
     if (arm === "A" || !promptB) return (arm === "A" ? promptA : promptB) || undefined;
     return scopedPrompt(promptA ?? "", promptB, scope);
+};
+export const armModelOf = (experiment: Experiment, arm: "A" | "B") => {
+    const { kind, modelA, modelB } = experiment.config;
+    if (kind !== "model") return undefined;
+    return (arm === "A" ? modelA : modelB) || undefined;
 };
 export async function enrollForPreparation(
     conn: CopyConnection,
@@ -364,7 +372,8 @@ export async function enrollForPreparation(
                 "실험 준비 보류",
                 true,
             );
-        const promptKind = experiment.config.kind === "prompt";
+        // AB 테스트(지시사항·AI 모델 비교)는 규칙 안에서 수신자만 나눈다 — 작성 지침 비교 실험(policy)과 다르게 다룬다
+        const promptKind = experiment.config.kind === "prompt" || experiment.config.kind === "model";
         // AB 테스트에서 빠지는 수신자(내부·다른 실험 중·이미 연락함)는 막지 않고 규칙 그대로 보낸다
         const skip = (reason: string): EnrollmentResult =>
             promptKind ? { kind: "none" } : { kind: "excluded", reason };
@@ -398,6 +407,8 @@ export async function enrollForPreparation(
             return { kind: "excluded", reason: "invalidated" };
         }
         const versions = promptKind ? null : await loadVersions(conn, experiment, false);
+        // 모델 A/B: B 모델 연결이 끊기면(키 제거) 나누지 않고 규칙 모델로 보낸다 — 메일은 멈추지 않는다
+        if (experiment.config.kind === "model" && modelUnavailableReason(experiment.config.modelB ?? "")) return { kind: "none" };
         if (previous)
             return {
                 kind: "assigned",
@@ -406,6 +417,7 @@ export async function enrollForPreparation(
                 policy: versions ? (previous.arm === "A" ? versions.A : versions.B) : undefined,
                 knowledge: versions?.knowledge,
                 armPrompt: armPromptOf(experiment, previous.arm),
+                armModel: armModelOf(experiment, previous.arm),
             };
         const [overlap] =
             await conn`SELECT a.id FROM email_copy_assignments a JOIN email_copy_experiments e ON e.id=a.experiment_id WHERE a.org_id=${input.orgId} AND a.normalized_email=${email}
@@ -487,6 +499,7 @@ export async function enrollForPreparation(
             policy: versions ? (arm === "A" ? versions.A : versions.B) : undefined,
             knowledge: versions?.knowledge,
             armPrompt: armPromptOf(experiment, arm),
+            armModel: armModelOf(experiment, arm),
         };
     });
 }

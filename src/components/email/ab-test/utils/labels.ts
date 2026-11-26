@@ -1,4 +1,5 @@
 import type { AbTestMetric, AbTestResult, AbTestRow, AbTestScope, ArmMetrics } from "../types";
+import { findModel } from "@/lib/ai/models";
 
 /** 테스트할 곳(제목만·첫 문장·전체) 칸 이름 */
 export const SCOPE_FIELD_LABEL = "테스트 선택";
@@ -43,6 +44,13 @@ export const SCOPE_METRICS: Record<AbTestScope, AbTestMetric[]> = {
     opening: ["reply", "click"],
     all: ["reply", "click"],
 };
+
+/** AI 모델 AB 테스트의 평가 기준 — 모델은 제목도 쓰므로 오픈률부터 */
+export const MODEL_METRICS: AbTestMetric[] = ["open", "click", "reply"];
+
+/** 모델 AB 테스트 한 줄 표기: Claude Haiku 5.5 → DeepSeek V4.1 Flash */
+export const modelPairLabel = (modelA: string | null | undefined, modelB: string | null | undefined) =>
+    `${findModel(modelA)?.label ?? modelA ?? "규칙 모델"} → ${findModel(modelB)?.label ?? modelB ?? "?"}`;
 
 export const RESULT_LABELS: Record<AbTestResult, string> = {
     running: "집계중",

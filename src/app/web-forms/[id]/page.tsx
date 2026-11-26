@@ -25,7 +25,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { AI_MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { ModelSelectItems } from "@/components/ai/ui/ModelSelectItems";
 import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { unlinkedFields, webFormEditorSnapshot, type WebFormEditorValues } from "@/components/web-forms/utils/editor-snapshot";
 import { autoLinkBasic, remapToPartition } from "@/components/web-forms/utils/remap-fields";
@@ -399,11 +400,7 @@ export default function EditWebFormPage() {
                                             <SelectValue placeholder="AI 모델 선택" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {AI_MODELS.map((m) => (
-                                                <SelectItem key={m.id} value={m.id}>
-                                                    {m.label}
-                                                </SelectItem>
-                                            ))}
+                                            <ModelSelectItems current={aiModel} />
                                         </SelectContent>
                                     </Select>
                                     <Button

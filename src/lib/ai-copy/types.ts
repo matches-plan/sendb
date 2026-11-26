@@ -31,7 +31,7 @@ export interface PerformanceTargets {
 }
 export interface PolicySnapshot {
     purpose: CopyPurpose;
-    provider: "claude" | "gemini" | "deepseek";
+    provider: "claude" | "gemini" | "deepseek" | "qwen";
     model: string;
     parameters: { maxOutputTokens: number; temperature: number };
     instructions: string;

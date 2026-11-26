@@ -20,8 +20,8 @@ export interface AbTestRow {
     /** 규칙 수정 화면 주소용 — 규칙이 지워졌으면 null */
     rulePartitionId?: number | null;
     workspaceName: string;
-    /** prompt: 규칙에서 만든 AB 테스트, policy: 자동 준비가 연 실험 */
-    kind: "prompt" | "policy";
+    /** prompt: 규칙에서 만든 지시사항 AB 테스트, model: AI 모델 AB 테스트, policy: 자동 준비가 연 실험 */
+    kind: "prompt" | "model" | "policy";
     state: string;
     startedAt: string | null;
     closedAt: string | null;
@@ -31,6 +31,9 @@ export interface AbTestRow {
     plannedPerArm: number;
     promptA: string | null;
     promptB: string | null;
+    /** model 실험만 — A는 시작 때 규칙 모델, B는 후보 모델 */
+    modelA?: string | null;
+    modelB?: string | null;
     arms: { A: ArmMetrics; B: ArmMetrics };
     result: AbTestResult;
     /** 자동 판정으로 B안이 규칙에 들어갔는지 (자동 판정이 아니면 null) */
@@ -46,7 +49,11 @@ export interface AbTestRow {
 export interface AbTestDraft {
     /** 화면에 보일 이름 — 기본 '테스트 N' */
     name: string;
+    /** 비교 대상 — 지시사항(prompt) 또는 AI 모델(model) */
+    kind: "prompt" | "model";
     promptB: string;
+    /** model: B안 AI 모델 */
+    modelB: string;
     metric: AbTestMetric;
     scope: AbTestScope;
 }
