@@ -2,7 +2,7 @@ import { classifyEmailSubmission } from "./nhn-submit-result";
 import { db, emailAutoPersonalizedLinks, emailAssets, emailSendLogs, records, products } from "@/lib/db";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { getEmailClient, getEmailConfig, appendSignature } from "@/lib/nhn-email";
-import { getSearchAiClient, generateCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { getSearchAiClient, generateCompanyResearch, isCompactCompanyResearch, hasCompactCompanyFacts, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 import { buildEmailSystemPrompt } from "@/lib/ai/email";
 import { prepareManagedEmail, attachManagedEmail } from "@/lib/ai-copy/runtime";
 import { CopyDeferredError } from "@/lib/ai-copy/generation";
@@ -348,10 +348,8 @@ export async function processAutoPersonalizedEmail(
                 const recordData = { ...data };
                 if (link.autoResearch === 1 && !recordData._companyResearch) {
                     const companyName = data[link.companyField] as string;
-                    const searchClient = getSearchAiClient();  // 회사 리서치는 웹검색 필요 → SEARCH_MODEL_ID 고정
-                    if (searchClient && companyName && typeof companyName === "string" && companyName.trim()) {
-                        // 같은 org에서 이미 조사한 회사면 재사용한다 — 웹서치 1건이 약 19,000 input tokens라
-                        // 대량 발송에서 회사가 겹치는 만큼 그대로 중복 과금된다.
+                    if (companyName && typeof companyName === "string" && companyName.trim()) {
+                        // 같은 조직에서 조사한 회사는 검색 연결 상태와 무관하게 재사용한다.
                         const cached = await findCachedCompanyResearch(orgId, companyName);
 
                         if (cached) {
@@ -362,7 +360,10 @@ export async function processAutoPersonalizedEmail(
                                 .where(eq(records.id, record.id));
                             console.log(`[AutoEmail] Company research cache hit: ${companyName}`);
                         } else {
-                            if (!(await checkTokenQuota(orgId)).allowed) throw new CopyDeferredError(new Date(Date.now() + 3600_000), "회사 조사 사용량 한도", true, "token_quota");
+                            const compact = isCompactCompanyResearch();
+                            const searchClient = compact ? null : getSearchAiClient();
+                            if (!compact && !searchClient) throw new CopyDeferredError(new Date(Date.now() + 3600_000), "회사 조사 검색 연결 확인 필요", true);
+                            if (!compact && !(await checkTokenQuota(orgId)).allowed) throw new CopyDeferredError(new Date(Date.now() + 3600_000), "회사 조사 사용량 한도", true, "token_quota");
                             const research = await generateCompanyResearch(searchClient, { companyName, additionalContext: data });
                             recordData._companyResearch = {
                                 ...research,
@@ -370,24 +371,25 @@ export async function processAutoPersonalizedEmail(
                                 researchedAt: new Date().toISOString(),
                             };
 
-                            // 레코드에 _companyResearch 저장
-                            await db
-                                .update(records)
-                                .set({ data: { ...data, _companyResearch: recordData._companyResearch } })
-                                .where(eq(records.id, record.id));
-
-                            const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
-                            await updateTokenUsage(orgId, researchTokens);
-
-                            await logAiUsage({
-                                orgId,
-                                userId: null,
-                                provider: searchClient.provider,
-                                model: searchClient.model,
-                                promptTokens: research.usage.promptTokens,
-                                completionTokens: research.usage.completionTokens,
-                                purpose: "auto_company_research",
-                            });
+                            // 빈 간단 정보는 저장하지 않는다. 나중에 홈페이지/CRM 자료가 추가되면 다시 읽는다.
+                            if (!compact || hasCompactCompanyFacts(research)) {
+                                await db
+                                    .update(records)
+                                    .set({ data: { ...data, _companyResearch: recordData._companyResearch } })
+                                    .where(eq(records.id, record.id));
+                            }
+                            if (searchClient) {
+                                const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
+                                await updateTokenUsage(orgId, researchTokens);
+                                await logAiUsage({
+                                    orgId,
+                                    userId: null,
+                                    provider: searchClient.provider,
+                                    model: searchClient.model,
+                                    ...research.usage,
+                                    purpose: "auto_company_research",
+                                });
+                            }
                         }
                     }
                 }

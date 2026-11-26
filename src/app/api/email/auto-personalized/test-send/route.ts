@@ -4,7 +4,7 @@ import { db, emailAutoPersonalizedLinks, products, records } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
 import { getEmailClient, getEmailConfig, appendSignature } from "@/lib/nhn-email";
-import { getAiClient, getSearchAiClient, generateEmail, generateCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { getAiClient, getSearchAiClient, generateEmail, generateCompanyResearch, isCompactCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 import { resolveSender, resolveSignature } from "@/lib/email-sender-resolver";
 import { linkSenderPool } from "@/lib/email-sender-limit-rules";
 import { resolveWorkspaceId } from "@/lib/email-unsubscribe";
@@ -102,8 +102,9 @@ export async function POST(req: NextRequest) {
         // 5. 회사 조사 (autoResearch ON && 레코드에 _companyResearch 없으면)
         if (link.autoResearch === 1 && !recordData._companyResearch) {
             const companyName = recordData[link.companyField] as string;
-            const searchClient = getSearchAiClient();  // 회사 리서치는 웹검색 필요 → SEARCH_MODEL_ID 고정
-            if (searchClient && companyName && typeof companyName === "string" && companyName.trim()) {
+            const compact = isCompactCompanyResearch();
+            const searchClient = compact ? null : getSearchAiClient();
+            if ((compact || searchClient) && companyName && typeof companyName === "string" && companyName.trim()) {
                 try {
                     const research = await generateCompanyResearch(searchClient, { companyName, additionalContext: recordData });
                     recordData._companyResearch = {
@@ -111,17 +112,18 @@ export async function POST(req: NextRequest) {
                         sources: research.sources,
                         researchedAt: new Date().toISOString(),
                     };
-                    const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
-                    await updateTokenUsage(user.orgId, researchTokens);
-                    await logAiUsage({
-                        orgId: user.orgId,
-                        userId: user.userId,
-                        provider: searchClient.provider,
-                        model: searchClient.model,
-                        promptTokens: research.usage.promptTokens,
-                        completionTokens: research.usage.completionTokens,
-                        purpose: "test_company_research",
-                    });
+                    if (searchClient) {
+                        const researchTokens = research.usage.promptTokens + research.usage.completionTokens;
+                        await updateTokenUsage(user.orgId, researchTokens);
+                        await logAiUsage({
+                            orgId: user.orgId,
+                            userId: user.userId,
+                            provider: searchClient.provider,
+                            model: searchClient.model,
+                            ...research.usage,
+                            purpose: "test_company_research",
+                        });
+                    }
                 } catch (err) {
                     console.error("[TestSend] Company research error:", err);
                 }

@@ -1,5 +1,5 @@
 import type { AiClient } from "./client";
-import type { Product } from "@/lib/db";
+import { generateCompactCompanyResearch, isCompactCompanyResearch } from "./company-research-compact";
 import { callGeminiWithSearch } from "./gemini";
 
 // ---- 제품 생성 (웹서칭) ----
@@ -68,7 +68,7 @@ export async function generateProduct(
 
 // ---- 회사 조사 (웹서칭) ----
 
-interface CompanyResearchInput {
+export interface CompanyResearchInput {
     companyName: string;
     additionalContext?: Record<string, unknown>;
 }
@@ -81,7 +81,8 @@ export interface CompanyResearchResult {
     employees: string;
     website: string;
     sources: Array<{ url: string; title: string }>;
-    usage: { promptTokens: number; completionTokens: number };
+    usage: { promptTokens: number; completionTokens: number; searchRequests?: number };
+    method?: "compact";
 }
 
 function buildCompanyResearchSystemPrompt(): string {
@@ -113,9 +114,11 @@ function buildCompanyResearchSystemPrompt(): string {
 }
 
 export async function generateCompanyResearch(
-    client: AiClient,
+    client: AiClient | null,
     input: CompanyResearchInput
 ): Promise<CompanyResearchResult> {
+    if (isCompactCompanyResearch()) return generateCompactCompanyResearch(input);
+    if (!client) throw new Error("회사 조사 검색 연결 확인 필요");
     const systemPrompt = buildCompanyResearchSystemPrompt();
     const pattern = /\{[\s\S]*"companyName"[\s\S]*"description"[\s\S]*\}/;
 

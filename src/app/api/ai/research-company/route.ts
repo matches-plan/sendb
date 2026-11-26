@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveUserFromNextRequest } from "@/lib/auth";
-import { getSearchAiClient, generateCompanyResearch, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
+import { getSearchAiClient, generateCompanyResearch, isCompactCompanyResearch, hasCompactCompanyFacts, checkTokenQuota, updateTokenUsage, logAiUsage } from "@/lib/ai";
 
 export async function POST(req: NextRequest) {
     const user = await getActiveUserFromNextRequest(req);
@@ -8,13 +8,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "인증이 필요합니다." }, { status: 401 });
     }
 
-    const client = getSearchAiClient();
-    if (!client) {
+    const compact = isCompactCompanyResearch();
+    const client = compact ? null : getSearchAiClient();
+    if (!compact && !client) {
         return NextResponse.json({ success: false, error: "AI 서비스를 사용할 수 없습니다." }, { status: 503 });
     }
 
-    const quota = await checkTokenQuota(user.orgId);
-    if (!quota.allowed) {
+    if (!compact && !(await checkTokenQuota(user.orgId)).allowed) {
         return NextResponse.json({
             success: false,
             error: "이번 달 AI 사용량을 초과했습니다. 플랜 업그레이드를 고려해주세요.",
@@ -32,18 +32,21 @@ export async function POST(req: NextRequest) {
             additionalContext: recordData as Record<string, unknown> | undefined,
         });
 
-        const totalTokens = result.usage.promptTokens + result.usage.completionTokens;
-        await updateTokenUsage(user.orgId, totalTokens);
-
-        await logAiUsage({
-            orgId: user.orgId,
-            userId: user.userId,
-            provider: client.provider,
-            model: client.model,
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            purpose: "company_research",
-        });
+        if (compact && !hasCompactCompanyFacts(result)) {
+            return NextResponse.json({ success: false, error: "저장된 회사 정보나 홈페이지 소개문이 없습니다. 업종·서비스 또는 홈페이지 주소를 입력해주세요." }, { status: 422 });
+        }
+        if (client) {
+            const totalTokens = result.usage.promptTokens + result.usage.completionTokens;
+            await updateTokenUsage(user.orgId, totalTokens);
+            await logAiUsage({
+                orgId: user.orgId,
+                userId: user.userId,
+                provider: client.provider,
+                model: client.model,
+                ...result.usage,
+                purpose: "company_research",
+            });
+        }
 
         return NextResponse.json({
             success: true,
@@ -55,6 +58,7 @@ export async function POST(req: NextRequest) {
                 employees: result.employees,
                 website: result.website,
                 sources: result.sources,
+                ...(result.method ? { method: result.method } : {}),
             },
         });
     } catch (error) {

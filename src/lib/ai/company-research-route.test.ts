@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { installFakeDb, isolateEnv, isMembershipLookup } from "../auth-fake-db.test-helper";
 
 test("UX-239·240 회사 조사 실패와 정상 정보 없음은 구분하고 공급자 원문을 숨긴다", async (t) => {
-    isolateEnv(t, { ANTHROPIC_API_KEY: "fake-research" });
+    isolateEnv(t, { ANTHROPIC_API_KEY: "fake-research", AI_COMPANY_RESEARCH_MODE: "search" });
     const { db } = await import("../db");
     const { generateToken } = await import("../auth");
     const { POST } = await import("../../app/api/ai/research-company/route");

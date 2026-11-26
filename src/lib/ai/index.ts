@@ -13,6 +13,7 @@ export { buildEmailSystemPrompt, generateEmail, type GenerateEmailInput } from "
 // Search (product, company research, field enrichment)
 export { generateProduct } from "./search";
 export { generateCompanyResearch, type CompanyResearchResult } from "./search";
+export { isCompactCompanyResearch, hasCompactCompanyFacts } from "./company-research-compact";
 export { generateFieldEnrichment } from "./search";
 
 // Web form
