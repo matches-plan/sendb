@@ -1,0 +1,68 @@
+name: Deploy to Cloudtype
+
+# v* 태그를 푸시할 때만 배포한다 — main 커밋마다 돌리면 배포가 필요없는 머지에도
+# 빌드 리소스를 계속 쓴다. 배포 시점은 태그로 직접 고른다.
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: # 태그 없이 재배포가 필요할 때(환경변수 변경 등) 수동 실행
+
+# 배포가 겹치면 나중 것만 살린다. 진행 중인 배포는 취소하지 않는다(중간에 끊기면 상태가 애매해짐).
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Connect deploy key
+        uses: cloudtype-github-actions/connect@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          ghtoken: ${{ secrets.GHP_TOKEN }}
+
+      # Cloudtype은 yaml의 env를 "이 서비스의 환경변수 전체"로 본다 — 생략하면 콘솔 값이
+      # 유지되는 게 아니라 비워져서 빌드가 DATABASE_URL 없이 돌다 죽는다.
+      # 그렇다고 값을 yaml에 적으면 DB·결제·메일 키가 저장소에 평문으로 남으므로,
+      # env 블록만 시크릿(CLOUDTYPE_ENV_YAML)에 두고 배포 직전에 끼워 넣는다.
+      - name: Build deploy manifest
+        env:
+          ENV_YAML: ${{ secrets.CLOUDTYPE_ENV_YAML }}
+          REF_NAME: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
+        run: |
+          {
+            echo "name: sendb"
+            echo "app: next.js"
+            echo "options:"
+            echo "  nodeversion: \"22\""
+            echo "  buildtype: standalone"
+            echo "  install: pnpm install"
+            echo "  build: pnpm run build:cloudtype"
+            echo "  buildenv: []"
+            echo "  env:"
+            # 시크릿의 각 줄을 env 하위(4칸)로 들여쓴다. 빈 줄은 버린다.
+            printf '%s\n' "$ENV_YAML" | sed '/^[[:space:]]*$/d; s/^/    /'
+            echo "context:"
+            echo "  git:"
+            echo "    url: git@github.com:${{ github.repository }}.git"
+            # 태그로 실행되면 그 태그를, 수동 실행(workflow_dispatch)이면 main을 배포한다.
+            # Cloudtype은 이 값을 git clone --branch 로 넘기므로 refs/... 전체 경로가 아닌 이름만 준다.
+            echo "    ref: ${REF_NAME}"
+          } > manifest.yaml
+          # 값은 찍지 않고 구조만 확인한다(키가 로그에 남지 않도록).
+          echo "manifest built: $(grep -c '^\s*- name:' manifest.yaml) env vars"
+
+      - name: Deploy
+        uses: cloudtype-github-actions/deploy@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          project: matches.plan/project
+          stage: main
+          # 액션이 path.join(cwd, file)로 해석하므로 절대경로가 아닌 상대경로를 준다.
+          file: manifest.yaml
