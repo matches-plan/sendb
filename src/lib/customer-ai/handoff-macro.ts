@@ -28,20 +28,19 @@ export async function findHandoffMacro(
 
 // The caller already holds the conversation lock acquired while appending the
 // customer message, so a simultaneous staff reply is serialized with this check.
-export async function sendImmediateHandoffMacro(
+export async function respondOrScheduleHandoffFollowup(
     exec: DbExec,
     chat: { id: string; orgId: string },
     workspaceId: number,
     message: { id: number; body: string },
+    attachmentCount: number,
 ) {
     const [handoff] = await exec
-        .select({ createdAt: inboxAuditEvents.createdAt })
+        .select({ id: inboxAuditEvents.id, createdAt: inboxAuditEvents.createdAt })
         .from(inboxAuditEvents)
         .where(and(eq(inboxAuditEvents.conversationId, chat.id), eq(inboxAuditEvents.action, "ai.handoff")))
         .orderBy(desc(inboxAuditEvents.createdAt), desc(inboxAuditEvents.id))
         .limit(1);
-    // A newly received FAQ can be answered even if the handoff predates the
-    // feature. The delayed worker still requires an explicit scheduling record.
     if (!handoff) return;
 
     const [staffReply] = await exec.select({ id: inboxMessages.id }).from(inboxMessages)
@@ -54,7 +53,15 @@ export async function sendImmediateHandoffMacro(
         .limit(1);
     if (staffReply) return;
 
-    const body = await findHandoffMacro(exec, chat.orgId, workspaceId, message.body);
-    if (body) await sendSystemReply(exec, chat.id, body,
-        requestUuid(`handoff-macro:${chat.id}:${message.id}`), undefined, HANDOFF_AUTOMATIC_AUTHOR);
+    const body = attachmentCount ? undefined : await findHandoffMacro(exec, chat.orgId, workspaceId, message.body);
+    if (body) {
+        await sendSystemReply(exec, chat.id, body,
+            requestUuid(`handoff-macro:${chat.id}:${message.id}`), undefined, HANDOFF_AUTOMATIC_AUTHOR);
+        return;
+    }
+
+    // A new unanswered inquiry can schedule follow-up on older handoffs too.
+    await exec.update(inboxAuditEvents)
+        .set({ changes: sql`${inboxAuditEvents.changes} || '{"macroFollowup":{"before":null,"after":"scheduled"}}'::jsonb` })
+        .where(and(eq(inboxAuditEvents.id, handoff.id), sql`not (${inboxAuditEvents.changes} ? 'macroFollowup')`));
 }

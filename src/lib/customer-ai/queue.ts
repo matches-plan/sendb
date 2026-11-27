@@ -22,7 +22,7 @@ import { InboxError } from "@/lib/inbox/errors";
 import { getSupportSettings, chatKnowledge } from "./catalog";
 import { ruleInstructions } from "./library";
 import { handoffFollowupEnabled } from "./worker-policy";
-import { sendImmediateHandoffMacro } from "./handoff-macro";
+import { respondOrScheduleHandoffFollowup } from "./handoff-macro";
 import {
     retrieveSources,
     humanIntent,
@@ -264,9 +264,9 @@ export async function onSupportMessage(
     }
     if (message.kind !== "customer") return;
     if (chat.aiState === "human" && chat.medium === "web") {
-        if (config.mode === "reply" && !attachmentCount &&
+        if (config.mode === "reply" &&
             handoffFollowupEnabled(process.env.CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE, workspaceId))
-            await sendImmediateHandoffMacro(exec, chat, workspaceId, message);
+            await respondOrScheduleHandoffFollowup(exec, chat, workspaceId, message, attachmentCount);
         // Draft mode can still prepare drafts for staff.
         if (config.mode === "reply") return;
     }
