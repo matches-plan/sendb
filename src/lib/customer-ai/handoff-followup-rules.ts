@@ -42,9 +42,21 @@ const comparableQuestion = (question: string) =>
         .replace(/(?:진행(?:이)?가능|이용(?:이)?가능|신청(?:이)?가능)(?:한가요|할까요|해요|합니까|한지궁금해요)$/, "할수있나요")
         .replace(/(?:할수있|해도되)(?:나요|어요|을까요|습니까)$/, "할수있나요");
 
+const serviceQuestions: [string, string[]][] = [
+    ["경리 업무만 맡길 수 있나요?", ["경리·총무 서비스", "경리총무에서 무슨 일을 해주나요?"]],
+    ["비서 라이트는 얼마이고 어떤 업무를 하나요?", ["비서 서비스", "비서 서비스는 어떤 서비스인가요?", "비서 업무는 뭐 해주나요?", "비서만 진행 가능한가요?"]],
+    ["정부지원사업에 선정됐는데 사업비 정산도 맡길 수 있나요?", ["사업비 관리 서비스", "사업비 관리는 어떤 서비스인가요?", "정부지원사업비 관리는 어떤 일을 해주나요?", "연구비 관리도 맡길 수 있나요?"]],
+    ["채용 공고나 입·퇴사 자료 정리도 지원하나요?", ["채용·인사 지원", "채용·인사 지원은 어떤 서비스인가요?", "인사 업무도 맡길 수 있나요?"]],
+    ["온라인 고객 문의 응대도 맡길 수 있나요?", ["온라인 고객응대 서비스", "온라인 고객응대는 어떤 서비스인가요?", "고객 상담 업무는 어디까지 맡길 수 있나요?", "CS 대행도 가능한가요?"]],
+    ["경리·총무와 비서, 사업비 관리를 함께 맡길 수 있나요?", ["맞춤 경영지원", "맞춤 경영지원은 어떤 서비스인가요?", "경영지원 업무를 여러 개 같이 맡길 수 있나요?"]],
+];
+
 const faqTitlesByPhrase = new Map([
     [normalize("무료체험 진행하고 싶어요"), "무료로 체험해 볼 수 있나요?"],
 ]);
+const serviceTitlesByQuestion = new Map(serviceQuestions.flatMap(([title, questions]) =>
+    questions.map(question => [comparableQuestion(question), title] as const),
+));
 
 export function followupMacroName(
     question: string,
@@ -60,7 +72,9 @@ export function followupMacroName(
 
     const comparable = comparableQuestion(question);
     if (!comparable) return undefined;
+    const serviceTitle = serviceTitlesByQuestion.get(comparable);
     const equivalent = docs.filter((doc) => doc.kind === "faq" &&
-        [doc.title, ...(doc.questions ?? [])].some((variant) => comparableQuestion(variant) === comparable));
+        (doc.title === serviceTitle ||
+            [doc.title, ...(doc.questions ?? [])].some((variant) => comparableQuestion(variant) === comparable)));
     return equivalent.length === 1 ? macroNames.get(equivalent[0].title) : undefined;
 }
