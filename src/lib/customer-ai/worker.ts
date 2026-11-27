@@ -16,12 +16,9 @@ import { supportConversation, freshSupportJob, handoffSupport } from "./queue";
 import { recordSupportUsage } from "./usage";
 import { aiWorkerEnabled } from "./catalog";
 import {
-    BACKOFFICE_WORKSPACE_ID,
-    handoffFollowupEnabled,
     sentenceGroundingEnabled,
     supportWorkerWorkspaces,
 } from "./worker-policy";
-import { processHandoffFollowup } from "./handoff-followup";
 import { supportDeps } from "./runtime";
 import {
     humanIntent,
@@ -432,11 +429,7 @@ export async function processSupportQueue(
         .orderBy(asc(jobs.eligibleAt), asc(jobs.id))
         .limit(1);
     if (rows[0]) await processSupportJob(rows[0].id, { exec, deps });
-    const followedUp =
-        (scope === null || scope.includes(BACKOFFICE_WORKSPACE_ID)) &&
-        handoffFollowupEnabled(process.env.CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE, BACKOFFICE_WORKSPACE_ID) &&
-        await processHandoffFollowup(exec, now);
-    return { processed: rows.length + Number(followedUp) };
+    return { processed: rows.length };
 }
 const runtime = globalThis as typeof globalThis & {
     __sendbSupportAiTimer?: ReturnType<typeof setTimeout>;

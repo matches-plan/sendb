@@ -22,7 +22,7 @@ import { InboxError } from "@/lib/inbox/errors";
 import { getSupportSettings, chatKnowledge } from "./catalog";
 import { ruleInstructions } from "./library";
 import { handoffFollowupEnabled } from "./worker-policy";
-import { respondOrScheduleHandoffFollowup } from "./handoff-macro";
+import { respondToHandoffMessage } from "./handoff-macro";
 import {
     retrieveSources,
     humanIntent,
@@ -96,10 +96,6 @@ export async function handoffSupport(
             actorName,
             action: "ai.handoff",
             changes: {
-                ...(attention && chat.medium === "web" &&
-                handoffFollowupEnabled(process.env.CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE, workspaceId)
-                    ? { macroFollowup: { before: null, after: "scheduled" } }
-                    : {}),
                 aiState: { before: chat.aiState, after: "human" },
                 priority: {
                     before: chat.priority,
@@ -266,7 +262,7 @@ export async function onSupportMessage(
     if (chat.aiState === "human" && chat.medium === "web") {
         if (config.mode === "reply" &&
             handoffFollowupEnabled(process.env.CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE, workspaceId))
-            await respondOrScheduleHandoffFollowup(exec, chat, workspaceId, message, attachmentCount);
+            await respondToHandoffMessage(exec, chat, workspaceId, message, attachmentCount);
         // Draft mode can still prepare drafts for staff.
         if (config.mode === "reply") return;
     }

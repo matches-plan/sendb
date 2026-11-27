@@ -3,7 +3,7 @@ import { inboxAuditEvents, inboxMacros, inboxMessages } from "@/lib/db";
 import type { DbExec } from "@/lib/db/tx";
 import { sendSystemReply } from "@/lib/inbox/repository";
 import { publishedDocs } from "./library";
-import { followupMacroName } from "./handoff-followup-rules";
+import { followupMacroName, HANDOFF_WAITING_MESSAGE } from "./handoff-followup-rules";
 import { requestUuid } from "./rules";
 
 export const HANDOFF_AUTOMATIC_AUTHOR = "상담 자동 안내";
@@ -28,7 +28,7 @@ export async function findHandoffMacro(
 
 // The caller already holds the conversation lock acquired while appending the
 // customer message, so a simultaneous staff reply is serialized with this check.
-export async function respondOrScheduleHandoffFollowup(
+export async function respondToHandoffMessage(
     exec: DbExec,
     chat: { id: string; orgId: string },
     workspaceId: number,
@@ -36,7 +36,7 @@ export async function respondOrScheduleHandoffFollowup(
     attachmentCount: number,
 ) {
     const [handoff] = await exec
-        .select({ id: inboxAuditEvents.id, createdAt: inboxAuditEvents.createdAt })
+        .select({ createdAt: inboxAuditEvents.createdAt })
         .from(inboxAuditEvents)
         .where(and(eq(inboxAuditEvents.conversationId, chat.id), eq(inboxAuditEvents.action, "ai.handoff")))
         .orderBy(desc(inboxAuditEvents.createdAt), desc(inboxAuditEvents.id))
@@ -54,14 +54,6 @@ export async function respondOrScheduleHandoffFollowup(
     if (staffReply) return;
 
     const body = attachmentCount ? undefined : await findHandoffMacro(exec, chat.orgId, workspaceId, message.body);
-    if (body) {
-        await sendSystemReply(exec, chat.id, body,
-            requestUuid(`handoff-macro:${chat.id}:${message.id}`), undefined, HANDOFF_AUTOMATIC_AUTHOR);
-        return;
-    }
-
-    // A new unanswered inquiry can schedule follow-up on older handoffs too.
-    await exec.update(inboxAuditEvents)
-        .set({ changes: sql`${inboxAuditEvents.changes} || '{"macroFollowup":{"before":null,"after":"scheduled"}}'::jsonb` })
-        .where(and(eq(inboxAuditEvents.id, handoff.id), sql`not (${inboxAuditEvents.changes} ? 'macroFollowup')`));
+    await sendSystemReply(exec, chat.id, body ?? HANDOFF_WAITING_MESSAGE,
+        requestUuid(`handoff-macro:${chat.id}:${message.id}`), undefined, HANDOFF_AUTOMATIC_AUTHOR);
 }
