@@ -31,3 +31,8 @@ export function supportWorkerEnabled(
             : scope.includes(workspaceId))
     );
 }
+
+/** Workspace IDs are globally unique. Workspace 9 is 2-백오피스랩 in production. */
+export function sentenceGroundingEnabled(value: string | undefined, workspaceId: number) {
+    return value === "9" && workspaceId === 9;
+}

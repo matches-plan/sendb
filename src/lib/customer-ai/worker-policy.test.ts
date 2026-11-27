@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { supportWorkerEnabled, supportWorkerWorkspaces } from "./worker-policy";
+import { sentenceGroundingEnabled, supportWorkerEnabled, supportWorkerWorkspaces } from "./worker-policy";
 
 test("automatic support is limited to explicitly enabled businesses", () => {
     const env = {
@@ -42,4 +42,13 @@ test("invalid explicit scopes fail closed and duplicates are removed", () => {
             false,
         );
     }
+});
+
+
+test("문장 단위 검증은 명시적으로 활성화한 백오피스랩에만 적용된다", () => {
+    assert.equal(sentenceGroundingEnabled("9", 9), true);
+    assert.equal(sentenceGroundingEnabled("9", 8), false);
+    assert.equal(sentenceGroundingEnabled(undefined, 9), false);
+    assert.equal(sentenceGroundingEnabled("8", 8), false);
+    assert.equal(sentenceGroundingEnabled("9,8", 9), false);
 });

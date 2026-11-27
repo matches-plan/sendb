@@ -4,6 +4,8 @@ import {
     retrieveSources,
     humanIntent,
     validateGroundedAnswer,
+    validateSentenceGroundedAnswer,
+    verifiedSupportAnswer,
     parseAiJson,
     requestUuid,
     buildSupportPrompt,
@@ -111,4 +113,19 @@ test("모델 JSON 파싱·멱등 요청 번호·비신뢰 입력 경계", () => 
     const judge = buildGroundingPrompt("답변", [], [fact], "실제 고객 질문");
     assert.equal(JSON.parse(judge.user).question, "실제 고객 질문");
     assert.ok(judge.system.includes("질문과 무관한"));
+});
+
+test("일부 인용이나 문장이 검증에 실패해도 핵심 답변은 유지한다", () => {
+    const raw = output("디자인 구독은 월 150,000원입니다. 무료 설치도 지원합니다. 월 5원입니다.");
+    const draft = validateSentenceGroundedAnswer({
+        ...raw,
+        citations: [...raw.citations, { sourceId: fact.id, quote: "무료 설치" }],
+    }, [fact]);
+    assert.equal(draft.citations.length, 1);
+    assert.equal(draft.sentences.length, 2);
+    const report = { supported: true, confidence: 0.95, supportedSentenceIndexes: [0] };
+    assert.equal(verifiedSupportAnswer(draft, report).answer, "디자인 구독은 월 150,000원입니다.");
+    assert.throws(() => verifiedSupportAnswer(draft, { ...report, supported: false }));
+    assert.throws(() => verifiedSupportAnswer(draft, { ...report, supportedSentenceIndexes: [2] }));
+    assert.throws(() => validateSentenceGroundedAnswer({ ...raw, citations: [] }, [fact]));
 });
