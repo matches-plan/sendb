@@ -17,10 +17,10 @@ test("공개 FAQ 질문 또는 유사 질문이 명확히 일치할 때만 매�
     assert.equal(followupMacroName(trial.title, [trial, trial]), undefined);
 });
 
-test("백오피스랩 전용 활성화와 10분 후 안내 문구를 유지한다", () => {
+test("백오피스랩 전용 활성화와 5분 후 안내 문구를 유지한다", () => {
     assert.equal(handoffFollowupEnabled("9", 9), true);
     assert.equal(handoffFollowupEnabled("9", 8), false);
     assert.equal(handoffFollowupEnabled(undefined, 9), false);
-    assert.equal(HANDOFF_FOLLOWUP_DELAY, 600_000);
-    assert.equal(HANDOFF_WAITING_MESSAGE, "현재 확인 중에 있습니다. 잠시만 기다려주세요 :)");
+    assert.equal(HANDOFF_FOLLOWUP_DELAY, 300_000);
+    assert.equal(HANDOFF_WAITING_MESSAGE, "잠시만 기다려 주시면 답변 드리겠습니다:)");
 });
