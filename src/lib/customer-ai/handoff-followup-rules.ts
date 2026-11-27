@@ -32,6 +32,16 @@ const macroNames = new Map([
 const normalize = (text: string) =>
     text.normalize("NFKC").toLowerCase().trim().replace(/[.!?]+$/, "").replace(/\s+/g, "");
 
+// Compare full questions after folding common Korean wording and punctuation.
+const comparableQuestion = (question: string) =>
+    normalize(question)
+        .replace(/^(?:(?:안녕하세요|테스트)[,:)]*)+/, "")
+        .replace(/[·ㆍ・]/g, "")
+        .replace(/(?:뭐하는|무슨)서비스(?:예요|에요|인가요|입니까|야)?$/, "어떤서비스")
+        .replace(/어떤서비스(?:예요|에요|인가요|입니까|야)$/, "어떤서비스")
+        .replace(/(?:진행(?:이)?가능|이용(?:이)?가능|신청(?:이)?가능)(?:한가요|할까요|해요|합니까|한지궁금해요)$/, "할수있나요")
+        .replace(/(?:할수있|해도되)(?:나요|어요|을까요|습니까)$/, "할수있나요");
+
 const faqTitlesByPhrase = new Map([
     [normalize("무료체험 진행하고 싶어요"), "무료로 체험해 볼 수 있나요?"],
 ]);
@@ -46,5 +56,11 @@ export function followupMacroName(
     const matches = docs.filter((doc) => doc.kind === "faq" &&
         (doc.title === matchingTitle ||
             [doc.title, ...(doc.questions ?? [])].some((variant) => normalize(variant) === normalized)));
-    return matches.length === 1 ? macroNames.get(matches[0].title) : undefined;
+    if (matches.length) return matches.length === 1 ? macroNames.get(matches[0].title) : undefined;
+
+    const comparable = comparableQuestion(question);
+    if (!comparable) return undefined;
+    const equivalent = docs.filter((doc) => doc.kind === "faq" &&
+        [doc.title, ...(doc.questions ?? [])].some((variant) => comparableQuestion(variant) === comparable));
+    return equivalent.length === 1 ? macroNames.get(equivalent[0].title) : undefined;
 }
