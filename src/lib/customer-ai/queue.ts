@@ -21,6 +21,7 @@ import { enqueuePlatformEvent } from "@/lib/customer-platform/outbox";
 import { InboxError } from "@/lib/inbox/errors";
 import { getSupportSettings, chatKnowledge } from "./catalog";
 import { ruleInstructions } from "./library";
+import { handoffFollowupEnabled } from "./worker-policy";
 import {
     retrieveSources,
     humanIntent,
@@ -94,6 +95,10 @@ export async function handoffSupport(
             actorName,
             action: "ai.handoff",
             changes: {
+                ...(attention && chat.medium === "web" &&
+                handoffFollowupEnabled(process.env.CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE, workspaceId)
+                    ? { macroFollowup: { before: null, after: "scheduled" } }
+                    : {}),
                 aiState: { before: chat.aiState, after: "human" },
                 priority: {
                     before: chat.priority,
