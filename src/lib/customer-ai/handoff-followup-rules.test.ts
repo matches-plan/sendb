@@ -17,6 +17,16 @@ test("공개 FAQ 질문 또는 유사 질문이 명확히 일치할 때만 매�
     assert.equal(followupMacroName(trial.title, [trial, trial]), undefined);
 });
 
+test("무료 체험 신청 표현을 공개 FAQ에 연결한다", () => {
+    assert.equal(followupMacroName("무료체험 진행하고 싶어요", [trial]), "무료체험");
+    assert.equal(followupMacroName("무료 체험 진행하고 싶어요!", [trial]), "무료체험");
+    assert.equal(followupMacroName("무료체험 진행하고 싶어요", []), undefined);
+    assert.equal(followupMacroName("무료체험 진행하고 싶어요", [
+        trial,
+        { kind: "faq", title: "다른 질문", questions: ["무료체험 진행하고 싶어요"] },
+    ]), undefined);
+});
+
 test("백오피스랩 전용 활성화와 5분 후 안내 문구를 유지한다", () => {
     assert.equal(handoffFollowupEnabled("9", 9), true);
     assert.equal(handoffFollowupEnabled("9", 8), false);
