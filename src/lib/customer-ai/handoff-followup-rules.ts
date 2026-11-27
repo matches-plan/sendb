@@ -1,5 +1,10 @@
-export const HANDOFF_FOLLOWUP_DELAY = 10 * 60 * 1000;
-export const HANDOFF_WAITING_MESSAGE = "현재 확인 중에 있습니다. 잠시만 기다려주세요 :)";
+export const HANDOFF_FOLLOWUP_DELAY = 5 * 60 * 1000;
+export const HANDOFF_WAITING_MESSAGE = "잠시만 기다려 주시면 답변 드리겠습니다:)";
+
+export const HANDOFF_WAITING_MESSAGES = [
+    HANDOFF_WAITING_MESSAGE,
+    "현재 확인 중에 있습니다. 잠시만 기다려주세요 :)",
+];
 
 const macroNames = new Map([
     ["어떤 서비스를 제공하나요?", "서비스소개"],
