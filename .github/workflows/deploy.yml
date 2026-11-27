@@ -43,6 +43,11 @@ jobs:
             echo "  env:"
             # 시크릿의 각 줄을 env 하위(4칸)로 들여쓴다. 빈 줄은 버린다.
             printf '%s\n' "$ENV_YAML" | sed '/^[[:space:]]*$/d; s/^/    /'
+            # 백오피스랩 전용 이관 후 안내를 배포 기본값으로 사용한다. 명시한 운영 값은 유지한다.
+            if ! printf '%s\n' "$ENV_YAML" | grep -Eq "^[[:space:]]*-[[:space:]]+name:[[:space:]]*[\"']?CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE([\"']|[[:space:]]|$)"; then
+              echo "    - name: CUSTOMER_AI_HANDOFF_FOLLOWUP_WORKSPACE"
+              echo '      value: "9"'
+            fi
             echo "context:"
             echo "  git:"
             # SSH Deploy Key 대신 읽기 전용 토큰으로 받는다 — 클라우드타입 키(RSA 2048)는

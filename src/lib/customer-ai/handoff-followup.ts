@@ -19,6 +19,7 @@ import { HANDOFF_FOLLOWUP_DELAY, HANDOFF_WAITING_MESSAGE, HANDOFF_WAITING_MESSAG
 import { findHandoffMacro, HANDOFF_AUTOMATIC_AUTHOR as authorName } from "./handoff-macro";
 
 export async function processHandoffFollowup(exec: DbExec, now: Date) {
+    const cutoff = new Date(now.getTime() - HANDOFF_FOLLOWUP_DELAY);
     const [candidate] = await exec
         .select({ id: events.id, conversationId: chats.id })
         .from(channels)
@@ -35,7 +36,10 @@ export async function processHandoffFollowup(exec: DbExec, now: Date) {
             isNull(chats.mergedIntoId),
             eq(events.action, "ai.handoff"),
             sql`${events.changes} ? 'macroFollowup'`,
-            lte(events.createdAt, new Date(now.getTime() - HANDOFF_FOLLOWUP_DELAY)),
+            lte(events.createdAt, cutoff),
+            sql`(select customer.created_at from inbox_messages customer
+                where customer.conversation_id = ${chats.id} and customer.kind = 'customer'
+                order by customer.id desc limit 1) <= ${cutoff.toISOString()}::timestamptz`,
             sql`not exists (
                 select 1 from inbox_audit_events newer
                 where newer.conversation_id = ${chats.id} and newer.action = 'ai.handoff'
@@ -91,11 +95,11 @@ export async function processHandoffFollowup(exec: DbExec, now: Date) {
             if (read) return false;
         }
 
-        const [customer] = await tx.select({ id: messages.id, body: messages.body })
+        const [customer] = await tx.select({ id: messages.id, body: messages.body, createdAt: messages.createdAt })
             .from(messages)
             .where(and(eq(messages.conversationId, chat.id), eq(messages.kind, "customer")))
             .orderBy(desc(messages.id)).limit(1);
-        if (!customer) return false;
+        if (!customer || customer.createdAt > cutoff) return false;
         const [reply] = await tx.select({ id: messages.id }).from(messages)
             .where(and(
                 eq(messages.conversationId, chat.id),
