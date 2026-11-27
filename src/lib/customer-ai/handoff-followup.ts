@@ -4,18 +4,16 @@ import {
     inboxAuditEvents as events,
     inboxChannels as channels,
     inboxConversations as chats,
-    inboxMacros,
     inboxMessages as messages,
 } from "@/lib/db";
 import type { DbExec } from "@/lib/db/tx";
 import { sendSystemReply } from "@/lib/inbox/repository";
-import { publishedDocs } from "./library";
 import { requestUuid } from "./rules";
 import { supportConversation } from "./queue";
 import { BACKOFFICE_WORKSPACE_ID } from "./worker-policy";
-import { followupMacroName, HANDOFF_FOLLOWUP_DELAY, HANDOFF_WAITING_MESSAGE } from "./handoff-followup-rules";
+import { HANDOFF_FOLLOWUP_DELAY, HANDOFF_WAITING_MESSAGE } from "./handoff-followup-rules";
 
-const authorName = "상담 자동 안내";
+import { findHandoffMacro, HANDOFF_AUTOMATIC_AUTHOR as authorName } from "./handoff-macro";
 
 export async function processHandoffFollowup(exec: DbExec, now: Date) {
     const [candidate] = await exec
@@ -43,7 +41,15 @@ export async function processHandoffFollowup(exec: DbExec, now: Date) {
                 select 1 from inbox_messages reply
                 where reply.conversation_id = ${chats.id} and reply.kind = 'reply'
                   and reply.created_at >= ${events.createdAt}
-                  and (reply.author_id is not null or reply.author_name = ${authorName})
+                  and (
+                    reply.author_id is not null or (
+                        reply.author_name = ${authorName} and (
+                            reply.body = ${HANDOFF_WAITING_MESSAGE} or
+                            reply.id > (select max(customer.id) from inbox_messages customer
+                                where customer.conversation_id = ${chats.id} and customer.kind = 'customer')
+                        )
+                    )
+                  )
             )`,
         ))
         .orderBy(asc(events.createdAt), asc(events.id))
@@ -63,30 +69,28 @@ export async function processHandoffFollowup(exec: DbExec, now: Date) {
             .limit(1);
         if (!handoff || handoff.id !== candidate.id) return false;
 
-        const [reply] = await tx.select({ id: messages.id }).from(messages)
-            .where(and(
-                eq(messages.conversationId, chat.id),
-                eq(messages.kind, "reply"),
-                sql`${messages.createdAt} >= ${handoff.createdAt.toISOString()}::timestamptz`,
-                sql`(${messages.authorId} is not null or ${messages.authorName} = ${authorName})`,
-            )).limit(1);
-        if (reply) return false;
-
         const [customer] = await tx.select({ id: messages.id, body: messages.body })
             .from(messages)
             .where(and(eq(messages.conversationId, chat.id), eq(messages.kind, "customer")))
             .orderBy(desc(messages.id)).limit(1);
         if (!customer) return false;
+        const [reply] = await tx.select({ id: messages.id }).from(messages)
+            .where(and(
+                eq(messages.conversationId, chat.id),
+                eq(messages.kind, "reply"),
+                sql`${messages.createdAt} >= ${handoff.createdAt.toISOString()}::timestamptz`,
+                sql`(${messages.authorId} is not null or (
+                    ${messages.authorName} = ${authorName} and
+                    (${messages.body} = ${HANDOFF_WAITING_MESSAGE} or ${messages.id} > ${customer.id})
+                ))`,
+            )).limit(1);
+        if (reply) return false;
+
         const [attachment] = await tx.select({ id: inboxAttachments.id }).from(inboxAttachments)
             .where(eq(inboxAttachments.messageId, customer.id)).limit(1);
-        const name = attachment ? undefined :
-            followupMacroName(customer.body, await publishedDocs(chat.orgId, workspaceId, tx));
-        const [macro] = name
-            ? await tx.select({ body: inboxMacros.body }).from(inboxMacros)
-                .where(and(eq(inboxMacros.orgId, chat.orgId), eq(inboxMacros.workspaceId, workspaceId), eq(inboxMacros.name, name)))
-                .limit(1)
-            : [];
-        await sendSystemReply(tx, chat.id, macro?.body.trim() || HANDOFF_WAITING_MESSAGE,
+        const body = attachment ? undefined :
+            await findHandoffMacro(tx, chat.orgId, workspaceId, customer.body);
+        await sendSystemReply(tx, chat.id, body || HANDOFF_WAITING_MESSAGE,
             requestUuid(`handoff-followup:${handoff.id}`), undefined, authorName);
         return true;
     });
