@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { followupMacroName, HANDOFF_WAITING_MESSAGE } from "./handoff-followup-rules";
-import { handoffFollowupEnabled } from "./worker-policy";
+import { faqQuestionLimit, handoffFollowupEnabled } from "./worker-policy";
 
 const trial = {
     kind: "faq",
@@ -76,4 +76,14 @@ test("전체요금 매크로가 FAQ의 추가 질문 자리를 쓰지 않고 기
     assert.equal(followupMacroName("가격이 얼마인가요?", [pricing, {
         kind: "faq", title: "비서 라이트는 얼마이고 어떤 업무를 하나요?", questions: ["가격이 얼마인가요?"],
     }]), undefined);
+});
+
+test("백오피스랩 FAQ는 10개를 넘겨도 앞뒤 유사 질문이 같은 매크로에 연결된다", () => {
+    const title = "비서 라이트는 얼마이고 어떤 업무를 하나요?";
+    const questions = Array.from({ length: faqQuestionLimit(9) }, (_, index) => `비서 업무 범위 문의 ${index + 1}`);
+    assert.equal(questions.length, 30);
+    assert.equal(faqQuestionLimit(8), 10);
+    for (const question of questions) {
+        assert.equal(followupMacroName(question, [{ kind: "faq", title, questions }]), "비서라이트");
+    }
 });

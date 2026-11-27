@@ -6,6 +6,7 @@ import type { DbExec } from "@/lib/db/tx";
 import { requireCustomerAccess, type CustomerActor } from "@/lib/customer-access/access";
 import { InboxError } from "@/lib/inbox/errors";
 import type { AiSource } from "./rules";
+import { faqQuestionLimit } from "./worker-policy";
 
 /* 상담 AI 규칙·상담 지식(문서·FAQ) 저장과 AI가 읽는 형태로 바꾸기 */
 
@@ -16,13 +17,13 @@ export const ruleInput = z
         enabled: z.boolean().optional(),
     })
     .strict();
-export const docInput = z
+const docInput = (workspaceId: number) => z
     .object({
         kind: z.enum(["article", "faq"]),
         title: z.string().trim().min(1, "제목을 입력해주세요.").max(200),
         body: z.string().trim().min(1, "내용을 입력해주세요.").max(30000, "내용은 30,000자까지 쓸 수 있어요."),
         published: z.boolean().optional(),
-        questions: z.array(z.string().trim().min(1).max(200)).max(10, "추가 질문은 10개까지예요.").optional(),
+        questions: z.array(z.string().trim().min(1).max(200)).max(faqQuestionLimit(workspaceId), `추가 질문은 ${faqQuestionLimit(workspaceId)}개까지예요.`).optional(),
         source: z.enum(["website", "file", "manual"]).optional(),
         sourceRef: z.string().trim().max(2000).nullable().optional(),
     })
@@ -81,7 +82,7 @@ export async function listDocs(actor: CustomerActor, workspaceId: number, exec: 
 }
 export async function createDoc(actor: CustomerActor, workspaceId: number, raw: unknown, exec: DbExec = db) {
     await requireCustomerAccess(actor, workspaceId, "manage", exec);
-    const input = docInput.parse(raw);
+    const input = docInput(workspaceId).parse(raw);
     const [row] = await exec
         .insert(customerAiDocs)
         .values({ ...input, orgId: actor.orgId, workspaceId, createdBy: actor.userId, updatedBy: actor.userId })
@@ -91,7 +92,7 @@ export async function createDoc(actor: CustomerActor, workspaceId: number, raw: 
 export async function updateDoc(actor: CustomerActor, id: number, raw: unknown, exec: DbExec = db) {
     const row = await ownedDoc(actor, id, exec);
     await requireCustomerAccess(actor, row.workspaceId, "manage", exec);
-    const input = docInput.omit({ kind: true }).partial().parse(raw);
+    const input = docInput(row.workspaceId).omit({ kind: true }).partial().parse(raw);
     const [saved] = await exec
         .update(customerAiDocs)
         .set({ ...input, updatedBy: actor.userId, updatedAt: new Date() })

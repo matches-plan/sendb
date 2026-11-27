@@ -101,7 +101,7 @@ export interface AiDoc {
     title: string;
     body: string;
     published: boolean;
-    /** FAQ 추가 질문 (최대 10개) */
+    /** FAQ 추가 질문 */
     questions: string[];
     source: "website" | "file" | "manual";
     sourceRef: string | null;

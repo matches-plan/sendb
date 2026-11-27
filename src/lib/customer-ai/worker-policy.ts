@@ -34,6 +34,10 @@ export function supportWorkerEnabled(
 
 export const BACKOFFICE_WORKSPACE_ID = 9;
 
+export function faqQuestionLimit(workspaceId: number) {
+    return workspaceId === BACKOFFICE_WORKSPACE_ID ? 30 : 10;
+}
+
 export function handoffFollowupEnabled(value: string | undefined, workspaceId: number) {
     return value === "9" && workspaceId === BACKOFFICE_WORKSPACE_ID;
 }

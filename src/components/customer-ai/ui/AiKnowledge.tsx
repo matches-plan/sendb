@@ -9,6 +9,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { useAsyncConfirm } from "@/components/ui/alert-dialog";
 import { RichTextInput } from "@/components/inbox-composer/ui/RichTextInput";
 import { isTranscriptDocument, readTranscriptFile } from "@/components/sales/utils/read-transcript-file";
+import { faqQuestionLimit } from "@/lib/customer-ai/worker-policy";
 import { cn } from "@/lib/utils";
 import { supportRequest, supportWrite } from "../api";
 import { aiDocsUrl, useAiDocs } from "../hooks/useAiLibrary";
@@ -239,6 +240,7 @@ function DocEditor({ initial, workspaceId, canManage, onDone, onBack }: { initia
     const faq = draft.kind === "faq";
     const set = (value: Partial<Draft>) => setDraft((d) => ({ ...d, ...value }));
     const questions = draft.questions;
+    const questionLimit = faqQuestionLimit(workspaceId);
 
     async function save() {
         setBusy(true);
@@ -288,7 +290,7 @@ function DocEditor({ initial, workspaceId, canManage, onDone, onBack }: { initia
                     <div className="space-y-1 py-3">
                         <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                             추가 질문
-                            <InfoTip text={"같은 뜻을 다르게 묻는 표현이에요.\n예: '요금제가 얼마인가요?' 대신 '플랜이 뭐가 있어요?'\n고객이 어떻게 물어도 이 답을 찾도록 최대 10개까지 넣을 수 있어요."} />
+                            <InfoTip text={"같은 뜻을 다르게 묻는 표현이에요.\n예: '요금제가 얼마인가요?' 대신 '플랜이 뭐가 있어요?'\n고객이 어떻게 물어도 이 답을 찾도록 최대 " + questionLimit + "개까지 넣을 수 있어요."} />
                         </div>
                         {questions.map((q, i) => (
                             <div key={i} className="flex items-center gap-1">
@@ -305,7 +307,7 @@ function DocEditor({ initial, workspaceId, canManage, onDone, onBack }: { initia
                                 </Button>
                             </div>
                         ))}
-                        {questions.length < 10 && (
+                        {questions.length < questionLimit && (
                             <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground" onClick={() => set({ questions: [...questions, ""] })}>
                                 <Plus className="h-4 w-4" />
                                 추가 질문
