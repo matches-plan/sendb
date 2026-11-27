@@ -15,10 +15,14 @@ import { enqueuePlatformEvent } from "@/lib/customer-platform/outbox";
 import { supportConversation, freshSupportJob, handoffSupport } from "./queue";
 import { recordSupportUsage } from "./usage";
 import { aiWorkerEnabled } from "./catalog";
-import { supportWorkerWorkspaces } from "./worker-policy";
+import { sentenceGroundingEnabled, supportWorkerWorkspaces } from "./worker-policy";
 import { supportDeps } from "./runtime";
 import {
     humanIntent,
+    buildSentenceSupportPrompt,
+    buildSentenceGroundingPrompt,
+    validateSentenceGroundedAnswer,
+    verifiedSupportAnswer,
     parseAiJson,
     validateGroundedAnswer,
     buildSupportPrompt,
@@ -312,10 +316,14 @@ export async function processSupportJob(
                 exec,
                 deps.now(),
             );
+        const sentenceGrounding = sentenceGroundingEnabled(
+            process.env.CUSTOMER_AI_SENTENCE_GROUNDING_WORKSPACE,
+            job.workspaceId,
+        );
         const generated = await stage(
                 job,
                 "answer",
-                buildSupportPrompt(
+                (sentenceGrounding ? buildSentenceSupportPrompt : buildSupportPrompt)(
                     job.settingsSnapshot,
                     job.context,
                     job.sources,
@@ -323,10 +331,11 @@ export async function processSupportJob(
                 exec,
                 deps,
             ),
-            answer = validateGroundedAnswer(
-                parseAiJson(generated.content),
-                job.sources,
-            );
+            rawAnswer = parseAiJson(generated.content);
+        const sentenceDraft = sentenceGrounding
+            ? validateSentenceGroundedAnswer(rawAnswer, job.sources)
+            : null;
+        const answer = sentenceDraft ?? validateGroundedAnswer(rawAnswer, job.sources);
         const [active] = await exec
             .select({ state: jobs.state, leaseId: jobs.leaseId })
             .from(jobs)
@@ -350,22 +359,26 @@ export async function processSupportJob(
         const judged = await stage(
                 job,
                 "judge",
-                buildGroundingPrompt(
-                    answer.answer,
-                    answer.citations,
-                    job.sources,
-                    job.context.question,
-                ),
+                sentenceDraft
+                    ? buildSentenceGroundingPrompt(
+                          sentenceDraft.sentences, answer.citations, job.sources, job.context.question,
+                      )
+                    : buildGroundingPrompt(
+                          answer.answer, answer.citations, job.sources, job.context.question,
+                      ),
                 exec,
                 deps,
             ),
-            report = z
+            rawReport = parseAiJson(judged.content);
+        if (sentenceDraft)
+            return finish(job, verifiedSupportAnswer(sentenceDraft, rawReport), exec, deps.now());
+        const report = z
                 .object({
                     supported: z.boolean(),
                     confidence: z.number().min(0).max(1),
                     unsupportedClaims: z.array(z.string()).max(30),
                 })
-                .parse(parseAiJson(judged.content));
+                .parse(rawReport);
         if (
             !report.supported ||
             report.confidence < 0.85 ||
