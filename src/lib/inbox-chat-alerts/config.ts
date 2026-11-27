@@ -14,8 +14,7 @@ export function chatAlertRoutes(env: Record<string, string | undefined> = proces
     try {
         const routes = z.array(routeInput).max(20).parse(JSON.parse(env.INBOX_CHAT_ALERT_ROUTES ?? "[]"));
         if (new Set(routes.map(route => `${route.orgId}:${route.channelId}`)).size !== routes.length) return [];
-        // Temporarily pause 2-백오피스랩 Google Chat alerts during 상담톡 testing.
-        return routes.filter(route => route.workspaceId !== 9);
+        return routes;
     } catch { return []; }
 }
 export const routeFingerprint = (route: ChatAlertRoute) =>
