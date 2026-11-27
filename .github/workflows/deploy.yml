@@ -21,12 +21,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Connect deploy key
-        uses: cloudtype-github-actions/connect@v1
-        with:
-          token: ${{ secrets.CLOUDTYPE_TOKEN }}
-          ghtoken: ${{ secrets.GHP_TOKEN }}
-
       # Cloudtype은 yaml의 env를 "이 서비스의 환경변수 전체"로 본다 — 생략하면 콘솔 값이
       # 유지되는 게 아니라 비워져서 빌드가 DATABASE_URL 없이 돌다 죽는다.
       # 그렇다고 값을 yaml에 적으면 DB·결제·메일 키가 저장소에 평문으로 남으므로,
@@ -34,6 +28,7 @@ jobs:
       - name: Build deploy manifest
         env:
           ENV_YAML: ${{ secrets.CLOUDTYPE_ENV_YAML }}
+          GIT_TOKEN: ${{ secrets.CLOUDTYPE_GIT_TOKEN }}
           REF_NAME: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
         run: |
           {
@@ -50,7 +45,10 @@ jobs:
             printf '%s\n' "$ENV_YAML" | sed '/^[[:space:]]*$/d; s/^/    /'
             echo "context:"
             echo "  git:"
-            echo "    url: git@github.com:${{ github.repository }}.git"
+            # SSH Deploy Key 대신 읽기 전용 토큰으로 받는다 — 클라우드타입 키(RSA 2048)는
+            # GitHub가 2026-10-14부터 새로 등록하지 않는다(3072비트 이상만 허용).
+            # 토큰은 이 저장소 Contents Read-only뿐이며 클라우드타입 빌드 로그의 Git URL에 노출된다.
+            echo "    url: https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}.git"
             # 태그로 실행되면 그 태그를, 수동 실행(workflow_dispatch)이면 main을 배포한다.
             # Cloudtype은 이 값을 git clone --branch 로 넘기므로 refs/... 전체 경로가 아닌 이름만 준다.
             echo "    ref: ${REF_NAME}"
