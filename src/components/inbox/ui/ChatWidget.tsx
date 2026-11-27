@@ -1433,7 +1433,8 @@ export function ChatWidget({
                                         role="status"
                                         className="border-t bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600"
                                     >
-                                        {config.data.businessHours?.open
+                                        {/* 운영시간 표시를 끈 상담창은 businessHours가 null — 운영시간 밖으로 보지 않는다 */}
+                                        {config.data.businessHours?.open !== false
                                             ? "상담원 연결 요청을 접수했습니다 🙂 궁금하신 점을 미리 남겨주시면 더 빠른 상담이 가능해요."
                                             : "현재는 고객센터 운영시간 밖입니다. 문의를 미리 남겨주시면 다음 운영시간에 담당자가 이어서 안내드립니다."}
                                     </p>
