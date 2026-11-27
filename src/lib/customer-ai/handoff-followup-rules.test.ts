@@ -87,3 +87,13 @@ test("백오피스랩 FAQ는 10개를 넘겨도 앞뒤 유사 질문이 같은 �
         assert.equal(followupMacroName(question, [{ kind: "faq", title, questions }]), "비서라이트");
     }
 });
+
+test("총무 단독 문의는 경리 단독 FAQ 대신 총무 매크로에 연결된다", () => {
+    const docs = [
+        { kind: "faq", title: "경리 업무만 맡길 수 있나요?" },
+        { kind: "faq", title: "총무 업무만 할 수 있나요?", questions: ["총무만 따로 맡길 수 있나요?"] },
+    ];
+    assert.equal(followupMacroName("총무 업무만 할 수 있나요?", docs), "총무단독");
+    assert.equal(followupMacroName("총무만 따로 맡길 수 있나요?", docs), "총무단독");
+    assert.equal(followupMacroName("경리 업무만 맡길 수 있나요?", docs), "경리단독");
+});
