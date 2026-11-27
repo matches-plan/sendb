@@ -60,3 +60,20 @@ test("서비스별 업무 범위 질문은 공개 FAQ의 승인된 매크로로 
     assert.equal(followupMacroName("사업비 관리는 뭐하는 서비스예요?", []), undefined);
     assert.equal(followupMacroName("사업비 관리는 무조건 승인되나요?", docs), undefined);
 });
+
+test("전체요금 매크로가 FAQ의 추가 질문 자리를 쓰지 않고 기존과 새 가격 문의에 답한다", () => {
+    const pricing = { kind: "faq", title: "비용은 얼마인가요?" };
+    for (const question of [
+        "가격이 얼마인가요?",
+        "서비스 이용 비용 알려주세요",
+        "요금이 궁금합니다",
+        "비용이 어떻게 되나요?",
+        "가격이 어떻게 되나요 ?",
+    ]) {
+        assert.equal(followupMacroName(question, [pricing]), "전체요금");
+    }
+    assert.equal(followupMacroName("가격이 얼마인가요?", []), undefined);
+    assert.equal(followupMacroName("가격이 얼마인가요?", [pricing, {
+        kind: "faq", title: "비서 라이트는 얼마이고 어떤 업무를 하나요?", questions: ["가격이 얼마인가요?"],
+    }]), undefined);
+});

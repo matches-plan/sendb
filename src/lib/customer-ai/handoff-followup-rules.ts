@@ -45,7 +45,15 @@ const serviceQuestions: [string, string[]][] = [
     ["경리·총무와 비서, 사업비 관리를 함께 맡길 수 있나요?", ["맞춤 경영지원", "맞춤 경영지원은 어떤 서비스인가요?", "경영지원 업무를 여러 개 같이 맡길 수 있나요?"]],
 ];
 
+const pricingFaq = "비용은 얼마인가요?";
 const faqTitlesByPhrase = new Map([
+    ...[
+        "가격이 얼마인가요?",
+        "서비스 이용 비용 알려주세요",
+        "요금이 궁금합니다",
+        "비용이 어떻게 되나요?",
+        "가격이 어떻게 되나요?",
+    ].map(question => [normalize(question), pricingFaq] as const),
     [normalize("무료체험 진행하고 싶어요"), "무료로 체험해 볼 수 있나요?"],
 ]);
 const serviceTitlesByQuestion = new Map(serviceQuestions.flatMap(([title, questions]) =>
