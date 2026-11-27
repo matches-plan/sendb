@@ -32,13 +32,19 @@ const macroNames = new Map([
 const normalize = (text: string) =>
     text.normalize("NFKC").toLowerCase().trim().replace(/[.!?]+$/, "").replace(/\s+/g, "");
 
+const faqTitlesByPhrase = new Map([
+    [normalize("무료체험 진행하고 싶어요"), "무료로 체험해 볼 수 있나요?"],
+]);
+
 export function followupMacroName(
     question: string,
     docs: { kind: string; title: string; questions?: string[] | null }[],
 ) {
     const normalized = normalize(question);
     if (!normalized) return undefined;
+    const matchingTitle = faqTitlesByPhrase.get(normalized);
     const matches = docs.filter((doc) => doc.kind === "faq" &&
-        [doc.title, ...(doc.questions ?? [])].some((variant) => normalize(variant) === normalized));
+        (doc.title === matchingTitle ||
+            [doc.title, ...(doc.questions ?? [])].some((variant) => normalize(variant) === normalized)));
     return matches.length === 1 ? macroNames.get(matches[0].title) : undefined;
 }
