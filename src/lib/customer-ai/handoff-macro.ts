@@ -35,12 +35,14 @@ export async function sendImmediateHandoffMacro(
     message: { id: number; body: string },
 ) {
     const [handoff] = await exec
-        .select({ createdAt: inboxAuditEvents.createdAt, changes: inboxAuditEvents.changes })
+        .select({ createdAt: inboxAuditEvents.createdAt })
         .from(inboxAuditEvents)
         .where(and(eq(inboxAuditEvents.conversationId, chat.id), eq(inboxAuditEvents.action, "ai.handoff")))
         .orderBy(desc(inboxAuditEvents.createdAt), desc(inboxAuditEvents.id))
         .limit(1);
-    if (!handoff?.changes.macroFollowup) return;
+    // A newly received FAQ can be answered even if the handoff predates the
+    // feature. The delayed worker still requires an explicit scheduling record.
+    if (!handoff) return;
 
     const [staffReply] = await exec.select({ id: inboxMessages.id }).from(inboxMessages)
         .where(and(
